@@ -108,42 +108,53 @@ export async function getOverviewMetrics(params: {
   const [windowRows] = await bq.query({
     query: `
       SELECT
-        window,
+        window_name,
         COALESCE(SUM(count_total), 0) AS count_total,
         COALESCE(SUM(count_failed), 0) AS count_failed,
         COALESCE(AVG(p95_duration_ms), 0) AS p95_duration_ms,
         COALESCE(SUM(sum_cost_usd), 0) AS sum_cost_usd,
         COALESCE(AVG(avg_cost_usd), 0) AS avg_cost_usd
       FROM (
-        SELECT '5m' AS window, *
+        SELECT '5m' AS window_name, *
         FROM \`${config.BIGQUERY_PROJECT_ID}.${config.BIGQUERY_DATASET}.workflow_metrics_minute\`
         WHERE tenant_id = @tenantId
           AND bucket_ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 MINUTE)
           ${params.workflowId ? "AND workflow_id = @workflowId" : ""}
           ${params.env ? "AND environment = @env" : ""}
         UNION ALL
-        SELECT '15m' AS window, *
+        SELECT '15m' AS window_name, *
         FROM \`${config.BIGQUERY_PROJECT_ID}.${config.BIGQUERY_DATASET}.workflow_metrics_minute\`
         WHERE tenant_id = @tenantId
           AND bucket_ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 15 MINUTE)
           ${params.workflowId ? "AND workflow_id = @workflowId" : ""}
           ${params.env ? "AND environment = @env" : ""}
       )
-      GROUP BY window
+      GROUP BY window_name
     `,
     params: queryParams,
     useLegacySql: false
   });
 
   const windows = Object.fromEntries(
-    (windowRows as Array<{ window: string }>).map((row) => [row.window, row])
+    (windowRows as Array<{ window_name: string }>).map((row) => [row.window_name, row])
   );
 
-  const result = {
-    summary: (summaryRows[0] as Record<string, unknown> | undefined) ?? null,
-    series: seriesRows as Array<Record<string, unknown>>,
-    windows
-  };
+  const normalizedSeries = (seriesRows as Array<Record<string, unknown>>).map((row) => {
+  const rawTs = row.bucket_ts;
+  const bucketTs =
+    rawTs && typeof rawTs === "object" && "value" in rawTs
+      ? String((rawTs as { value: unknown }).value)
+      : String(rawTs ?? "");
+
+  return { ...row, bucket_ts: bucketTs };
+});
+
+const result = {
+  summary: (summaryRows[0] as Record<string, unknown> | undefined) ?? null,
+  series: normalizedSeries,
+  windows
+};
+
 
   overviewCache.set(key, result, config.METRICS_CACHE_TTL_SEC);
   runtimeMetrics.setGauge("metrics_cache_size", overviewCache.size());

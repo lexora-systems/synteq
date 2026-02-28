@@ -2,7 +2,7 @@
 -- This query can be run as a scheduled query every minute.
 DECLARE lookback_minutes INT64 DEFAULT 15;
 
-MERGE `YOUR_PROJECT_ID.synteq.workflow_metrics_minute` AS target
+MERGE `gen-lang-client-0121884750.synteq.workflow_metrics_minute` AS target
 USING (
   WITH base AS (
     SELECT
@@ -21,7 +21,7 @@ USING (
         PARTITION BY tenant_id, workflow_id, environment, TIMESTAMP_TRUNC(event_ts, MINUTE), execution_id
         ORDER BY ingest_ts DESC
       ) AS rn
-    FROM `YOUR_PROJECT_ID.synteq.execution_events`
+    FROM `gen-lang-client-0121884750.synteq.execution_events`
     WHERE event_ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL lookback_minutes MINUTE)
   ),
   dedup AS (

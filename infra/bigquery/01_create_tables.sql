@@ -1,7 +1,7 @@
 -- Replace YOUR_PROJECT_ID before execution.
-CREATE SCHEMA IF NOT EXISTS `YOUR_PROJECT_ID.synteq`;
+CREATE SCHEMA IF NOT EXISTS `gen-lang-client-0121884750.synteq`;
 
-CREATE TABLE IF NOT EXISTS `YOUR_PROJECT_ID.synteq.execution_events` (
+CREATE TABLE IF NOT EXISTS `gen-lang-client-0121884750.synteq.execution_events` (
   event_ts TIMESTAMP NOT NULL,
   ingest_ts TIMESTAMP,
   tenant_id STRING,
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS `YOUR_PROJECT_ID.synteq.execution_events` (
 PARTITION BY DATE(event_ts)
 CLUSTER BY tenant_id, workflow_id, status, fingerprint;
 
-CREATE TABLE IF NOT EXISTS `YOUR_PROJECT_ID.synteq.heartbeats` (
+CREATE TABLE IF NOT EXISTS `gen-lang-client-0121884750.synteq.heartbeats` (
   heartbeat_ts TIMESTAMP NOT NULL,
   ingest_ts TIMESTAMP,
   tenant_id STRING,
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS `YOUR_PROJECT_ID.synteq.heartbeats` (
 PARTITION BY DATE(heartbeat_ts)
 CLUSTER BY tenant_id, workflow_id;
 
-CREATE TABLE IF NOT EXISTS `YOUR_PROJECT_ID.synteq.workflow_metrics_minute` (
+CREATE TABLE IF NOT EXISTS `gen-lang-client-0121884750.synteq.workflow_metrics_minute` (
   bucket_ts TIMESTAMP NOT NULL,
   tenant_id STRING,
   workflow_id STRING,

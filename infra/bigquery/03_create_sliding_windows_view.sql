@@ -1,9 +1,9 @@
 -- Replace YOUR_PROJECT_ID before execution.
 -- Sliding windows view used by dashboards/jobs.
-CREATE OR REPLACE VIEW `YOUR_PROJECT_ID.synteq.workflow_metrics_sliding` AS
+CREATE OR REPLACE VIEW `gen-lang-client-0121884750.synteq.workflow_metrics_sliding` AS
 WITH base AS (
   SELECT *
-  FROM `YOUR_PROJECT_ID.synteq.workflow_metrics_minute`
+  FROM `gen-lang-client-0121884750.synteq.workflow_metrics_minute`
   WHERE bucket_ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 15 MINUTE)
 ),
 windowed AS (
