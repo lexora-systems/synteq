@@ -1,0 +1,131 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-body: "Manrope", sans-serif;
+  --font-heading: "Space Grotesk", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: #0f1726;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(14, 116, 144, 0.12), transparent 40%),
+    radial-gradient(circle at 80% 10%, rgba(15, 118, 110, 0.1), transparent 35%),
+    #f8fafc;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5 {
+  font-family: var(--font-heading);
+}
+
+.metric-card {
+  border-radius: 1rem;
+  border: 1px solid #e2e8f0;
+  background: white;
+  padding: 1rem;
+  box-shadow: 0 10px 40px rgba(15, 23, 38, 0.08);
+}
+
+.metric-card p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.metric-card strong {
+  margin-top: 0.25rem;
+  display: block;
+  font-size: 1.65rem;
+  color: #0f1726;
+}
+
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(14, 116, 144, 0.2), transparent 45%),
+    radial-gradient(circle at 80% 80%, rgba(15, 118, 110, 0.22), transparent 35%),
+    linear-gradient(135deg, #0f1726, #1f2937);
+}
+
+.login-card {
+  width: min(100%, 460px);
+  border-radius: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.95);
+  padding: 2rem;
+  box-shadow: 0 16px 70px rgba(2, 6, 23, 0.35);
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #0e7490;
+}
+
+.login-title {
+  margin: 0.5rem 0 0;
+  font-size: 1.6rem;
+}
+
+.login-subtitle {
+  margin-top: 0.4rem;
+  color: #334155;
+  font-size: 0.95rem;
+}
+
+.login-form {
+  margin-top: 1.25rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.login-form label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.86rem;
+  color: #334155;
+}
+
+.login-form input {
+  border-radius: 0.75rem;
+  border: 1px solid #cbd5e1;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.95rem;
+}
+
+.login-form button {
+  border: 0;
+  border-radius: 0.75rem;
+  background: linear-gradient(90deg, #0e7490, #0f766e);
+  color: white;
+  font-weight: 600;
+  padding: 0.7rem 0.85rem;
+  cursor: pointer;
+}
+
+.login-form button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.login-error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 0.85rem;
+}

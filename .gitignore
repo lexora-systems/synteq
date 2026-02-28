@@ -1,0 +1,11 @@
+node_modules
+.env
+.env.*
+!.env.example
+.next
+dist
+coverage
+npm-debug.log*
+.DS_Store
+*.tsbuildinfo
+apps/api/generated

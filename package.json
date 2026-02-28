@@ -1,0 +1,21 @@
+{
+  "name": "synteq",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "postinstall": "npm run build --workspace @synteq/shared",
+    "build": "npm run build -ws",
+    "dev": "npm run dev --workspace api",
+    "dev:web": "npm run dev --workspace web",
+    "dev:api": "npm run dev --workspace api",
+    "test": "npm run test -ws",
+    "seed": "npm run seed --workspace api"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,209 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  operator
+  viewer
+}
+
+enum IncidentStatus {
+  open
+  acked
+  resolved
+}
+
+enum Severity {
+  warn
+  low
+  medium
+  high
+  critical
+}
+
+enum AlertChannelType {
+  slack
+  webhook
+  email
+}
+
+enum Comparator {
+  gt
+  gte
+  lt
+  lte
+  eq
+}
+
+model Tenant {
+  id         String           @id @default(uuid()) @db.VarChar(36)
+  name       String           @db.VarChar(191)
+  plan       String           @db.VarChar(64)
+  timezone   String           @default("UTC") @db.VarChar(64)
+  created_at DateTime         @default(now())
+  users      User[]
+  api_keys   ApiKey[]
+  workflows  Workflow[]
+  policies   AlertPolicy[]
+  channels   AlertChannel[]
+  incidents  Incident[]
+
+  @@map("tenants")
+}
+
+model User {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  tenant_id  String   @db.VarChar(36)
+  email      String   @db.VarChar(191)
+  full_name  String   @db.VarChar(191)
+  role       UserRole @default(operator)
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, email])
+  @@index([tenant_id])
+  @@map("users")
+}
+
+model ApiKey {
+  id           String    @id @default(uuid()) @db.VarChar(36)
+  tenant_id    String    @db.VarChar(36)
+  name         String    @db.VarChar(191)
+  key_hash     String    @unique @db.VarChar(64)
+  last_used_at DateTime?
+  revoked_at   DateTime?
+  created_at   DateTime  @default(now())
+  tenant       Tenant    @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@map("api_keys")
+}
+
+model Workflow {
+  id            String            @id @default(uuid()) @db.VarChar(36)
+  tenant_id     String            @db.VarChar(36)
+  slug          String            @db.VarChar(191)
+  display_name  String            @db.VarChar(191)
+  system        String            @db.VarChar(191)
+  environment   String            @db.VarChar(64)
+  is_active     Boolean           @default(true)
+  created_at    DateTime          @default(now())
+  tenant        Tenant            @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  versions      WorkflowVersion[]
+  policies      AlertPolicy[]
+  incidents     Incident[]
+
+  @@unique([tenant_id, slug, environment])
+  @@index([tenant_id])
+  @@map("workflows")
+}
+
+model WorkflowVersion {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  workflow_id String   @db.VarChar(36)
+  version     String   @db.VarChar(128)
+  config_json Json
+  deployed_at DateTime?
+  created_at  DateTime @default(now())
+  workflow    Workflow @relation(fields: [workflow_id], references: [id], onDelete: Cascade)
+
+  @@index([workflow_id])
+  @@map("workflow_versions")
+}
+
+model AlertPolicy {
+  id                 String               @id @default(uuid()) @db.VarChar(36)
+  tenant_id          String               @db.VarChar(36)
+  name               String               @db.VarChar(191)
+  metric             String               @db.VarChar(64)
+  window_sec         Int                  @default(300)
+  threshold          Float
+  comparator         Comparator           @default(gte)
+  min_events         Int                  @default(20)
+  severity           Severity             @default(medium)
+  is_enabled         Boolean              @default(true)
+  filter_workflow_id String?              @db.VarChar(36)
+  filter_env         String?              @db.VarChar(64)
+  created_at         DateTime             @default(now())
+  tenant             Tenant               @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  workflow           Workflow?            @relation(fields: [filter_workflow_id], references: [id], onDelete: SetNull)
+  channels           AlertPolicyChannel[]
+  incidents          Incident[]
+
+  @@index([tenant_id, is_enabled])
+  @@map("alert_policies")
+}
+
+model AlertChannel {
+  id         String               @id @default(uuid()) @db.VarChar(36)
+  tenant_id  String               @db.VarChar(36)
+  type       AlertChannelType
+  name       String               @db.VarChar(191)
+  config_json Json
+  is_enabled Boolean              @default(true)
+  created_at DateTime             @default(now())
+  tenant     Tenant               @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  policies   AlertPolicyChannel[]
+
+  @@index([tenant_id, is_enabled])
+  @@map("alert_channels")
+}
+
+model AlertPolicyChannel {
+  policy_id  String       @db.VarChar(36)
+  channel_id String       @db.VarChar(36)
+  policy     AlertPolicy  @relation(fields: [policy_id], references: [id], onDelete: Cascade)
+  channel    AlertChannel @relation(fields: [channel_id], references: [id], onDelete: Cascade)
+
+  @@id([policy_id, channel_id])
+  @@map("alert_policy_channels")
+}
+
+model Incident {
+  id          String         @id @default(uuid()) @db.VarChar(36)
+  tenant_id   String         @db.VarChar(36)
+  policy_id   String?        @db.VarChar(36)
+  workflow_id String?        @db.VarChar(36)
+  environment String?        @db.VarChar(64)
+  status      IncidentStatus @default(open)
+  severity    Severity       @default(medium)
+  started_at  DateTime
+  last_seen_at DateTime
+  resolved_at DateTime?
+  sla_due_at DateTime
+  sla_breached_at DateTime?
+  fingerprint String         @db.VarChar(64)
+  summary     String         @db.VarChar(512)
+  details_json Json
+  created_at  DateTime       @default(now())
+  tenant      Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  policy      AlertPolicy?   @relation(fields: [policy_id], references: [id], onDelete: SetNull)
+  workflow    Workflow?      @relation(fields: [workflow_id], references: [id], onDelete: SetNull)
+  events      IncidentEvent[]
+
+  @@index([tenant_id, status])
+  @@index([tenant_id, status, sla_due_at])
+  @@index([policy_id, workflow_id, environment, status])
+  @@index([fingerprint])
+  @@map("incidents")
+}
+
+model IncidentEvent {
+  id          Int      @id @default(autoincrement())
+  incident_id String   @db.VarChar(36)
+  at_time     DateTime @default(now())
+  event_type  String   @db.VarChar(64)
+  payload_json Json
+  incident    Incident @relation(fields: [incident_id], references: [id], onDelete: Cascade)
+
+  @@index([incident_id, at_time])
+  @@index([event_type, at_time])
+  @@map("incident_events")
+}
