@@ -2,12 +2,13 @@ import type { FastifyPluginAsync } from "fastify";
 import { incidentsQuerySchema } from "@synteq/shared";
 import { parseWithSchema } from "../utils/validation.js";
 import { ackIncident, listIncidents, resolveIncident } from "../services/incidents-service.js";
+import { Permission } from "../auth/permissions.js";
 
 const incidentsRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     "/incidents",
     {
-      preHandler: app.requireDashboardAuth
+      preHandler: [app.requireDashboardAuth, app.requirePermissions([Permission.INCIDENTS_READ])]
     },
     async (request, reply) => {
       const query = parseWithSchema(incidentsQuerySchema, request.query);
@@ -42,7 +43,7 @@ const incidentsRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/incidents/:id/ack",
     {
-      preHandler: app.requireDashboardAuth
+      preHandler: [app.requireDashboardAuth, app.requirePermissions([Permission.INCIDENTS_WRITE])]
     },
     async (request, reply) => {
       const tenantId = request.authUser?.tenant_id;
@@ -63,7 +64,7 @@ const incidentsRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/incidents/:id/resolve",
     {
-      preHandler: app.requireDashboardAuth
+      preHandler: [app.requireDashboardAuth, app.requirePermissions([Permission.INCIDENTS_WRITE])]
     },
     async (request, reply) => {
       const tenantId = request.authUser?.tenant_id;

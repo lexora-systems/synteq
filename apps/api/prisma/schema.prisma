@@ -8,8 +8,9 @@ datasource db {
 }
 
 enum UserRole {
+  owner
   admin
-  operator
+  engineer
   viewer
 }
 
@@ -53,23 +54,105 @@ model Tenant {
   policies   AlertPolicy[]
   channels   AlertChannel[]
   incidents  Incident[]
+  invites    Invite[]
 
   @@map("tenants")
 }
 
 model User {
-  id         String   @id @default(uuid()) @db.VarChar(36)
-  tenant_id  String   @db.VarChar(36)
-  email      String   @db.VarChar(191)
-  full_name  String   @db.VarChar(191)
-  role       UserRole @default(operator)
-  is_active  Boolean  @default(true)
-  created_at DateTime @default(now())
-  tenant     Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  id                         String                    @id @default(uuid()) @db.VarChar(36)
+  tenant_id                  String                    @db.VarChar(36)
+  email                      String                    @db.VarChar(191)
+  full_name                  String                    @db.VarChar(191)
+  password_hash              String                    @default("") @db.VarChar(255)
+  role                       UserRole                  @default(viewer)
+  email_verified_at          DateTime?
+  created_at                 DateTime                  @default(now())
+  updated_at                 DateTime                  @updatedAt
+  disabled_at                DateTime?
+  tenant                     Tenant                    @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  refresh_tokens             RefreshToken[]
+  email_verification_tokens  EmailVerificationToken[]
+  password_reset_tokens      PasswordResetToken[]
+  invites_sent               Invite[]                  @relation("InviteSender")
 
   @@unique([tenant_id, email])
   @@index([tenant_id])
   @@map("users")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  user_id    String   @db.VarChar(36)
+  token_hash String   @unique @db.VarChar(64)
+  expires_at DateTime
+  created_at DateTime @default(now())
+  revoked_at DateTime?
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, expires_at])
+  @@map("refresh_tokens")
+}
+
+model EmailVerificationToken {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  user_id    String   @db.VarChar(36)
+  token_hash String   @unique @db.VarChar(64)
+  expires_at DateTime
+  created_at DateTime @default(now())
+  used_at    DateTime?
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, expires_at])
+  @@map("email_verification_tokens")
+}
+
+model PasswordResetToken {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  user_id    String   @db.VarChar(36)
+  token_hash String   @unique @db.VarChar(64)
+  expires_at DateTime
+  created_at DateTime @default(now())
+  used_at    DateTime?
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, expires_at])
+  @@map("password_reset_tokens")
+}
+
+model Invite {
+  id                 String   @id @default(uuid()) @db.VarChar(36)
+  tenant_id          String   @db.VarChar(36)
+  email              String   @db.VarChar(191)
+  role               UserRole
+  token_hash         String   @unique @db.VarChar(64)
+  invited_by_user_id String   @db.VarChar(36)
+  expires_at         DateTime
+  accepted_at        DateTime?
+  created_at         DateTime @default(now())
+  tenant             Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  invited_by_user    User     @relation("InviteSender", fields: [invited_by_user_id], references: [id], onDelete: Restrict)
+
+  @@index([tenant_id, email, accepted_at])
+  @@index([tenant_id, email, created_at])
+  @@index([tenant_id, expires_at])
+  @@map("invites")
+}
+
+model SecurityEvent {
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  tenant_id     String?  @db.VarChar(36)
+  user_id       String?  @db.VarChar(36)
+  type          String   @db.VarChar(64)
+  ip            String?  @db.VarChar(64)
+  user_agent    String?  @db.VarChar(512)
+  metadata_json Json
+  created_at    DateTime @default(now())
+
+  @@index([tenant_id, created_at])
+  @@index([user_id, created_at])
+  @@index([type, created_at])
+  @@map("security_events")
 }
 
 model ApiKey {

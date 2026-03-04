@@ -2,7 +2,7 @@ import "dotenv/config";
 import { resolveEnvironmentSecrets } from "../lib/secret-manager.js";
 
 async function main() {
-  await resolveEnvironmentSecrets(["DATABASE_URL", "SLACK_DEFAULT_WEBHOOK_URL"]);
+  await resolveEnvironmentSecrets(["DATABASE_URL", "SLACK_DEFAULT_WEBHOOK_URL", "BREVO_API_KEY"]);
 
   const [{ dispatchPendingAlertEvents }, { prisma }] = await Promise.all([
     import("../services/alert-service.js"),

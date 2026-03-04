@@ -2,12 +2,13 @@ import type { FastifyPluginAsync } from "fastify";
 import { workflowRegisterSchema } from "@synteq/shared";
 import { parseWithSchema } from "../utils/validation.js";
 import { prisma } from "../lib/prisma.js";
+import { Permission } from "../auth/permissions.js";
 
 const workflowRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/workflows/register",
     {
-      preHandler: app.requireDashboardAuth
+      preHandler: [app.requireDashboardAuth, app.requirePermissions([Permission.WORKFLOWS_WRITE])]
     },
     async (request, reply) => {
       const body = parseWithSchema(workflowRegisterSchema, request.body);

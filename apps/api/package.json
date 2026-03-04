@@ -26,12 +26,14 @@
     "@google-cloud/secret-manager": "^6.1.0",
     "@prisma/client": "^6.3.1",
     "@synteq/shared": "*",
+    "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "fastify-raw-body": "^5.0.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.7",
     "prisma": "^6.3.1",
     "tsx": "^4.19.2",

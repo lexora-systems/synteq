@@ -11,6 +11,8 @@ export function TopNav() {
         <nav className="flex items-center gap-4 text-sm font-medium text-slate-600">
           <Link href="/overview" className="hover:text-ocean">Overview</Link>
           <Link href="/incidents" className="hover:text-ocean">Incidents</Link>
+          <Link href="/profile" className="hover:text-ocean">Profile</Link>
+          <Link href="/settings/team" className="hover:text-ocean">Team</Link>
           <form action="/api/logout" method="post">
             <button className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs uppercase tracking-wide text-slate-700 hover:border-slate-300">
               Logout

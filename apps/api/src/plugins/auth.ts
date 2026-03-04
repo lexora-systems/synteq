@@ -1,10 +1,13 @@
 import type { FastifyInstance } from "fastify";
+import type { UserRole } from "@prisma/client";
 import fastifyCors from "@fastify/cors";
 import fastifyJwt from "@fastify/jwt";
 import { config } from "../config.js";
 import { hashApiKey, hmacSha256, secureCompareHex } from "../utils/crypto.js";
 import { prisma } from "../lib/prisma.js";
 import { TtlCache } from "../utils/ttl-cache.js";
+import { hasRequiredRole } from "../utils/rbac.js";
+import { hasRequiredPermissions, type Permission } from "../auth/permissions.js";
 
 const replayGuard = new TtlCache<boolean>(100_000);
 
@@ -20,11 +23,76 @@ export async function registerAuthAndSecurity(app: FastifyInstance) {
   app.decorate("requireDashboardAuth", async (request, reply) => {
     try {
       await request.jwtVerify();
-      const user = request.user as { email: string; tenant_id: string; role: string };
-      request.authUser = user;
+
+      const claims = request.user as {
+        user_id?: string;
+        email: string;
+        tenant_id: string;
+      };
+
+      const user = claims.user_id
+        ? await prisma.user.findFirst({
+            where: {
+              id: claims.user_id,
+              tenant_id: claims.tenant_id,
+              disabled_at: null
+            }
+          })
+        : await prisma.user.findFirst({
+            where: {
+              email: claims.email,
+              tenant_id: claims.tenant_id,
+              disabled_at: null
+            }
+          });
+
+      if (!user) {
+        reply.code(401).send({ error: "Unauthorized" });
+        return;
+      }
+
+      request.authUser = {
+        user_id: user.id,
+        email: user.email,
+        full_name: user.full_name,
+        tenant_id: user.tenant_id,
+        role: user.role,
+        email_verified_at: user.email_verified_at?.toISOString() ?? null
+      };
     } catch {
       reply.code(401).send({ error: "Unauthorized" });
     }
+  });
+
+  app.decorate("requireRoles", (allowedRoles: UserRole[]) => {
+    return async (request, reply) => {
+      if (!request.authUser) {
+        reply.code(401).send({ error: "Unauthorized" });
+        return;
+      }
+
+      if (!hasRequiredRole(request.authUser.role as UserRole, allowedRoles)) {
+        reply.code(403).send({ error: "Forbidden" });
+        return;
+      }
+    };
+  });
+
+  app.decorate("requirePermissions", (requiredPermissions: Permission[]) => {
+    return async (request, reply) => {
+      if (!request.authUser) {
+        reply.code(401).send({ error: "Unauthorized" });
+        return;
+      }
+
+      if (!hasRequiredPermissions(request.authUser.role as UserRole, requiredPermissions)) {
+        reply.code(403).send({
+          error: "Forbidden",
+          code: "FORBIDDEN_PERMISSION"
+        });
+        return;
+      }
+    };
   });
 
   app.decorate("requireIngestionKey", async (request, reply) => {

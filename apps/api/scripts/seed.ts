@@ -2,6 +2,7 @@ import "dotenv/config";
 import { prisma } from "../src/lib/prisma.js";
 import { hashApiKey, randomApiKey } from "../src/utils/crypto.js";
 import { config } from "../src/config.js";
+import { hashPassword } from "../src/utils/password.js";
 
 async function main() {
   const defaultTenantId = config.DEFAULT_TENANT_ID;
@@ -32,23 +33,28 @@ async function main() {
       }));
   }
 
+  const passwordHash = await hashPassword(config.DASHBOARD_ADMIN_PASSWORD);
+  const adminEmail = config.DASHBOARD_ADMIN_EMAIL.toLowerCase();
   const user = await prisma.user.upsert({
     where: {
       tenant_id_email: {
         tenant_id: tenant.id,
-        email: config.DASHBOARD_ADMIN_EMAIL
+        email: adminEmail
       }
     },
     create: {
       tenant_id: tenant.id,
-      email: config.DASHBOARD_ADMIN_EMAIL,
+      email: adminEmail,
       full_name: "Synteq Admin",
-      role: "admin",
-      is_active: true
+      password_hash: passwordHash,
+      role: "owner",
+      email_verified_at: new Date()
     },
     update: {
-      is_active: true,
-      role: "admin"
+      password_hash: passwordHash,
+      role: "owner",
+      disabled_at: null,
+      email_verified_at: new Date()
     }
   });
 
@@ -168,7 +174,7 @@ async function main() {
 
   console.log("Seed completed");
   console.log(`tenant_id=${tenant.id}`);
-  console.log(`admin_email=${user.email}`);
+  console.log(`admin_email=${adminEmail}`);
   console.log(`raw_api_key=${rawApiKey}`);
   console.log(`workflow_id=${workflow.id}`);
 }

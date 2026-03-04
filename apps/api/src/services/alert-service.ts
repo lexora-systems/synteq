@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { prisma } from "../lib/prisma.js";
+import { sendIncidentAlert } from "./email-service.js";
 
 type DispatchResult = {
   channel_id: string;
@@ -141,11 +142,28 @@ export async function dispatchPendingAlertEvents(limit = 100) {
         }
 
         if (channel.type === "email") {
+          const recipient = typeof configJson.email === "string" ? configJson.email : undefined;
+          if (!recipient) {
+            results.push({
+              channel_id: channel.id,
+              type: channel.type,
+              ok: false,
+              error: "Missing email in channel config"
+            });
+            continue;
+          }
+
+          await sendIncidentAlert({
+            email: recipient,
+            incidentId: incident.id,
+            severity: incident.severity,
+            summary: incident.summary
+          });
+
           results.push({
             channel_id: channel.id,
             type: channel.type,
-            ok: false,
-            error: "Email channel not implemented in MVP"
+            ok: true
           });
         }
       } catch (error) {

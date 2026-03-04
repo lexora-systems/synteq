@@ -61,3 +61,7 @@ export function buildIncidentFingerprint(input: {
 export function randomApiKey(): string {
   return `synteq_${crypto.randomBytes(24).toString("hex")}`;
 }
+
+export function randomOpaqueToken(bytes = 32): string {
+  return crypto.randomBytes(bytes).toString("base64url");
+}

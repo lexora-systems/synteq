@@ -1,12 +1,21 @@
 import { z } from "zod";
 import {
+  emailVerifyConfirmSchema,
   executionStatusSchema,
   incidentsQuerySchema,
   ingestExecutionSchema,
   ingestHeartbeatSchema,
+  inviteAcceptSchema,
+  inviteCreateSchema,
   loginSchema,
   metricsOverviewQuerySchema,
+  passwordChangeSchema,
+  passwordResetConfirmSchema,
+  passwordResetRequestSchema,
   pubSubPushEnvelopeSchema,
+  refreshTokenSchema,
+  teamUpdateRoleSchema,
+  userRoleSchema,
   workflowRegisterSchema
 } from "./schemas.js";
 
@@ -17,6 +26,15 @@ export type WorkflowRegisterInput = z.infer<typeof workflowRegisterSchema>;
 export type MetricsOverviewQuery = z.infer<typeof metricsOverviewQuerySchema>;
 export type IncidentsQuery = z.infer<typeof incidentsQuerySchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
+export type UserRole = z.infer<typeof userRoleSchema>;
+export type InviteCreateInput = z.infer<typeof inviteCreateSchema>;
+export type InviteAcceptInput = z.infer<typeof inviteAcceptSchema>;
+export type TeamUpdateRoleInput = z.infer<typeof teamUpdateRoleSchema>;
+export type PasswordChangeInput = z.infer<typeof passwordChangeSchema>;
+export type EmailVerifyConfirmInput = z.infer<typeof emailVerifyConfirmSchema>;
+export type PasswordResetRequestInput = z.infer<typeof passwordResetRequestSchema>;
+export type PasswordResetConfirmInput = z.infer<typeof passwordResetConfirmSchema>;
 export type PubSubPushEnvelope = z.infer<typeof pubSubPushEnvelopeSchema>;
 
 export type MetricPoint = {

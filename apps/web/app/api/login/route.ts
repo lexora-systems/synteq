@@ -18,14 +18,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: text || "Invalid credentials" }, { status: 401 });
   }
 
-  const payload = (await response.json()) as { token: string };
+  const payload = (await response.json()) as { token?: string; access_token?: string; refresh_token?: string };
+  const accessToken = payload.access_token ?? payload.token;
+  if (!accessToken || !payload.refresh_token) {
+    return NextResponse.json({ error: "Invalid auth response" }, { status: 500 });
+  }
+
   const cookieStore = await cookies();
-  cookieStore.set("synteq_token", payload.token, {
+  cookieStore.set("synteq_token", accessToken, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 12
+    maxAge: 60 * 15
+  });
+  cookieStore.set("synteq_refresh_token", payload.refresh_token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30
   });
 
   return NextResponse.json({ ok: true });

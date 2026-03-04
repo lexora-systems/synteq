@@ -83,12 +83,27 @@ Synteq is now upgraded from MVP to a production-ready, multi-tenant observabilit
 ### Dashboard API (JWT)
 
 - `POST /v1/auth/login`
+- `POST /v1/auth/logout`
+- `POST /v1/auth/logout-all`
+- `POST /v1/auth/refresh`
 - `GET /v1/auth/me`
+- `POST /v1/auth/change-password`
+- `POST /v1/auth/email/verification/request`
+- `POST /v1/auth/email/verification/confirm`
+- `POST /v1/auth/password-reset/request`
+- `POST /v1/auth/password-reset/confirm`
 - `POST /v1/workflows/register`
 - `GET /v1/metrics/overview?workflow_id=&env=&range=`
 - `GET /v1/incidents?status=&workflow_id=&page=&page_size=`
 - `POST /v1/incidents/:id/ack`
 - `POST /v1/incidents/:id/resolve`
+- `GET /v1/team/users`
+- `POST /v1/team/invite`
+- `POST /v1/team/invite/resend`
+- `GET /v1/team/invites`
+- `POST /v1/team/invite/:token/accept`
+- `POST /v1/team/users/:id/role`
+- `POST /v1/team/users/:id/disable`
 
 ## Environment Variables (API)
 
@@ -100,6 +115,10 @@ Core:
 - `BIGQUERY_KEY_JSON`
 - `SYNTEQ_API_KEY_SALT`
 - `JWT_SECRET`
+- `ACCESS_TOKEN_TTL` (default: `15m`)
+- `REFRESH_TOKEN_TTL` (default: `30d`)
+- `BREVO_API_KEY`
+- `EMAIL_DEV_MODE` (`true|false`)
 - `DASHBOARD_ADMIN_EMAIL`
 - `DASHBOARD_ADMIN_PASSWORD`
 
@@ -119,6 +138,10 @@ Queueing:
 
 Ops/perf:
 
+- `WEB_BASE_URL`
+- `INVITE_RATE_LIMIT_PER_HOUR`
+- `INVITE_PER_EMAIL_PER_DAY`
+- `LOGOUT_ALL_ENABLED`
 - `METRICS_CACHE_TTL_SEC`
 - `INGEST_DEDUPE_TTL_SEC`
 - `INCIDENT_ESCALATION_MINUTES`
@@ -258,3 +281,66 @@ Covers:
 
 - anomaly math (`z-score`, `poisson`, `EWMA`, smoothed baseline)
 - ingestion schema validation
+- auth + invite + RBAC baseline tests
+
+## SaaS Identity and Tenant System
+
+Synteq now includes an incremental SaaS identity layer that preserves existing ingestion, anomaly, metrics, and dashboard flows.
+
+### Invite-only model
+
+- Public signup is disabled.
+- Tenant `owner`/`admin` users can invite users.
+- Invite acceptance endpoint: `POST /v1/team/invite/:token/accept`.
+- Only hashed invite tokens are stored in Cloud SQL.
+
+### Roles and RBAC
+
+Supported roles:
+
+- `owner`
+- `admin`
+- `engineer`
+- `viewer`
+
+Role checks are enforced by route middleware and all business queries remain tenant scoped.
+
+### Authentication
+
+- Password hashing uses bcrypt.
+- Access token TTL defaults to `15m`.
+- Refresh token TTL defaults to `30d`.
+- Refresh tokens are rotated on use and stored hashed only.
+- Logout revokes refresh tokens.
+- Reuse detection is enabled for refresh tokens. If a revoked/expired token is replayed,
+  all active refresh tokens for that user are revoked and the API returns `AUTH_REFRESH_REUSE_DETECTED`.
+
+### Tenant safety guardrails
+
+- Synteq prevents tenants from ending up without an owner.
+- The last active owner cannot be demoted or disabled (`LAST_OWNER_PROTECTION`).
+
+### Invite abuse prevention
+
+- Invite creation and resend enforce tenant-aware throttling:
+  - `INVITE_RATE_LIMIT_PER_HOUR` (default `20`)
+  - `INVITE_PER_EMAIL_PER_DAY` (default `3`)
+- Rate-limit violations return `INVITE_RATE_LIMITED` and are logged as security events.
+
+### Email service (Brevo + dev stub mode)
+
+Service file: `apps/api/src/services/email-service.ts`
+
+Implemented methods:
+
+- `sendVerificationEmail()`
+- `sendPasswordResetEmail()`
+- `sendInviteEmail()`
+- `sendIncidentAlert()`
+
+When `EMAIL_DEV_MODE=true`, emails are not sent and links are printed to logs for local development.
+
+### Dashboard pages
+
+- `/profile` for account details and password update.
+- `/settings/team` for invite + role/disable management (owner/admin).

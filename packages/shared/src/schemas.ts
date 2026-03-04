@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const nonEmpty = z.string().trim().min(1);
+export const userRoleSchema = z.enum(["owner", "admin", "engineer", "viewer"]);
 
 export const executionStatusSchema = z.enum(["success", "failed", "timeout", "running", "cancelled"]);
 
@@ -57,6 +58,42 @@ export const incidentsQuerySchema = z.object({
 
 export const loginSchema = z.object({
   email: z.string().email(),
+  password: z.string().min(8).max(200)
+});
+
+export const refreshTokenSchema = z.object({
+  refresh_token: z.string().min(32).max(512)
+});
+
+export const inviteCreateSchema = z.object({
+  email: z.string().email(),
+  role: userRoleSchema
+});
+
+export const inviteAcceptSchema = z.object({
+  full_name: z.string().trim().min(1).max(191),
+  password: z.string().min(8).max(200)
+});
+
+export const teamUpdateRoleSchema = z.object({
+  role: userRoleSchema
+});
+
+export const passwordChangeSchema = z.object({
+  current_password: z.string().min(8).max(200),
+  new_password: z.string().min(8).max(200)
+});
+
+export const emailVerifyConfirmSchema = z.object({
+  token: z.string().min(32).max(512)
+});
+
+export const passwordResetRequestSchema = z.object({
+  email: z.string().email()
+});
+
+export const passwordResetConfirmSchema = z.object({
+  token: z.string().min(32).max(512),
   password: z.string().min(8).max(200)
 });
 

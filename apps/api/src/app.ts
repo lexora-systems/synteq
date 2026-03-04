@@ -11,6 +11,7 @@ import workflowRoutes from "./routes/workflows.js";
 import metricsRoutes from "./routes/metrics.js";
 import incidentsRoutes from "./routes/incidents.js";
 import internalRoutes from "./routes/internal.js";
+import teamRoutes from "./routes/team.js";
 import { runtimeMetrics } from "./lib/runtime-metrics.js";
 import { prisma } from "./lib/prisma.js";
 
@@ -87,6 +88,7 @@ export async function buildApp() {
   await app.register(workflowRoutes, { prefix: "/v1" });
   await app.register(metricsRoutes, { prefix: "/v1" });
   await app.register(incidentsRoutes, { prefix: "/v1" });
+  await app.register(teamRoutes, { prefix: "/v1" });
   await app.register(internalRoutes, { prefix: "/v1/internal" });
 
   app.setErrorHandler((error, request, reply) => {
