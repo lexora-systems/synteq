@@ -4,6 +4,7 @@ import { parseWithSchema } from "../utils/validation.js";
 import { enqueueExecutionEvent, enqueueHeartbeatEvent } from "../services/ingest-queue-service.js";
 import { config } from "../config.js";
 import { runtimeMetrics } from "../lib/runtime-metrics.js";
+import { consumeRateLimit } from "../services/rate-limit-service.js";
 
 function getIngestionRateLimitKey(request: { apiKeyId?: string; ip: string }) {
   return request.apiKeyId ? `api_key:${request.apiKeyId}` : `ip:${request.ip}`;
@@ -15,15 +16,25 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
     {
       preHandler: [app.requireIngestionKey, app.requireIngestionSignature],
       config: {
-        rateLimit: {
-          max: config.INGEST_RATE_LIMIT_PER_MIN,
-          timeWindow: "1 minute",
-          keyGenerator: getIngestionRateLimitKey
-        },
         rawBody: true
       }
     },
     async (request, reply) => {
+      const rate = await consumeRateLimit({
+        scope: "ingest_execution",
+        key: getIngestionRateLimitKey(request),
+        max: config.INGEST_RATE_LIMIT_PER_MIN,
+        windowSec: 60
+      });
+      if (!rate.allowed) {
+        runtimeMetrics.increment("ingest_rate_limited_total");
+        reply.header("Retry-After", String(rate.retryAfterSec));
+        return reply.code(429).send({
+          error: "Rate limit exceeded",
+          code: "INGEST_RATE_LIMITED"
+        });
+      }
+
       if (request.rawBody && Buffer.byteLength(request.rawBody, "utf8") > config.MAX_INGEST_BODY_BYTES) {
         runtimeMetrics.increment("ingest_rejected_payload_too_large_total");
         return reply.code(413).send({ error: "Payload too large" });
@@ -57,15 +68,25 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
     {
       preHandler: [app.requireIngestionKey, app.requireIngestionSignature],
       config: {
-        rateLimit: {
-          max: config.INGEST_RATE_LIMIT_PER_MIN,
-          timeWindow: "1 minute",
-          keyGenerator: getIngestionRateLimitKey
-        },
         rawBody: true
       }
     },
     async (request, reply) => {
+      const rate = await consumeRateLimit({
+        scope: "ingest_heartbeat",
+        key: getIngestionRateLimitKey(request),
+        max: config.INGEST_RATE_LIMIT_PER_MIN,
+        windowSec: 60
+      });
+      if (!rate.allowed) {
+        runtimeMetrics.increment("ingest_rate_limited_total");
+        reply.header("Retry-After", String(rate.retryAfterSec));
+        return reply.code(429).send({
+          error: "Rate limit exceeded",
+          code: "INGEST_RATE_LIMITED"
+        });
+      }
+
       if (request.rawBody && Buffer.byteLength(request.rawBody, "utf8") > config.MAX_INGEST_BODY_BYTES) {
         runtimeMetrics.increment("ingest_rejected_payload_too_large_total");
         return reply.code(413).send({ error: "Payload too large" });

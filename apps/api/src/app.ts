@@ -1,5 +1,4 @@
 import Fastify from "fastify";
-import fastifyRateLimit from "@fastify/rate-limit";
 import fastifySensible from "@fastify/sensible";
 import fastifyRawBody from "fastify-raw-body";
 import crypto from "node:crypto";
@@ -12,6 +11,10 @@ import metricsRoutes from "./routes/metrics.js";
 import incidentsRoutes from "./routes/incidents.js";
 import internalRoutes from "./routes/internal.js";
 import teamRoutes from "./routes/team.js";
+import securityEventsRoutes from "./routes/security-events.js";
+import scanRoutes from "./routes/scan.js";
+import simulateRoutes from "./routes/simulate.js";
+import settingsRoutes from "./routes/settings.js";
 import { runtimeMetrics } from "./lib/runtime-metrics.js";
 import { prisma } from "./lib/prisma.js";
 
@@ -28,11 +31,6 @@ export async function buildApp() {
     field: "rawBody",
     global: false,
     runFirst: true
-  });
-  await app.register(fastifyRateLimit, {
-    global: false,
-    max: 100,
-    timeWindow: "1 minute"
   });
 
   await registerAuthAndSecurity(app);
@@ -88,7 +86,11 @@ export async function buildApp() {
   await app.register(workflowRoutes, { prefix: "/v1" });
   await app.register(metricsRoutes, { prefix: "/v1" });
   await app.register(incidentsRoutes, { prefix: "/v1" });
+  await app.register(scanRoutes, { prefix: "/v1" });
+  await app.register(simulateRoutes, { prefix: "/v1" });
+  await app.register(settingsRoutes, { prefix: "/v1" });
   await app.register(teamRoutes, { prefix: "/v1" });
+  await app.register(securityEventsRoutes, { prefix: "/v1" });
   await app.register(internalRoutes, { prefix: "/v1/internal" });
 
   app.setErrorHandler((error, request, reply) => {

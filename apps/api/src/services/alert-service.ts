@@ -10,6 +10,48 @@ type DispatchResult = {
   error?: string;
 };
 
+type PendingPayload = {
+  retry_attempt?: number;
+  retry_not_before?: string;
+  [key: string]: unknown;
+};
+
+const dispatchWorkerId = `${process.env.HOSTNAME ?? "local"}:${process.pid}`;
+
+function asObject(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+function parsePendingPayload(value: unknown): PendingPayload {
+  const payload = asObject(value);
+  return payload as PendingPayload;
+}
+
+function retryAttempt(payload: PendingPayload): number {
+  const raw = payload.retry_attempt;
+  return typeof raw === "number" && raw >= 0 ? raw : 0;
+}
+
+function retryNotBefore(payload: PendingPayload): Date | null {
+  const raw = payload.retry_not_before;
+  if (typeof raw !== "string") {
+    return null;
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function retryBackoffSec(nextAttempt: number): number {
+  const exponent = Math.max(0, nextAttempt - 1);
+  const capped = Math.min(config.ALERT_DISPATCH_BACKOFF_BASE_SEC * 2 ** exponent, 3600);
+  return Math.max(config.ALERT_DISPATCH_BACKOFF_BASE_SEC, capped);
+}
+
 async function postJson(url: string, payload: unknown, headers?: Record<string, string>) {
   return fetch(url, {
     method: "POST",
@@ -44,6 +86,73 @@ function formatIncidentMessage(input: {
   return `Synteq Incident ${input.incidentId}\nSeverity: ${input.severity.toUpperCase()}\nWorkflow: ${input.workflowId ?? "n/a"}\nEnv: ${input.environment ?? "n/a"}\nSLA Due: ${input.slaDueAt.toISOString()}\nSLA Breached: ${input.slaBreachedAt ? input.slaBreachedAt.toISOString() : "no"}\n${input.summary}`;
 }
 
+export async function claimPendingAlertEvent(eventId: number, currentPayload: unknown) {
+  const claimedAt = new Date().toISOString();
+  const payload = asObject(currentPayload);
+  const claimPayload = {
+    ...payload,
+    claim: {
+      worker_id: dispatchWorkerId,
+      claimed_at: claimedAt
+    }
+  };
+
+  const claimed = await prisma.incidentEvent.updateMany({
+    where: {
+      id: eventId,
+      event_type: "ALERT_PENDING"
+    },
+    data: {
+      event_type: "ALERT_CLAIMED",
+      payload_json: claimPayload
+    }
+  });
+
+  return {
+    claimed: claimed.count === 1,
+    claimedAt
+  };
+}
+
+async function scheduleRetryIfNeeded(input: {
+  incidentId: string;
+  eventId: number;
+  payload: PendingPayload;
+  dispatchedAt: string;
+}): Promise<{ scheduled: boolean; nextAttempt: number; retryNotBefore: string | null }> {
+  const currentAttempt = retryAttempt(input.payload);
+  const nextAttempt = currentAttempt + 1;
+  const shouldRetry = currentAttempt < config.ALERT_DISPATCH_MAX_RETRIES;
+  if (!shouldRetry) {
+    return {
+      scheduled: false,
+      nextAttempt,
+      retryNotBefore: null
+    };
+  }
+
+  const backoffSec = retryBackoffSec(nextAttempt);
+  const nextRetryAt = new Date(Date.now() + backoffSec * 1000).toISOString();
+  await prisma.incidentEvent.create({
+    data: {
+      incident_id: input.incidentId,
+      event_type: "ALERT_PENDING",
+      payload_json: {
+        retry_attempt: nextAttempt,
+        retry_not_before: nextRetryAt,
+        previous_event_id: input.eventId,
+        previous_dispatched_at: input.dispatchedAt
+      }
+    }
+  });
+
+  return {
+    scheduled: true,
+    nextAttempt,
+    retryNotBefore: nextRetryAt
+  };
+}
+
 export async function dispatchPendingAlertEvents(limit = 100) {
   const pendingEvents = await prisma.incidentEvent.findMany({
     where: {
@@ -71,6 +180,17 @@ export async function dispatchPendingAlertEvents(limit = 100) {
   });
 
   for (const event of pendingEvents) {
+    const pendingPayload = parsePendingPayload(event.payload_json);
+    const notBefore = retryNotBefore(pendingPayload);
+    if (notBefore && notBefore.getTime() > Date.now()) {
+      continue;
+    }
+
+    const claim = await claimPendingAlertEvent(event.id, event.payload_json);
+    if (!claim.claimed) {
+      continue;
+    }
+
     const incident = event.incident;
     const policyChannels =
       incident.policy?.channels
@@ -88,6 +208,7 @@ export async function dispatchPendingAlertEvents(limit = 100) {
     });
 
     const results: DispatchResult[] = [];
+    const dispatchedAt = new Date().toISOString();
 
     for (const channel of policyChannels) {
       const configJson = channel.config_json as Record<string, unknown>;
@@ -194,17 +315,49 @@ export async function dispatchPendingAlertEvents(limit = 100) {
     }
 
     const allOk = results.length > 0 && results.every((item) => item.ok);
-    await prisma.incidentEvent.update({
-      where: { id: event.id },
-      data: {
-        event_type: allOk ? "ALERT_SENT" : "ALERT_FAILED",
-        payload_json: {
-          original_payload: event.payload_json,
-          dispatched_at: new Date().toISOString(),
-          results
+    if (allOk) {
+      await prisma.incidentEvent.update({
+        where: { id: event.id },
+        data: {
+          event_type: "ALERT_SENT",
+          payload_json: {
+            original_payload: event.payload_json,
+            claim: {
+              worker_id: dispatchWorkerId,
+              claimed_at: claim.claimedAt
+            },
+            dispatched_at: dispatchedAt,
+            results
+          }
         }
-      }
-    });
+      });
+    } else {
+      const retry = await scheduleRetryIfNeeded({
+        incidentId: incident.id,
+        eventId: event.id,
+        payload: pendingPayload,
+        dispatchedAt
+      });
+
+      await prisma.incidentEvent.update({
+        where: { id: event.id },
+        data: {
+          event_type: "ALERT_FAILED",
+          payload_json: {
+            original_payload: event.payload_json,
+            claim: {
+              worker_id: dispatchWorkerId,
+              claimed_at: claim.claimedAt
+            },
+            dispatched_at: dispatchedAt,
+            retry_scheduled: retry.scheduled,
+            retry_attempt: retry.nextAttempt,
+            retry_not_before: retry.retryNotBefore,
+            results
+          }
+        }
+      });
+    }
 
     await prisma.incidentEvent.create({
       data: {
@@ -213,6 +366,8 @@ export async function dispatchPendingAlertEvents(limit = 100) {
         payload_json: {
           pending_event_id: event.id,
           all_ok: allOk,
+          dispatched_at: dispatchedAt,
+          worker_id: dispatchWorkerId,
           results
         }
       }

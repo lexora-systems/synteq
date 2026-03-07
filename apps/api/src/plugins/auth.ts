@@ -5,11 +5,9 @@ import fastifyJwt from "@fastify/jwt";
 import { config } from "../config.js";
 import { hashApiKey, hmacSha256, secureCompareHex } from "../utils/crypto.js";
 import { prisma } from "../lib/prisma.js";
-import { TtlCache } from "../utils/ttl-cache.js";
 import { hasRequiredRole } from "../utils/rbac.js";
 import { hasRequiredPermissions, type Permission } from "../auth/permissions.js";
-
-const replayGuard = new TtlCache<boolean>(100_000);
+import { redisSetNx, redisKey } from "../lib/redis.js";
 
 export async function registerAuthAndSecurity(app: FastifyInstance) {
   await app.register(fastifyCors, {
@@ -162,12 +160,6 @@ export async function registerAuthAndSecurity(app: FastifyInstance) {
       return;
     }
 
-    const replayKey = `${request.tenantId ?? "unknown"}:${timestampSec}:${signatureRaw}`;
-    if (replayGuard.has(replayKey)) {
-      reply.code(409).send({ error: "Replay detected" });
-      return;
-    }
-
     const rawBody = request.rawBody ?? JSON.stringify(request.body ?? {});
     const expectedSignature = hmacSha256(config.INGEST_HMAC_SECRET, `${timestampSec}.${rawBody}`);
     const actualSignature = signatureRaw.startsWith("sha256=") ? signatureRaw.slice("sha256=".length) : signatureRaw;
@@ -177,6 +169,12 @@ export async function registerAuthAndSecurity(app: FastifyInstance) {
       return;
     }
 
-    replayGuard.set(replayKey, true, config.INGEST_SIGNATURE_MAX_SKEW_SEC);
+    const replayKey = redisKey("ingest", "replay", request.tenantId ?? "unknown", timestampSec, signatureRaw);
+    const accepted = await redisSetNx(replayKey, "1", config.INGEST_SIGNATURE_MAX_SKEW_SEC);
+    if (!accepted) {
+      reply.code(409).send({ error: "Replay detected" });
+      return;
+    }
+
   });
 }

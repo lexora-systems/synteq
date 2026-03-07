@@ -47,6 +47,7 @@ model Tenant {
   name       String           @db.VarChar(191)
   plan       String           @db.VarChar(64)
   timezone   String           @default("UTC") @db.VarChar(64)
+  default_currency String     @default("USD") @db.VarChar(3)
   created_at DateTime         @default(now())
   users      User[]
   api_keys   ApiKey[]

@@ -17,6 +17,18 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7.2-alpine
+    container_name: synteq-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   api:
     build:
       context: .
@@ -25,10 +37,15 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       NODE_ENV: development
       PORT: 8080
       DATABASE_URL: mysql://root:root@mysql:3306/synteq
+      REDIS_URL: redis://redis:6379
+      REDIS_REQUIRED: ${REDIS_REQUIRED:-false}
+      REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-synteq}
       BIGQUERY_PROJECT_ID: ${BIGQUERY_PROJECT_ID:-your-gcp-project}
       BIGQUERY_DATASET: ${BIGQUERY_DATASET:-synteq}
       BIGQUERY_KEY_JSON: ${BIGQUERY_KEY_JSON:-}
@@ -52,9 +69,15 @@ services:
       DASHBOARD_ADMIN_PASSWORD: ${DASHBOARD_ADMIN_PASSWORD:-ChangeMe123!}
       DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-}
       CORS_ORIGIN: http://localhost:3000
+      AUTH_LOGIN_MAX_ATTEMPTS_PER_IP: ${AUTH_LOGIN_MAX_ATTEMPTS_PER_IP:-10}
+      AUTH_LOGIN_MAX_ATTEMPTS_PER_EMAIL: ${AUTH_LOGIN_MAX_ATTEMPTS_PER_EMAIL:-5}
+      AUTH_LOGIN_WINDOW_SEC: ${AUTH_LOGIN_WINDOW_SEC:-900}
+      AUTH_LOGIN_LOCKOUT_SEC: ${AUTH_LOGIN_LOCKOUT_SEC:-900}
       METRICS_CACHE_TTL_SEC: ${METRICS_CACHE_TTL_SEC:-45}
       INCIDENT_ESCALATION_MINUTES: ${INCIDENT_ESCALATION_MINUTES:-20}
       INCIDENT_COOLDOWN_WINDOWS: ${INCIDENT_COOLDOWN_WINDOWS:-3}
+      ALERT_DISPATCH_MAX_RETRIES: ${ALERT_DISPATCH_MAX_RETRIES:-3}
+      ALERT_DISPATCH_BACKOFF_BASE_SEC: ${ALERT_DISPATCH_BACKOFF_BASE_SEC:-30}
     ports:
       - "8080:8080"
 

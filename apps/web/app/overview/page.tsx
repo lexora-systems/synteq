@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { TopNav } from "../../components/top-nav";
 import { MetricsChart } from "../../components/charts";
-import { fetchIncidents, fetchOverview } from "../../lib/api";
+import { ReliabilityTools } from "../../components/reliability-tools";
+import { fetchIncidents, fetchOverview, fetchWorkflows } from "../../lib/api";
 import { requireToken } from "../../lib/auth";
 
 function asNumber(value: unknown): number {
@@ -10,7 +11,11 @@ function asNumber(value: unknown): number {
 
 export default async function OverviewPage() {
   const token = await requireToken();
-  const [overview, incidentsPayload] = await Promise.all([fetchOverview(token, "1h"), fetchIncidents(token, "open")]);
+  const [overview, incidentsPayload, workflowsPayload] = await Promise.all([
+    fetchOverview(token, "1h"),
+    fetchIncidents(token, "open"),
+    fetchWorkflows(token)
+  ]);
 
   const summary = overview.summary ?? {};
   const total = asNumber(summary.count_total);
@@ -91,6 +96,14 @@ export default async function OverviewPage() {
           <MetricsChart data={chartData} dataKey="p95_duration_ms" color="#d97706" title="P95 Latency (ms)" />
           <MetricsChart data={chartData} dataKey="retry_rate" color="#0e7490" title="Retry Rate" />
         </div>
+
+        {workflowsPayload.workflows.length > 0 ? (
+          <ReliabilityTools workflows={workflowsPayload.workflows} />
+        ) : (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-panel">
+            Register a workflow first, then run a Synteq Reliability Scan and controlled simulations.
+          </div>
+        )}
       </section>
     </main>
   );

@@ -3,6 +3,7 @@ import { resolveEnvironmentSecrets } from "./lib/secret-manager.js";
 
 await resolveEnvironmentSecrets([
   "DATABASE_URL",
+  "REDIS_URL",
   "BIGQUERY_KEY_JSON",
   "SYNTEQ_API_KEY_SALT",
   "JWT_SECRET",

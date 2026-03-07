@@ -9,12 +9,13 @@ Synteq is now upgraded from MVP to a production-ready, multi-tenant observabilit
 - API ingestion is now buffered through **Pub/Sub** (`PUBSUB_TOPIC_INGEST`) before BigQuery writes.
 - Added idempotency fingerprint per execution:
   - `fingerprint = sha256(tenant_id + workflow_id + minute_bucket + execution_id)`
-- Added dedupe guard in subscriber worker (TTL cache) plus BigQuery `insertId` usage.
-- Added per-API-key rate limiting (`INGEST_RATE_LIMIT_PER_MIN`).
+- Added distributed dedupe guard in subscriber worker (Redis TTL keys) plus BigQuery `insertId` usage.
+- Added distributed per-API-key/IP rate limiting (`INGEST_RATE_LIMIT_PER_MIN`) via Redis counters.
 - Added HMAC signature verification and replay prevention:
   - `X-Synteq-Timestamp`
   - `X-Synteq-Signature: sha256=<hex>`
   - signature payload: `<timestamp>.<rawBody>`
+- Added distributed replay protection via Redis `SET NX EX` keys.
 - Added strict payload size protections (`MAX_INGEST_BODY_BYTES`) and sanitation.
 - Structured request logging with `request_id`, route, status, and latency.
 
@@ -25,7 +26,7 @@ Synteq is now upgraded from MVP to a production-ready, multi-tenant observabilit
   - cost rollups (`sum_cost_usd`, `avg_cost_usd`)
   - token rollups (`sum_token_in`, `sum_token_out`)
 - Added sliding windows support (`5m` and `15m`) in metrics API response.
-- Added metrics cache (in-memory TTL, default 45s) for dashboard traffic reduction.
+- Added metrics cache (Redis TTL, default 45s) for dashboard traffic reduction across replicas.
 
 ### Advanced Anomaly Detection
 
@@ -46,11 +47,56 @@ Synteq is now upgraded from MVP to a production-ready, multi-tenant observabilit
   - `sha256(tenant + workflow + metric + timeBucket)`
 - Added incident pagination (`page`, `page_size`).
 - Added SLA breach event generation (`SLA_BREACHED`).
+- Added alert dispatch claim semantics (`ALERT_PENDING` -> `ALERT_CLAIMED`) to prevent duplicate sends under parallel workers.
+- Added retry/backoff metadata for failed alert dispatch attempts.
+
+### Incident Diagnosis & Recommended Actions
+
+- Synteq now adds a deterministic, rule-based guidance layer after incidents are detected.
+- Guidance is generated per incident with:
+  - incident type classification
+  - likely causes
+  - business impact
+  - recommended actions
+  - confidence level
+  - evidence
+  - summary text
+- Current supported incident guidance types:
+  - `duplicate_webhook`
+  - `retry_storm`
+  - `latency_spike`
+  - `failure_rate_spike`
+  - `missing_heartbeat`
+  - `cost_spike`
+  - `unknown`
+- Detection remains deterministic and unchanged; guidance consumes incident context on read and does not replace anomaly logic.
+- Narration is architecture-ready for AI: current implementation uses template narration, and an AI narrator can be added later behind the same interface without changing detection/guidance core logic.
+
+### Reliability Scan & Simulation Tools
+
+- Synteq now includes a deterministic Reliability Scan that scores workflow reliability from existing telemetry.
+- New scan output includes:
+  - reliability score (0-100)
+  - success rate, duplicate rate, retry rate
+  - latency health score
+  - anomaly/risk flags
+  - estimated monthly risk (USD)
+  - deterministic top risks and next steps
+- New simulation tools inject synthetic execution events into the existing ingestion pipeline for:
+  - webhook failure
+  - retry storm
+  - latency spike
+  - duplicate webhook
+- Simulation-generated incidents continue through the normal path:
+  - ingest -> metrics -> anomaly -> incident -> guidance
+- Incident metadata now includes simulation source signals when synthetic traffic dominates the triggering window.
 
 ### Security
 
 - Added Secret Manager secret reference support (`sm://projects/.../secrets/.../versions/latest`).
 - API server and jobs resolve secrets before initialization.
+- Added Redis-backed login abuse protection with per-IP and per-email lockouts (`AUTH_TEMPORARILY_LOCKED`).
+- Added tenant-scoped security events API and dashboard page.
 
 ### Operability
 
@@ -93,10 +139,20 @@ Synteq is now upgraded from MVP to a production-ready, multi-tenant observabilit
 - `POST /v1/auth/password-reset/request`
 - `POST /v1/auth/password-reset/confirm`
 - `POST /v1/workflows/register`
+- `GET /v1/workflows`
 - `GET /v1/metrics/overview?workflow_id=&env=&range=`
 - `GET /v1/incidents?status=&workflow_id=&page=&page_size=`
 - `POST /v1/incidents/:id/ack`
 - `POST /v1/incidents/:id/resolve`
+- `GET /v1/incidents/:id`
+- `POST /v1/scan/run`
+- `GET /v1/scan/:workflowId/latest`
+- `POST /v1/simulate/webhook-failure`
+- `POST /v1/simulate/retry-storm`
+- `POST /v1/simulate/latency-spike`
+- `POST /v1/simulate/duplicate-webhook`
+- `GET /v1/settings/tenant`
+- `PATCH /v1/settings/tenant`
 - `GET /v1/team/users`
 - `POST /v1/team/invite`
 - `POST /v1/team/invite/resend`
@@ -104,12 +160,16 @@ Synteq is now upgraded from MVP to a production-ready, multi-tenant observabilit
 - `POST /v1/team/invite/:token/accept`
 - `POST /v1/team/users/:id/role`
 - `POST /v1/team/users/:id/disable`
+- `GET /v1/security-events?type=&from=&to=&page=&limit=`
 
 ## Environment Variables (API)
 
 Core:
 
 - `DATABASE_URL`
+- `REDIS_URL`
+- `REDIS_REQUIRED` (`true|false`)
+- `REDIS_KEY_PREFIX`
 - `BIGQUERY_PROJECT_ID`
 - `BIGQUERY_DATASET` (default: `synteq`)
 - `BIGQUERY_KEY_JSON`
@@ -141,11 +201,24 @@ Ops/perf:
 - `WEB_BASE_URL`
 - `INVITE_RATE_LIMIT_PER_HOUR`
 - `INVITE_PER_EMAIL_PER_DAY`
+- `AUTH_LOGIN_MAX_ATTEMPTS_PER_IP`
+- `AUTH_LOGIN_MAX_ATTEMPTS_PER_EMAIL`
+- `AUTH_LOGIN_WINDOW_SEC`
+- `AUTH_LOGIN_LOCKOUT_SEC`
 - `LOGOUT_ALL_ENABLED`
 - `METRICS_CACHE_TTL_SEC`
 - `INGEST_DEDUPE_TTL_SEC`
 - `INCIDENT_ESCALATION_MINUTES`
 - `INCIDENT_COOLDOWN_WINDOWS`
+- `ALERT_DISPATCH_MAX_RETRIES`
+- `ALERT_DISPATCH_BACKOFF_BASE_SEC`
+- `FX_RATE_USD`
+- `FX_RATE_PHP`
+- `FX_RATE_EUR`
+- `FX_RATE_GBP`
+- `FX_RATE_JPY`
+- `FX_RATE_AUD`
+- `FX_RATE_CAD`
 
 Secret Manager:
 
@@ -164,6 +237,8 @@ npm install
 ```bash
 docker compose up --build -d
 ```
+
+This starts MySQL + Redis + API + Web.
 
 3. Generate Prisma client and apply migrations:
 
@@ -196,7 +271,7 @@ Run these SQL files in order:
 
 ### API/Web deploy
 
-Use existing deploy flow; ensure new env vars are present for Pub/Sub + HMAC + cache + cooldown.
+Use existing deploy flow; ensure new env vars are present for Pub/Sub + HMAC + Redis + cache + cooldown.
 
 ### Jobs
 
@@ -209,10 +284,10 @@ Schedule all three with Cloud Scheduler (1m or 2m cadence).
 ## Scaling Notes
 
 - **Ingestion API is decoupled** from BigQuery write latency via Pub/Sub.
-- Run multiple API replicas safely; dedupe is protected by fingerprint + downstream dedupe aggregation.
+- Run multiple API replicas safely; dedupe/replay/rate limits/cache now use Redis shared state.
 - Keep aggregation and anomaly jobs independent from API scaling.
 - For higher throughput, split topics by tenant tier or region.
-- Move in-memory dedupe/cache to Redis for cross-instance consistency in large clusters.
+- Keep Redis highly available (managed Redis or sentinel/cluster) because auth, replay guard, and dedupe use shared keys.
 
 ## Failure Scenarios & Safeguards
 
@@ -221,11 +296,13 @@ Schedule all three with Cloud Scheduler (1m or 2m cadence).
 - BigQuery transient errors:
   - Pub/Sub push retries until worker returns 2xx.
 - Replay attacks:
-  - rejected by timestamp skew + signature replay cache.
+  - rejected by timestamp skew + Redis replay keys.
 - Duplicate ingestion attempts:
-  - suppressed by fingerprint cache + BigQuery insertId + dedupe aggregation query.
+  - suppressed by Redis fingerprint dedupe + BigQuery insertId + dedupe aggregation query.
 - Incident storms:
   - cooldown windows and incident dedupe prevent rapid reopen spam.
+- Parallel alert workers:
+  - deduplicated by atomic claim transition on `ALERT_PENDING` events.
 
 ## Cost Estimation Guidance
 
@@ -245,6 +322,81 @@ Suggested operational budget alarms:
 - 5m spend > threshold per tenant
 - 15m spend slope increase via EWMA
 - daily spend forecast from rolling 24h average
+
+## Reliability Scan
+
+Dashboard: `/overview` -> "Run a Synteq Reliability Scan"
+
+API:
+
+- `POST /v1/scan/run`
+  - body: `{ "workflow_id": "...", "range": "24h|7d|30d" }`
+- `GET /v1/scan/:workflowId/latest?range=24h|7d|30d`
+
+Response includes:
+
+- `reliability_score` (0-100)
+- `success_rate`
+- `duplicate_rate`
+- `retry_rate`
+- `latency_health_score`
+- `anomaly_flags`
+- `estimated_monthly_risk_usd`
+- `recommendation`
+- `top_risks`
+- `next_steps`
+
+## Simulation Tools
+
+Dashboard: `/overview` -> "Test Synteq Detection"
+
+API:
+
+- `POST /v1/simulate/webhook-failure`
+- `POST /v1/simulate/retry-storm`
+- `POST /v1/simulate/latency-spike`
+- `POST /v1/simulate/duplicate-webhook`
+
+All simulation endpoints accept:
+
+- `{ "workflow_id": "..." }`
+
+They inject synthetic execution events through existing ingestion semantics and mark payload metadata with simulation context.
+
+## Deterministic Scoring Model
+
+Reliability score is deterministic and non-AI in v1:
+
+- `success_rate = success / total`
+- `duplicate_rate = duplicate_events / total`
+- `retry_rate = retry_events / total`
+- `latency_health_score` derived from p95 vs baseline (or deterministic fallback thresholds)
+- `reliability_score = (success_rate * 50) + ((1 - duplicate_rate) * 20) + ((1 - retry_rate) * 15) + ((latency_health_score / 100) * 15)`
+
+Monthly risk estimate is deterministic and uses workload volume with fallback assumptions when tenant business context is not configured.
+
+## Synthetic Event Handling & Caveats
+
+- Synthetic events are explicitly tagged in payload metadata (`simulation=true`, scenario, batch).
+- Simulations can influence aggregate metrics by design in v1.
+- Incident detection is asynchronous; after simulation, run:
+  - `npm run job:aggregate --workspace api`
+  - `npm run job:anomaly --workspace api`
+  - `npm run job:alerts --workspace api`
+- For duplicate-webhook simulation, Synteq applies a simulation-only fingerprint override so duplicate execution IDs remain observable while preserving normal ingestion behavior for non-synthetic traffic.
+
+## Multi-Currency Revenue Risk Display
+
+- Synteq keeps internal reliability risk normalization in USD (`estimated_monthly_risk_usd`).
+- Tenant settings can choose default display currency:
+  - `USD`, `PHP`, `EUR`, `GBP`, `JPY`, `AUD`, `CAD`
+- Scan API responses include both base and converted values:
+  - `estimated_monthly_risk_usd`
+  - `estimated_monthly_risk`
+  - `currency`
+  - `conversion_rate`
+- V1 uses deterministic static FX rates from environment variables (`FX_RATE_*`), not live external FX calls.
+- Future enhancement can replace static rates with scheduled live-rate updates while preserving the same response contract.
 
 ## Monitoring Synteq Itself
 
@@ -282,6 +434,10 @@ Covers:
 - anomaly math (`z-score`, `poisson`, `EWMA`, smoothed baseline)
 - ingestion schema validation
 - auth + invite + RBAC baseline tests
+- auth abuse lockout tests
+- alert idempotency claim tests
+- security events API access/isolation tests
+- refresh-session API flow tests
 
 ## SaaS Identity and Tenant System
 
@@ -314,6 +470,7 @@ Role checks are enforced by route middleware and all business queries remain ten
 - Logout revokes refresh tokens.
 - Reuse detection is enabled for refresh tokens. If a revoked/expired token is replayed,
   all active refresh tokens for that user are revoked and the API returns `AUTH_REFRESH_REUSE_DETECTED`.
+- Web session continuity is preserved: stale access tokens trigger refresh exchange before redirecting users to login.
 
 ### Tenant safety guardrails
 
@@ -344,3 +501,5 @@ When `EMAIL_DEV_MODE=true`, emails are not sent and links are printed to logs fo
 
 - `/profile` for account details and password update.
 - `/settings/team` for invite + role/disable management (owner/admin).
+- `/settings/security` for tenant security event visibility (owner/admin).
+- `/incidents/[id]` for incident diagnosis and recommended action guidance.

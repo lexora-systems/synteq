@@ -33,6 +33,27 @@ export async function listIncidents(params: {
   };
 }
 
+export async function getIncidentById(tenantId: string, incidentId: string) {
+  return prisma.incident.findFirst({
+    where: {
+      id: incidentId,
+      tenant_id: tenantId
+    }
+  });
+}
+
+export async function listIncidentEvents(incidentId: string, limit = 20) {
+  return prisma.incidentEvent.findMany({
+    where: {
+      incident_id: incidentId
+    },
+    orderBy: {
+      at_time: "desc"
+    },
+    take: limit
+  });
+}
+
 export async function markBreachedSla(now = new Date()) {
   const openIncidents = await prisma.incident.findMany({
     where: {

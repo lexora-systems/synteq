@@ -1,14 +1,14 @@
 import { config } from "../config.js";
 import { getBigQueryClient } from "../lib/bigquery.js";
 import { runtimeMetrics } from "../lib/runtime-metrics.js";
+import { redisGetJson, redisKey, redisSetJson } from "../lib/redis.js";
 import { getRangeMinutes } from "../utils/range.js";
-import { TtlCache } from "../utils/ttl-cache.js";
 
-const overviewCache = new TtlCache<{
+type OverviewCacheValue = {
   summary: Record<string, unknown> | null;
   series: Array<Record<string, unknown>>;
   windows: Record<string, unknown>;
-}>(5_000);
+};
 
 function cacheKey(params: {
   tenantId: string;
@@ -16,7 +16,14 @@ function cacheKey(params: {
   env?: string;
   range: "15m" | "1h" | "6h" | "24h" | "7d";
 }) {
-  return `${params.tenantId}|${params.workflowId ?? "*"}|${params.env ?? "*"}|${params.range}`;
+  return redisKey(
+    "metrics",
+    "overview",
+    params.tenantId,
+    params.workflowId ?? "*",
+    params.env ?? "*",
+    params.range
+  );
 }
 
 export async function getOverviewMetrics(params: {
@@ -26,7 +33,7 @@ export async function getOverviewMetrics(params: {
   range: "15m" | "1h" | "6h" | "24h" | "7d";
 }) {
   const key = cacheKey(params);
-  const cached = overviewCache.get(key);
+  const cached = await redisGetJson<OverviewCacheValue>(key);
   if (cached) {
     runtimeMetrics.increment("metrics_cache_hit_total");
     return cached;
@@ -140,23 +147,21 @@ export async function getOverviewMetrics(params: {
   );
 
   const normalizedSeries = (seriesRows as Array<Record<string, unknown>>).map((row) => {
-  const rawTs = row.bucket_ts;
-  const bucketTs =
-    rawTs && typeof rawTs === "object" && "value" in rawTs
-      ? String((rawTs as { value: unknown }).value)
-      : String(rawTs ?? "");
+    const rawTs = row.bucket_ts;
+    const bucketTs =
+      rawTs && typeof rawTs === "object" && "value" in rawTs
+        ? String((rawTs as { value: unknown }).value)
+        : String(rawTs ?? "");
 
-  return { ...row, bucket_ts: bucketTs };
-});
+    return { ...row, bucket_ts: bucketTs };
+  });
 
-const result = {
-  summary: (summaryRows[0] as Record<string, unknown> | undefined) ?? null,
-  series: normalizedSeries,
-  windows
-};
+  const result: OverviewCacheValue = {
+    summary: (summaryRows[0] as Record<string, unknown> | undefined) ?? null,
+    series: normalizedSeries,
+    windows
+  };
 
-
-  overviewCache.set(key, result, config.METRICS_CACHE_TTL_SEC);
-  runtimeMetrics.setGauge("metrics_cache_size", overviewCache.size());
+  await redisSetJson(key, result, config.METRICS_CACHE_TTL_SEC);
   return result;
 }

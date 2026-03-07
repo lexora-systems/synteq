@@ -1,9 +1,39 @@
 import { apiBaseUrl } from "./config";
+import type { IncidentGuidance, SupportedCurrency } from "@synteq/shared";
 
 type RequestOptions = {
   token?: string;
   method?: string;
   body?: unknown;
+};
+
+type IncidentRow = {
+  id: string;
+  tenant_id: string;
+  workflow_id: string | null;
+  environment: string | null;
+  policy_id: string | null;
+  status: "open" | "acked" | "resolved";
+  severity: "warn" | "low" | "medium" | "high" | "critical";
+  started_at: string;
+  last_seen_at: string;
+  resolved_at: string | null;
+  summary: string;
+  details_json: Record<string, unknown>;
+  guidance: IncidentGuidance;
+};
+
+export type WorkflowRow = {
+  id: string;
+  slug: string;
+  display_name: string;
+  environment: string;
+  system: string;
+};
+
+export type TenantSettings = {
+  tenant_id: string;
+  default_currency: SupportedCurrency;
 };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -39,23 +69,68 @@ export async function fetchOverview(token: string, range: "15m" | "1h" | "6h" | 
   }>(`/v1/metrics/overview?${params.toString()}`, { token });
 }
 
-export async function fetchIncidents(token: string, status?: string, page = 1, pageSize = 25) {
+export async function fetchWorkflows(token: string) {
+  return request<{
+    workflows: WorkflowRow[];
+  }>("/v1/workflows", { token });
+}
+
+export async function fetchTenantSettings(token: string) {
+  return request<{
+    settings: TenantSettings;
+  }>("/v1/settings/tenant", { token });
+}
+
+export async function updateTenantSettings(token: string, defaultCurrency: SupportedCurrency) {
+  return request<{
+    settings: TenantSettings;
+  }>("/v1/settings/tenant", {
+    token,
+    method: "PATCH",
+    body: {
+      default_currency: defaultCurrency
+    }
+  });
+}
+
+export async function fetchIncidents(
+  token: string,
+  status?: string,
+  page = 1,
+  pageSize = 25,
+  workflowId?: string
+) {
   const params = new URLSearchParams();
   if (status) {
     params.set("status", status);
+  }
+  if (workflowId) {
+    params.set("workflow_id", workflowId);
   }
   params.set("page", String(page));
   params.set("page_size", String(pageSize));
 
   const query = params.toString();
   return request<{
-    incidents: Array<Record<string, unknown>>;
+    incidents: IncidentRow[];
     pagination: { page: number; page_size: number; total: number; has_next: boolean };
     last_updated: string;
   }>(
     `/v1/incidents${query ? `?${query}` : ""}`,
     { token }
   );
+}
+
+export async function fetchIncidentById(token: string, incidentId: string) {
+  return request<{
+    incident: IncidentRow;
+    recent_events: Array<{
+      id: number;
+      event_type: string;
+      at_time: string;
+      payload_json: Record<string, unknown>;
+    }>;
+  }>(`/v1/incidents/${incidentId}`, { token });
 }
 
 export async function postIncidentAction(token: string, incidentId: string, action: "ack" | "resolve") {
@@ -174,4 +249,45 @@ export async function disableTeamUser(token: string, userId: string) {
     token,
     method: "POST"
   });
+}
+
+export async function fetchSecurityEvents(
+  token: string,
+  options: {
+    type?: "REFRESH_REUSE_DETECTED" | "LOGIN_FAILED" | "LOGIN_LOCKED" | "INVITE_RATE_LIMITED";
+    from?: string;
+    to?: string;
+    page?: number;
+    limit?: number;
+  } = {}
+) {
+  const params = new URLSearchParams();
+  if (options.type) {
+    params.set("type", options.type);
+  }
+  if (options.from) {
+    params.set("from", options.from);
+  }
+  if (options.to) {
+    params.set("to", options.to);
+  }
+  params.set("page", String(options.page ?? 1));
+  params.set("limit", String(options.limit ?? 25));
+
+  return request<{
+    events: Array<{
+      id: string;
+      type: string;
+      created_at: string;
+      ip: string | null;
+      user_agent: string | null;
+      metadata_json: Record<string, unknown>;
+      actor: {
+        id: string;
+        email: string;
+        full_name: string;
+      } | null;
+    }>;
+    pagination: { page: number; limit: number; total: number; has_next: boolean };
+  }>(`/v1/security-events?${params.toString()}`, { token });
 }

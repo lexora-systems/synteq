@@ -1,7 +1,11 @@
 import { prisma } from "../lib/prisma.js";
 import type { Prisma } from "@prisma/client";
 
-export type SecurityEventType = "REFRESH_REUSE_DETECTED" | "LOGIN_FAILED" | "INVITE_RATE_LIMITED";
+export type SecurityEventType =
+  | "REFRESH_REUSE_DETECTED"
+  | "LOGIN_FAILED"
+  | "LOGIN_LOCKED"
+  | "INVITE_RATE_LIMITED";
 
 type SecurityEventInput = {
   tenantId?: string | null;

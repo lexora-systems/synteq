@@ -25,6 +25,7 @@ import {
 import { sendPasswordResetEmail, sendVerificationEmail } from "../services/email-service.js";
 import { logSecurityEvent } from "../services/security-event-service.js";
 import { config } from "../config.js";
+import { getLoginLockState, recordFailedLoginAttempt, resetLoginAbuseState } from "../services/auth-abuse-service.js";
 
 const logoutSchema = z.object({
   refresh_token: z.string().min(32).max(512).optional(),
@@ -36,6 +37,27 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     const body = parseWithSchema(loginSchema, request.body);
     const email = body.email.toLowerCase();
 
+    const loginLock = await getLoginLockState(request.ip, email);
+    if (loginLock.locked) {
+      await logSecurityEvent({
+        tenantId: null,
+        userId: null,
+        type: "LOGIN_LOCKED",
+        ip: request.ip,
+        userAgent: request.headers["user-agent"] ?? null,
+        metadata: {
+          email,
+          retry_after_sec: loginLock.retryAfterSec
+        }
+      });
+
+      reply.header("Retry-After", String(loginLock.retryAfterSec));
+      return reply.code(429).send({
+        error: "Too many login attempts. Try again later.",
+        code: "AUTH_TEMPORARILY_LOCKED"
+      });
+    }
+
     const user = await prisma.user.findFirst({
       where: {
         email,
@@ -44,6 +66,7 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     });
 
     if (!user || !(await verifyPassword(body.password, user.password_hash))) {
+      const failed = await recordFailedLoginAttempt(request.ip, email);
       await logSecurityEvent({
         tenantId: user?.tenant_id ?? null,
         userId: user?.id ?? null,
@@ -51,12 +74,39 @@ const authRoutes: FastifyPluginAsync = async (app) => {
         ip: request.ip,
         userAgent: request.headers["user-agent"] ?? null,
         metadata: {
-          email
+          email,
+          attempts_ip: failed.ipAttempts,
+          attempts_email: failed.emailAttempts,
+          locked: failed.locked
         }
       });
+
+      if (failed.locked) {
+        await logSecurityEvent({
+          tenantId: user?.tenant_id ?? null,
+          userId: user?.id ?? null,
+          type: "LOGIN_LOCKED",
+          ip: request.ip,
+          userAgent: request.headers["user-agent"] ?? null,
+          metadata: {
+            email,
+            attempts_ip: failed.ipAttempts,
+            attempts_email: failed.emailAttempts,
+            retry_after_sec: failed.retryAfterSec
+          }
+        });
+
+        reply.header("Retry-After", String(failed.retryAfterSec));
+        return reply.code(429).send({
+          error: "Too many login attempts. Try again later.",
+          code: "AUTH_TEMPORARILY_LOCKED"
+        });
+      }
+
       return reply.code(401).send({ error: "Invalid credentials" });
     }
 
+    await resetLoginAbuseState(request.ip, email);
     const session = await createAuthSession(reply, asAuthUser(user));
     return {
       token: session.access_token,

@@ -1,8 +1,20 @@
 import type { FastifyPluginAsync } from "fastify";
 import { incidentsQuerySchema } from "@synteq/shared";
+import { z } from "zod";
 import { parseWithSchema } from "../utils/validation.js";
-import { ackIncident, listIncidents, resolveIncident } from "../services/incidents-service.js";
+import {
+  ackIncident,
+  getIncidentById,
+  listIncidentEvents,
+  listIncidents,
+  resolveIncident
+} from "../services/incidents-service.js";
 import { Permission } from "../auth/permissions.js";
+import { generateIncidentGuidance } from "../services/incident-guidance-service.js";
+
+const incidentIdParamSchema = z.object({
+  id: z.string().min(1)
+});
 
 const incidentsRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -25,9 +37,17 @@ const incidentsRoutes: FastifyPluginAsync = async (app) => {
         page: query.page,
         pageSize: query.page_size
       });
+      const incidentsWithGuidance = await Promise.all(
+        incidents.items.map(async (incident) => ({
+          ...incident,
+          guidance: await generateIncidentGuidance({
+            incident
+          })
+        }))
+      );
 
       return {
-        incidents: incidents.items,
+        incidents: incidentsWithGuidance,
         pagination: {
           page: incidents.page,
           page_size: incidents.page_size,
@@ -35,6 +55,40 @@ const incidentsRoutes: FastifyPluginAsync = async (app) => {
           has_next: incidents.has_next
         },
         last_updated: new Date().toISOString(),
+        request_id: request.id
+      };
+    }
+  );
+
+  app.get(
+    "/incidents/:id",
+    {
+      preHandler: [app.requireDashboardAuth, app.requirePermissions([Permission.INCIDENTS_READ])]
+    },
+    async (request, reply) => {
+      const tenantId = request.authUser?.tenant_id;
+      if (!tenantId) {
+        return reply.code(401).send({ error: "Missing tenant context" });
+      }
+
+      const params = parseWithSchema(incidentIdParamSchema, request.params);
+      const incident = await getIncidentById(tenantId, params.id);
+      if (!incident) {
+        return reply.code(404).send({ error: "Incident not found" });
+      }
+
+      const recentEvents = await listIncidentEvents(incident.id, 20);
+      const guidance = await generateIncidentGuidance({
+        incident,
+        recentEvents
+      });
+
+      return {
+        incident: {
+          ...incident,
+          guidance
+        },
+        recent_events: recentEvents,
         request_id: request.id
       };
     }
@@ -51,8 +105,8 @@ const incidentsRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(401).send({ error: "Missing tenant context" });
       }
 
-      const { id } = request.params as { id: string };
-      const incident = await ackIncident(tenantId, id);
+      const params = parseWithSchema(incidentIdParamSchema, request.params);
+      const incident = await ackIncident(tenantId, params.id);
       if (!incident) {
         return reply.code(404).send({ error: "Incident not found" });
       }
@@ -72,8 +126,8 @@ const incidentsRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(401).send({ error: "Missing tenant context" });
       }
 
-      const { id } = request.params as { id: string };
-      const incident = await resolveIncident(tenantId, id);
+      const params = parseWithSchema(incidentIdParamSchema, request.params);
+      const incident = await resolveIncident(tenantId, params.id);
       if (!incident) {
         return reply.code(404).send({ error: "Incident not found" });
       }

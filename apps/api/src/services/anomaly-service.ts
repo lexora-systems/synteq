@@ -22,6 +22,7 @@ type WindowSummary = {
   retryRate: number;
   duplicates: number;
   avgCostUsd: number;
+  syntheticEvents: number;
   latestBucket: Date | null;
 };
 
@@ -115,6 +116,22 @@ async function queryWindowSummary(input: {
   });
 
   const row = (rows[0] as Record<string, unknown> | undefined) ?? {};
+  const [syntheticRows] = await bq.query({
+    query: `
+      SELECT
+        COUNT(*) AS total_events,
+        COUNTIF(REGEXP_CONTAINS(COALESCE(payload, ''), r'"simulation"\\s*:\\s*true')) AS synthetic_events
+      FROM \`${config.BIGQUERY_PROJECT_ID}.${config.BIGQUERY_DATASET}.execution_events\`
+      WHERE tenant_id = @tenantId
+        AND workflow_id = @workflowId
+        AND environment = @env
+        AND event_ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @windowSec SECOND)
+    `,
+    params: input,
+    useLegacySql: false
+  });
+  const syntheticRow = (syntheticRows[0] as Record<string, unknown> | undefined) ?? {};
+
   return {
     total: Math.round(asNumber(row.total, 0)),
     failed: Math.round(asNumber(row.failed, 0)),
@@ -123,6 +140,7 @@ async function queryWindowSummary(input: {
     retryRate: asNumber(row.retry_rate, 0),
     duplicates: Math.round(asNumber(row.duplicates, 0)),
     avgCostUsd: asNumber(row.avg_cost_usd, 0),
+    syntheticEvents: Math.round(asNumber(syntheticRow.synthetic_events, 0)),
     latestBucket: row.latest_bucket instanceof Date ? row.latest_bucket : null
   };
 }
@@ -495,6 +513,14 @@ async function upsertIncident(input: {
     failed: input.summary.failed,
     retry_rate: input.summary.retryRate,
     duplicates: input.summary.duplicates,
+    synthetic_events: input.summary.syntheticEvents,
+    synthetic_ratio: input.summary.total > 0 ? input.summary.syntheticEvents / input.summary.total : 0,
+    source:
+      input.summary.syntheticEvents > 0 &&
+      input.summary.total > 0 &&
+      input.summary.syntheticEvents / input.summary.total >= 0.2
+        ? "simulation"
+        : "production",
     avg_cost_usd: input.summary.avgCostUsd,
     reason: input.result.summary
   } satisfies Prisma.JsonObject;
@@ -770,6 +796,7 @@ export async function runAnomalyDetectionJob(now = new Date()) {
             retryRate: 0,
             duplicates: 0,
             avgCostUsd: 0,
+            syntheticEvents: 0,
             latestBucket: now
           };
 

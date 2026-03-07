@@ -2,6 +2,11 @@ import { z } from "zod";
 import {
   emailVerifyConfirmSchema,
   executionStatusSchema,
+  incidentConfidenceSchema,
+  incidentGuidanceNarrationInputSchema,
+  incidentGuidanceSchema,
+  incidentNarrationResultSchema,
+  incidentTypeSchema,
   incidentsQuerySchema,
   ingestExecutionSchema,
   ingestHeartbeatSchema,
@@ -14,6 +19,18 @@ import {
   passwordResetRequestSchema,
   pubSubPushEnvelopeSchema,
   refreshTokenSchema,
+  reliabilityScanRangeSchema,
+  reliabilityScanResultSchema,
+  scanRunRequestSchema,
+  supportedCurrencySchema,
+  tenantSettingsSchema,
+  tenantSettingsUpdateSchema,
+  moneyDisplaySchema,
+  simulationRequestSchema,
+  simulationResultSchema,
+  simulationScenarioSchema,
+  securityEventsQuerySchema,
+  securityEventTypeSchema,
   teamUpdateRoleSchema,
   userRoleSchema,
   workflowRegisterSchema
@@ -25,6 +42,23 @@ export type IngestHeartbeatInput = z.infer<typeof ingestHeartbeatSchema>;
 export type WorkflowRegisterInput = z.infer<typeof workflowRegisterSchema>;
 export type MetricsOverviewQuery = z.infer<typeof metricsOverviewQuerySchema>;
 export type IncidentsQuery = z.infer<typeof incidentsQuerySchema>;
+export type ReliabilityScanRange = z.infer<typeof reliabilityScanRangeSchema>;
+export type ScanRunRequest = z.infer<typeof scanRunRequestSchema>;
+export type ReliabilityScanResult = z.infer<typeof reliabilityScanResultSchema>;
+export type SupportedCurrency = z.infer<typeof supportedCurrencySchema>;
+export type TenantSettings = z.infer<typeof tenantSettingsSchema>;
+export type TenantSettingsUpdate = z.infer<typeof tenantSettingsUpdateSchema>;
+export type MoneyDisplay = z.infer<typeof moneyDisplaySchema>;
+export type SimulationScenario = z.infer<typeof simulationScenarioSchema>;
+export type SimulationRequest = z.infer<typeof simulationRequestSchema>;
+export type SimulationResult = z.infer<typeof simulationResultSchema>;
+export type IncidentType = z.infer<typeof incidentTypeSchema>;
+export type IncidentConfidence = z.infer<typeof incidentConfidenceSchema>;
+export type IncidentGuidance = z.infer<typeof incidentGuidanceSchema>;
+export type IncidentGuidanceNarrationInput = z.infer<typeof incidentGuidanceNarrationInputSchema>;
+export type IncidentNarrationResult = z.infer<typeof incidentNarrationResultSchema>;
+export type SecurityEventType = z.infer<typeof securityEventTypeSchema>;
+export type SecurityEventsQuery = z.infer<typeof securityEventsQuerySchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
 export type UserRole = z.infer<typeof userRoleSchema>;
@@ -65,4 +99,9 @@ export type IncidentDTO = {
   last_seen_at: string;
   resolved_at: string | null;
   summary: string;
+  guidance?: IncidentGuidance;
+};
+
+export type IncidentWithGuidanceDTO = IncidentDTO & {
+  guidance: IncidentGuidance;
 };

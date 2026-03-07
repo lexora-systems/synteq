@@ -5,6 +5,39 @@ import { prisma } from "../lib/prisma.js";
 import { Permission } from "../auth/permissions.js";
 
 const workflowRoutes: FastifyPluginAsync = async (app) => {
+  app.get(
+    "/workflows",
+    {
+      preHandler: [app.requireDashboardAuth, app.requirePermissions([Permission.WORKFLOWS_READ])]
+    },
+    async (request, reply) => {
+      const tenantId = request.authUser?.tenant_id;
+      if (!tenantId) {
+        return reply.code(401).send({ error: "Missing tenant context" });
+      }
+
+      const workflows = await prisma.workflow.findMany({
+        where: {
+          tenant_id: tenantId,
+          is_active: true
+        },
+        orderBy: [{ display_name: "asc" }, { created_at: "asc" }],
+        select: {
+          id: true,
+          slug: true,
+          display_name: true,
+          environment: true,
+          system: true
+        }
+      });
+
+      return {
+        workflows,
+        request_id: request.id
+      };
+    }
+  );
+
   app.post(
     "/workflows/register",
     {

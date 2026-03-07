@@ -16,6 +16,7 @@ export type IngestionMetadata = {
   requestId?: string;
   source?: "api" | "pubsub";
   ingestTs?: Date;
+  fingerprintOverride?: string;
 };
 
 export type ExecutionRecord = {
@@ -68,12 +69,14 @@ function normalizeIngestTs(metadata?: IngestionMetadata): Date {
 
 export function buildExecutionRecord(input: IngestExecutionInput, metadata?: IngestionMetadata): ExecutionRecord {
   const eventTs = input.event_ts instanceof Date ? input.event_ts : new Date(input.event_ts);
-  const fingerprint = buildExecutionFingerprint({
-    tenantId: input.tenant_id,
-    workflowId: input.workflow_id,
-    executionId: input.execution_id,
-    eventTs
-  });
+  const fingerprint =
+    metadata?.fingerprintOverride ??
+    buildExecutionFingerprint({
+      tenantId: input.tenant_id,
+      workflowId: input.workflow_id,
+      executionId: input.execution_id,
+      eventTs
+    });
 
   return {
     event_ts: eventTs,

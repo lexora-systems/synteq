@@ -17,12 +17,20 @@ export type IngestQueueMessage = {
   payload: IngestExecutionInput | IngestHeartbeatInput;
 };
 
+type EnqueueExecutionOptions = {
+  fingerprintOverride?: string;
+};
+
 function hasPubSubConfigured(): boolean {
   return Boolean(config.PUBSUB_TOPIC_INGEST);
 }
 
-export async function enqueueExecutionEvent(input: IngestExecutionInput, requestId: string) {
-  const record = buildExecutionRecord(input, { requestId, source: "api" });
+export async function enqueueExecutionEvent(input: IngestExecutionInput, requestId: string, options?: EnqueueExecutionOptions) {
+  const record = buildExecutionRecord(input, {
+    requestId,
+    source: "api",
+    fingerprintOverride: options?.fingerprintOverride
+  });
   const message: IngestQueueMessage = {
     type: "execution",
     fingerprint: record.fingerprint,

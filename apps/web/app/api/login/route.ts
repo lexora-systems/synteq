@@ -14,8 +14,14 @@ export async function POST(request: Request) {
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    return NextResponse.json({ error: text || "Invalid credentials" }, { status: 401 });
+    const payload = (await response.json().catch(() => ({}))) as { error?: string; code?: string };
+    return NextResponse.json(
+      {
+        error: payload.error ?? "Invalid credentials",
+        code: payload.code
+      },
+      { status: response.status }
+    );
   }
 
   const payload = (await response.json()) as { token?: string; access_token?: string; refresh_token?: string };

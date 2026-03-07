@@ -32,6 +32,9 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(8080),
   DATABASE_URL: z.string().min(1),
+  REDIS_URL: optionalString,
+  REDIS_REQUIRED: envBoolean,
+  REDIS_KEY_PREFIX: z.string().default("synteq"),
   BIGQUERY_PROJECT_ID: z.string().min(1),
   BIGQUERY_DATASET: z.string().default("synteq"),
   BIGQUERY_KEY_JSON: optionalString,
@@ -60,16 +63,33 @@ const envSchema = z.object({
   WEB_BASE_URL: z.string().url().optional(),
   INVITE_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().max(10000).default(20),
   INVITE_PER_EMAIL_PER_DAY: z.coerce.number().int().positive().max(1000).default(3),
+  AUTH_LOGIN_MAX_ATTEMPTS_PER_IP: z.coerce.number().int().positive().max(10000).default(10),
+  AUTH_LOGIN_MAX_ATTEMPTS_PER_EMAIL: z.coerce.number().int().positive().max(10000).default(5),
+  AUTH_LOGIN_WINDOW_SEC: z.coerce.number().int().positive().max(86400).default(900),
+  AUTH_LOGIN_LOCKOUT_SEC: z.coerce.number().int().positive().max(86400).default(900),
   LOGOUT_ALL_ENABLED: envBoolean.default(true),
   METRICS_CACHE_TTL_SEC: z.coerce.number().int().positive().max(300).default(45),
   INCIDENT_ESCALATION_MINUTES: z.coerce.number().int().positive().max(10080).default(20),
-  INCIDENT_COOLDOWN_WINDOWS: z.coerce.number().int().positive().max(20).default(3)
+  INCIDENT_COOLDOWN_WINDOWS: z.coerce.number().int().positive().max(20).default(3),
+  ALERT_DISPATCH_MAX_RETRIES: z.coerce.number().int().nonnegative().max(20).default(3),
+  ALERT_DISPATCH_BACKOFF_BASE_SEC: z.coerce.number().int().positive().max(86400).default(30),
+  FX_RATE_USD: z.coerce.number().positive().default(1),
+  FX_RATE_PHP: z.coerce.number().positive().default(56),
+  FX_RATE_EUR: z.coerce.number().positive().default(0.92),
+  FX_RATE_GBP: z.coerce.number().positive().default(0.79),
+  FX_RATE_JPY: z.coerce.number().positive().default(150),
+  FX_RATE_AUD: z.coerce.number().positive().default(1.53),
+  FX_RATE_CAD: z.coerce.number().positive().default(1.36)
 });
 
 const parsed = envSchema.safeParse(process.env);
 if (!parsed.success) {
   const message = parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
   throw new Error(`Invalid environment variables: ${message}`);
+}
+
+if (parsed.data.REDIS_REQUIRED && !parsed.data.REDIS_URL) {
+  throw new Error("Invalid environment variables: REDIS_URL is required when REDIS_REQUIRED=true");
 }
 
 export const config = parsed.data;

@@ -7,11 +7,9 @@ import {
   writeHeartbeatRecordToBigQuery
 } from "./ingestion-service.js";
 import { parseWithSchema } from "../utils/validation.js";
-import { TtlCache } from "../utils/ttl-cache.js";
 import { config } from "../config.js";
 import { runtimeMetrics } from "../lib/runtime-metrics.js";
-
-const dedupeCache = new TtlCache<boolean>(200_000);
+import { redisDelete, redisKey, redisSetNx } from "../lib/redis.js";
 
 type WorkerResult = {
   skipped: boolean;
@@ -19,11 +17,13 @@ type WorkerResult = {
 };
 
 export async function processQueueMessage(message: IngestQueueMessage): Promise<WorkerResult> {
-  if (dedupeCache.has(message.fingerprint)) {
+  const dedupeKey = redisKey("ingest", "dedupe", message.fingerprint);
+  const claimed = await redisSetNx(dedupeKey, message.request_id, config.INGEST_DEDUPE_TTL_SEC);
+  if (!claimed) {
     runtimeMetrics.increment("ingest_worker_duplicate_total");
     return {
       skipped: true,
-      reason: "duplicate fingerprint in dedupe cache"
+      reason: "duplicate fingerprint in distributed dedupe cache"
     };
   }
 
@@ -32,14 +32,18 @@ export async function processQueueMessage(message: IngestQueueMessage): Promise<
     const record = buildExecutionRecord(payload, {
       source: "pubsub",
       requestId: message.request_id,
-      ingestTs: new Date(message.ingest_ts)
+      ingestTs: new Date(message.ingest_ts),
+      fingerprintOverride: message.fingerprint
     });
 
-    await writeExecutionRecordToBigQuery(record);
-    dedupeCache.set(message.fingerprint, true, config.INGEST_DEDUPE_TTL_SEC);
-    runtimeMetrics.increment("ingest_worker_execution_total");
-    runtimeMetrics.setGauge("ingest_dedupe_cache_size", dedupeCache.size());
-    return { skipped: false };
+    try {
+      await writeExecutionRecordToBigQuery(record);
+      runtimeMetrics.increment("ingest_worker_execution_total");
+      return { skipped: false };
+    } catch (error) {
+      await redisDelete(dedupeKey);
+      throw error;
+    }
   }
 
   const payload = parseWithSchema(ingestHeartbeatSchema, message.payload);
@@ -49,9 +53,12 @@ export async function processQueueMessage(message: IngestQueueMessage): Promise<
     ingestTs: new Date(message.ingest_ts)
   });
 
-  await writeHeartbeatRecordToBigQuery(record);
-  dedupeCache.set(message.fingerprint, true, config.INGEST_DEDUPE_TTL_SEC);
-  runtimeMetrics.increment("ingest_worker_heartbeat_total");
-  runtimeMetrics.setGauge("ingest_dedupe_cache_size", dedupeCache.size());
-  return { skipped: false };
+  try {
+    await writeHeartbeatRecordToBigQuery(record);
+    runtimeMetrics.increment("ingest_worker_heartbeat_total");
+    return { skipped: false };
+  } catch (error) {
+    await redisDelete(dedupeKey);
+    throw error;
+  }
 }

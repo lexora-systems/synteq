@@ -56,6 +56,128 @@ export const incidentsQuerySchema = z.object({
   page_size: z.coerce.number().int().positive().max(100).default(25)
 });
 
+export const supportedCurrencySchema = z.enum(["USD", "PHP", "EUR", "GBP", "JPY", "AUD", "CAD"]);
+
+export const moneyDisplaySchema = z.object({
+  amount_usd: z.number().int().nonnegative(),
+  amount: z.number().nonnegative(),
+  currency: supportedCurrencySchema,
+  conversion_rate: z.number().positive()
+});
+
+export const tenantSettingsSchema = z.object({
+  tenant_id: nonEmpty,
+  default_currency: supportedCurrencySchema
+});
+
+export const tenantSettingsUpdateSchema = z.object({
+  default_currency: supportedCurrencySchema
+});
+
+export const reliabilityScanRangeSchema = z.enum(["24h", "7d", "30d"]);
+
+export const scanRunRequestSchema = z.object({
+  workflow_id: nonEmpty,
+  range: reliabilityScanRangeSchema.optional()
+});
+
+export const reliabilityScanResultSchema = z.object({
+  workflow_id: z.string().min(1),
+  workflow_name: z.string().min(1).optional(),
+  scan_window: z.object({
+    from: z.string().datetime(),
+    to: z.string().datetime()
+  }),
+  reliability_score: z.number().int().min(0).max(100),
+  success_rate: z.number().min(0).max(1),
+  duplicate_rate: z.number().min(0).max(1),
+  retry_rate: z.number().min(0).max(1),
+  latency_health_score: z.number().int().min(0).max(100),
+  anomaly_flags: z.array(z.string().min(1)),
+  estimated_monthly_risk_usd: z.number().int().nonnegative(),
+  estimated_monthly_risk: z.number().nonnegative(),
+  currency: supportedCurrencySchema,
+  conversion_rate: z.number().positive(),
+  recommendation: z.string().min(1),
+  enough_data: z.boolean(),
+  generated_by: z.literal("scan_rules_v1")
+});
+
+export const simulationScenarioSchema = z.enum([
+  "webhook-failure",
+  "retry-storm",
+  "latency-spike",
+  "duplicate-webhook"
+]);
+
+export const simulationRequestSchema = z.object({
+  workflow_id: nonEmpty
+});
+
+export const simulationResultSchema = z.object({
+  scenario: simulationScenarioSchema,
+  workflow_id: z.string().min(1),
+  batch_id: z.string().min(1),
+  injected_events: z.number().int().positive(),
+  queued_events: z.number().int().nonnegative(),
+  direct_events: z.number().int().nonnegative(),
+  recommendation: z.string().min(1)
+});
+
+export const incidentTypeSchema = z.enum([
+  "duplicate_webhook",
+  "retry_storm",
+  "latency_spike",
+  "failure_rate_spike",
+  "missing_heartbeat",
+  "cost_spike",
+  "unknown"
+]);
+
+export const incidentConfidenceSchema = z.enum(["low", "medium", "high"]);
+
+export const incidentGuidanceNarrationInputSchema = z.object({
+  incident_type: incidentTypeSchema,
+  likely_causes: z.array(z.string().min(1)),
+  business_impact: z.string().min(1),
+  recommended_actions: z.array(z.string().min(1)),
+  confidence: incidentConfidenceSchema,
+  evidence: z.array(z.string()),
+  workflow_id: z.string().nullable(),
+  environment: z.string().nullable()
+});
+
+export const incidentNarrationResultSchema = z.object({
+  summary_text: z.string().min(1),
+  generated_by: z.enum(["template_v1", "ai_stub_v1"])
+});
+
+export const incidentGuidanceSchema = z.object({
+  incident_type: incidentTypeSchema,
+  likely_causes: z.array(z.string().min(1)).min(1),
+  business_impact: z.string().min(1),
+  recommended_actions: z.array(z.string().min(1)).min(1),
+  confidence: incidentConfidenceSchema,
+  evidence: z.array(z.string()),
+  generated_by: z.literal("rules_v1"),
+  summary_text: z.string().min(1)
+});
+
+export const securityEventTypeSchema = z.enum([
+  "REFRESH_REUSE_DETECTED",
+  "LOGIN_FAILED",
+  "LOGIN_LOCKED",
+  "INVITE_RATE_LIMITED"
+]);
+
+export const securityEventsQuerySchema = z.object({
+  type: securityEventTypeSchema.optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(25)
+});
+
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(200)
