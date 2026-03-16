@@ -13,7 +13,17 @@
     "dev:web": "npm run dev --workspace web",
     "dev:api": "npm run dev --workspace api",
     "test": "npm run test -ws",
-    "seed": "npm run seed --workspace api"
+    "seed": "npm run seed --workspace api",
+    "check:shared": "npm run build --workspace @synteq/shared",
+    "check:api:build": "npm run build --workspace api",
+    "check:api:test": "npm run test --workspace api",
+    "check:api:preflight": "npm run test:preflight --workspace api",
+    "check:api:smoke": "npm run smoke --workspace api",
+    "check:prisma:validate": "npm run prisma:validate --workspace api",
+    "check:prisma:migrate:deploy": "npm run prisma:migrate --workspace api",
+    "check:prisma:migrate:status": "npm run prisma:migrate:status --workspace api",
+    "check:web:build": "npm run build --workspace web",
+    "check:release": "npm run check:shared && npm run check:api:build && npm run check:prisma:validate && npm run check:prisma:migrate:deploy && npm run check:prisma:migrate:status && npm run check:api:test && npm run check:api:preflight && npm run check:api:smoke && npm run check:web:build"
   },
   "engines": {
     "node": ">=20"

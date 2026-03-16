@@ -9,12 +9,16 @@
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
+    "prisma:validate": "prisma validate",
+    "prisma:migrate:status": "prisma migrate status",
     "seed": "tsx scripts/seed.ts",
     "job:aggregate": "tsx src/jobs/aggregate-metrics-job.ts",
     "job:anomaly": "tsx src/jobs/anomaly-job.ts",
     "job:alerts": "tsx src/jobs/alert-dispatch-job.ts",
     "sample:sender": "tsx scripts/sample-sender.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:preflight": "vitest run tests/production-preflight.test.ts",
+    "smoke": "tsx scripts/smoke-app.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",

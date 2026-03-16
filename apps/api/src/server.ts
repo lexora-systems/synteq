@@ -18,6 +18,9 @@ const [{ buildApp }, { config }, { prisma }] = await Promise.all([
   import("./config.js"),
   import("./lib/prisma.js")
 ]);
+const { assertProductionPreflight } = await import("./preflight/production-preflight.js");
+
+assertProductionPreflight(config);
 
 const app = await buildApp();
 

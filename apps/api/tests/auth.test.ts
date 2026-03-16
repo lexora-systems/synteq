@@ -15,6 +15,7 @@ describe("auth", () => {
 
   it("validates login and refresh payloads", () => {
     const login = loginSchema.safeParse({
+      tenant_id: "tenant-1",
       email: "owner@synteq.local",
       password: "LongEnough123!"
     });

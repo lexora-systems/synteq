@@ -179,6 +179,7 @@ export const securityEventsQuerySchema = z.object({
 });
 
 export const loginSchema = z.object({
+  tenant_id: z.string().trim().min(1).max(64).optional(),
   email: z.string().email(),
   password: z.string().min(8).max(200)
 });
@@ -211,6 +212,7 @@ export const emailVerifyConfirmSchema = z.object({
 });
 
 export const passwordResetRequestSchema = z.object({
+  tenant_id: z.string().trim().min(1).max(64).optional(),
   email: z.string().email()
 });
 

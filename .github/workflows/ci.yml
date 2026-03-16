@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: synteq_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      CI: "true"
+      NODE_ENV: test
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/synteq_ci
+      REDIS_REQUIRED: "false"
+      REDIS_KEY_PREFIX: synteq
+      BIGQUERY_PROJECT_ID: synteq-ci
+      BIGQUERY_DATASET: synteq
+      SYNTEQ_API_KEY_SALT: ci-api-key-salt-that-is-long-enough-123456
+      INGEST_HMAC_REQUIRED: "false"
+      INGEST_HMAC_SECRET: ci-ingest-hmac-secret-that-is-long-enough-123456
+      JWT_SECRET: ci-jwt-secret-that-is-long-enough-123456
+      EMAIL_DEV_MODE: "true"
+      DASHBOARD_ADMIN_EMAIL: admin@synteq.local
+      DASHBOARD_ADMIN_PASSWORD: SmokeCheckPassword123!
+      CORS_ORIGIN: http://localhost:3000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Shared Package
+        run: npm run check:shared
+
+      - name: Build API
+        run: npm run check:api:build
+
+      - name: Validate Prisma Schema
+        run: npm run check:prisma:validate
+
+      - name: Apply Prisma Migrations (CI DB)
+        run: npm run check:prisma:migrate:deploy
+
+      - name: Check Prisma Migration Status
+        run: npm run check:prisma:migrate:status
+
+      - name: Run API Tests
+        run: npm run check:api:test
+
+      - name: Verify Production Preflight Test
+        run: npm run check:api:preflight
+
+      - name: Run API Smoke Check
+        run: npm run check:api:smoke
+
+      - name: Build Web
+        run: npm run check:web:build

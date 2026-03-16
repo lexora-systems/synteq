@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { apiBaseUrl } from "../../../lib/config";
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as { email?: string; password?: string };
+  const body = (await request.json()) as { tenant_id?: string; email?: string; password?: string };
 
   const response = await fetch(`${apiBaseUrl}/v1/auth/login`, {
     method: "POST",

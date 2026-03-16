@@ -32,21 +32,71 @@ const logoutSchema = z.object({
   logout_all: z.boolean().optional().default(false)
 });
 
+type ResolveUserResult = {
+  user: Awaited<ReturnType<typeof prisma.user.findFirst>>;
+  tenantContextRequired: boolean;
+};
+
+async function resolveUserForTenantScopedAuth(input: {
+  email: string;
+  tenantId?: string;
+}): Promise<ResolveUserResult> {
+  if (input.tenantId) {
+    const user = await prisma.user.findFirst({
+      where: {
+        tenant_id: input.tenantId,
+        email: input.email,
+        disabled_at: null
+      }
+    });
+
+    return {
+      user,
+      tenantContextRequired: false
+    };
+  }
+
+  const users = await prisma.user.findMany({
+    where: {
+      email: input.email,
+      disabled_at: null
+    },
+    orderBy: {
+      created_at: "asc"
+    },
+    take: 2
+  });
+
+  if (users.length !== 1) {
+    return {
+      user: null,
+      tenantContextRequired: users.length > 1
+    };
+  }
+
+  return {
+    user: users[0],
+    tenantContextRequired: false
+  };
+}
+
 const authRoutes: FastifyPluginAsync = async (app) => {
   app.post("/auth/login", async (request, reply) => {
     const body = parseWithSchema(loginSchema, request.body);
+    const tenantId = body.tenant_id?.trim();
     const email = body.email.toLowerCase();
 
-    const loginLock = await getLoginLockState(request.ip, email);
+    const loginLock = await getLoginLockState(request.ip, email, tenantId);
     if (loginLock.locked) {
       await logSecurityEvent({
-        tenantId: null,
+        tenantId: tenantId ?? null,
         userId: null,
         type: "LOGIN_LOCKED",
         ip: request.ip,
         userAgent: request.headers["user-agent"] ?? null,
         metadata: {
           email,
+          tenant_id: tenantId ?? null,
           retry_after_sec: loginLock.retryAfterSec
         }
       });
@@ -58,15 +108,33 @@ const authRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    const user = await prisma.user.findFirst({
-      where: {
-        email,
-        disabled_at: null
-      }
+    const resolved = await resolveUserForTenantScopedAuth({
+      email,
+      tenantId
     });
 
+    if (resolved.tenantContextRequired) {
+      await logSecurityEvent({
+        tenantId: null,
+        userId: null,
+        type: "LOGIN_FAILED",
+        ip: request.ip,
+        userAgent: request.headers["user-agent"] ?? null,
+        metadata: {
+          email,
+          reason: "TENANT_CONTEXT_REQUIRED"
+        }
+      });
+
+      return reply.code(401).send({
+        error: "Tenant context required for this account.",
+        code: "AUTH_TENANT_REQUIRED"
+      });
+    }
+
+    const user = resolved.user;
     if (!user || !(await verifyPassword(body.password, user.password_hash))) {
-      const failed = await recordFailedLoginAttempt(request.ip, email);
+      const failed = await recordFailedLoginAttempt(request.ip, email, tenantId ?? user?.tenant_id ?? null);
       await logSecurityEvent({
         tenantId: user?.tenant_id ?? null,
         userId: user?.id ?? null,
@@ -75,6 +143,7 @@ const authRoutes: FastifyPluginAsync = async (app) => {
         userAgent: request.headers["user-agent"] ?? null,
         metadata: {
           email,
+          tenant_id: tenantId ?? null,
           attempts_ip: failed.ipAttempts,
           attempts_email: failed.emailAttempts,
           locked: failed.locked
@@ -90,6 +159,7 @@ const authRoutes: FastifyPluginAsync = async (app) => {
           userAgent: request.headers["user-agent"] ?? null,
           metadata: {
             email,
+            tenant_id: tenantId ?? null,
             attempts_ip: failed.ipAttempts,
             attempts_email: failed.emailAttempts,
             retry_after_sec: failed.retryAfterSec
@@ -106,7 +176,7 @@ const authRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(401).send({ error: "Invalid credentials" });
     }
 
-    await resetLoginAbuseState(request.ip, email);
+    await resetLoginAbuseState(request.ip, email, tenantId ?? user.tenant_id);
     const session = await createAuthSession(reply, asAuthUser(user));
     return {
       token: session.access_token,
@@ -284,14 +354,14 @@ const authRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/auth/password-reset/request", async (request) => {
     const body = parseWithSchema(passwordResetRequestSchema, request.body);
+    const tenantId = body.tenant_id?.trim();
     const email = body.email.toLowerCase();
 
-    const user = await prisma.user.findFirst({
-      where: {
-        email,
-        disabled_at: null
-      }
+    const resolved = await resolveUserForTenantScopedAuth({
+      email,
+      tenantId
     });
+    const user = resolved.tenantContextRequired ? null : resolved.user;
 
     if (user) {
       const token = await issuePasswordResetToken(user.id);

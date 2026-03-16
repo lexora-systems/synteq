@@ -82,6 +82,8 @@ const envSchema = z.object({
   FX_RATE_CAD: z.coerce.number().positive().default(1.36)
 });
 
+export type AppConfig = z.infer<typeof envSchema>;
+
 const parsed = envSchema.safeParse(process.env);
 if (!parsed.success) {
   const message = parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");

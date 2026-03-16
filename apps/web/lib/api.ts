@@ -178,10 +178,13 @@ export async function confirmEmailVerification(token: string) {
   });
 }
 
-export async function requestPasswordReset(email: string) {
+export async function requestPasswordReset(email: string, tenantId?: string) {
   return request<{ ok: boolean }>("/v1/auth/password-reset/request", {
     method: "POST",
-    body: { email }
+    body: {
+      email,
+      tenant_id: tenantId
+    }
   });
 }
 

@@ -429,6 +429,14 @@ Run:
 npm run test --workspace api
 ```
 
+Release gates (same checks used in CI):
+
+```bash
+npm run check:release
+```
+
+`check:release` expects `DATABASE_URL` to point to a reachable MySQL instance for migration checks.
+
 Covers:
 
 - anomaly math (`z-score`, `poisson`, `EWMA`, smoothed baseline)
