@@ -10,6 +10,8 @@ import {
   incidentsQuerySchema,
   ingestExecutionSchema,
   ingestHeartbeatSchema,
+  ingestOperationalEventSchema,
+  ingestOperationalEventsRequestSchema,
   inviteAcceptSchema,
   inviteCreateSchema,
   loginSchema,
@@ -31,6 +33,7 @@ import {
   simulationScenarioSchema,
   securityEventsQuerySchema,
   securityEventTypeSchema,
+  operationalEventSeveritySchema,
   teamUpdateRoleSchema,
   userRoleSchema,
   workflowRegisterSchema
@@ -39,6 +42,9 @@ import {
 export type ExecutionStatus = z.infer<typeof executionStatusSchema>;
 export type IngestExecutionInput = z.infer<typeof ingestExecutionSchema>;
 export type IngestHeartbeatInput = z.infer<typeof ingestHeartbeatSchema>;
+export type IngestOperationalEventInput = z.infer<typeof ingestOperationalEventSchema>;
+export type IngestOperationalEventsRequest = z.infer<typeof ingestOperationalEventsRequestSchema>;
+export type OperationalEventSeverity = z.infer<typeof operationalEventSeveritySchema>;
 export type WorkflowRegisterInput = z.infer<typeof workflowRegisterSchema>;
 export type MetricsOverviewQuery = z.infer<typeof metricsOverviewQuerySchema>;
 export type IncidentsQuery = z.infer<typeof incidentsQuerySchema>;

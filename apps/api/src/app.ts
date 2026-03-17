@@ -15,6 +15,7 @@ import securityEventsRoutes from "./routes/security-events.js";
 import scanRoutes from "./routes/scan.js";
 import simulateRoutes from "./routes/simulate.js";
 import settingsRoutes from "./routes/settings.js";
+import githubWebhookRoutes from "./routes/github-webhook.js";
 import { runtimeMetrics } from "./lib/runtime-metrics.js";
 import { prisma } from "./lib/prisma.js";
 
@@ -89,6 +90,7 @@ export async function buildApp() {
   await app.register(scanRoutes, { prefix: "/v1" });
   await app.register(simulateRoutes, { prefix: "/v1" });
   await app.register(settingsRoutes, { prefix: "/v1" });
+  await app.register(githubWebhookRoutes, { prefix: "/v1" });
   await app.register(teamRoutes, { prefix: "/v1" });
   await app.register(securityEventsRoutes, { prefix: "/v1" });
   await app.register(internalRoutes, { prefix: "/v1/internal" });

@@ -42,6 +42,17 @@ enum Comparator {
   eq
 }
 
+enum OperationalFindingStatus {
+  open
+  resolved
+}
+
+enum EventIdempotencyStatus {
+  processing
+  completed
+  failed
+}
+
 model Tenant {
   id         String           @id @default(uuid()) @db.VarChar(36)
   name       String           @db.VarChar(191)
@@ -56,6 +67,11 @@ model Tenant {
   channels   AlertChannel[]
   incidents  Incident[]
   invites    Invite[]
+  operational_events OperationalEvent[]
+  github_integrations GitHubIntegration[]
+  operational_findings OperationalFinding[]
+  finding_incident_links FindingIncidentLink[]
+  event_idempotency_ledger EventIdempotencyLedger[]
 
   @@map("tenants")
 }
@@ -156,6 +172,143 @@ model SecurityEvent {
   @@map("security_events")
 }
 
+model OperationalEvent {
+  id              String    @id @default(uuid()) @db.VarChar(36)
+  tenant_id       String    @db.VarChar(36)
+  source          String    @db.VarChar(64)
+  event_type      String    @db.VarChar(128)
+  system          String    @db.VarChar(191)
+  service         String?   @db.VarChar(191)
+  environment     String?   @db.VarChar(64)
+  event_ts        DateTime
+  severity        Severity?
+  correlation_key String?   @db.VarChar(191)
+  metadata_json   Json
+  request_id      String?   @db.VarChar(64)
+  api_key_id      String?   @db.VarChar(36)
+  created_at      DateTime  @default(now())
+  tenant          Tenant    @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  api_key         ApiKey?   @relation(fields: [api_key_id], references: [id], onDelete: SetNull)
+  idempotency_entries EventIdempotencyLedger[]
+
+  @@index([tenant_id, event_ts])
+  @@index([tenant_id, source, event_type, event_ts])
+  @@index([tenant_id, correlation_key, event_ts])
+  @@index([api_key_id, created_at])
+  @@index([created_at, id])
+  @@map("operational_events")
+}
+
+model EventIdempotencyLedger {
+  id                 String               @id @default(uuid()) @db.VarChar(36)
+  tenant_id          String               @db.VarChar(36)
+  source             String               @db.VarChar(64)
+  idempotency_key    String               @db.VarChar(128)
+  status             EventIdempotencyStatus @default(processing)
+  first_seen_at      DateTime             @default(now())
+  last_seen_at       DateTime             @default(now())
+  completed_at       DateTime?
+  lock_expires_at    DateTime?
+  error_code         String?              @db.VarChar(64)
+  error_message      String?              @db.VarChar(512)
+  operational_event_id String?            @db.VarChar(36)
+  seen_count         Int                  @default(1)
+  attempt_count      Int                  @default(1)
+  created_at         DateTime             @default(now())
+  updated_at         DateTime             @updatedAt
+  tenant             Tenant               @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  operational_event  OperationalEvent?    @relation(fields: [operational_event_id], references: [id], onDelete: SetNull)
+
+  @@unique([tenant_id, source, idempotency_key], map: "eid_ledger_tenant_source_key_uq")
+  @@index([tenant_id, source, status, last_seen_at], map: "eid_ledger_tenant_source_status_seen_idx")
+  @@index([status, lock_expires_at], map: "eid_ledger_status_lock_idx")
+  @@index([operational_event_id], map: "eid_ledger_op_event_idx")
+  @@map("event_idempotency_ledger")
+}
+
+model WorkerLease {
+  worker_name        String    @id @db.VarChar(128)
+  owner_token        String?   @db.VarChar(191)
+  lease_expires_at   DateTime?
+  acquired_at        DateTime?
+  renewed_at         DateTime?
+  last_heartbeat_at  DateTime?
+  last_completed_at  DateTime?
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  @@index([lease_expires_at], map: "worker_lease_expires_idx")
+  @@index([owner_token, lease_expires_at], map: "worker_lease_owner_exp_idx")
+  @@map("worker_leases")
+}
+
+model OperationalEventAnalysisCursor {
+  worker_key            String   @id @db.VarChar(64)
+  last_event_created_at DateTime?
+  last_event_id         String?  @db.VarChar(36)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  @@map("operational_event_analysis_cursors")
+}
+
+model OperationalFinding {
+  id              String                   @id @default(uuid()) @db.VarChar(36)
+  tenant_id       String                   @db.VarChar(36)
+  source          String                   @db.VarChar(64)
+  rule_key        String                   @db.VarChar(128)
+  severity        Severity
+  status          OperationalFindingStatus @default(open)
+  system          String                   @db.VarChar(191)
+  correlation_key String?                  @db.VarChar(191)
+  fingerprint     String                   @db.VarChar(64)
+  summary         String                   @db.VarChar(512)
+  evidence_json   Json
+  first_seen_at   DateTime
+  last_seen_at    DateTime
+  resolved_at     DateTime?
+  event_count     Int                      @default(1)
+  created_at      DateTime                 @default(now())
+  updated_at      DateTime                 @updatedAt
+  tenant          Tenant                   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  incident_links  FindingIncidentLink[]
+
+  @@unique([tenant_id, fingerprint])
+  @@index([tenant_id, status, last_seen_at])
+  @@index([tenant_id, source, rule_key, system])
+  @@index([tenant_id, correlation_key, status])
+  @@map("operational_findings")
+}
+
+model IncidentBridgeCursor {
+  worker_key              String   @id @db.VarChar(64)
+  last_finding_updated_at DateTime?
+  last_finding_id         String?  @db.VarChar(36)
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+
+  @@map("incident_bridge_cursors")
+}
+
+model FindingIncidentLink {
+  id             Int              @id @default(autoincrement())
+  tenant_id      String           @db.VarChar(36)
+  finding_id     String           @unique @db.VarChar(36)
+  incident_id    String           @db.VarChar(36)
+  bridge_key     String           @db.VarChar(64)
+  last_bridged_at DateTime        @default(now())
+  created_at     DateTime         @default(now())
+  updated_at     DateTime         @updatedAt
+  tenant         Tenant           @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  finding        OperationalFinding @relation(fields: [finding_id], references: [id], onDelete: Cascade)
+  incident       Incident         @relation(fields: [incident_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, bridge_key])
+  @@index([incident_id])
+  @@index([tenant_id, updated_at])
+  @@map("finding_incident_links")
+}
+
 model ApiKey {
   id           String    @id @default(uuid()) @db.VarChar(36)
   tenant_id    String    @db.VarChar(36)
@@ -165,9 +318,28 @@ model ApiKey {
   revoked_at   DateTime?
   created_at   DateTime  @default(now())
   tenant       Tenant    @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  operational_events OperationalEvent[]
 
   @@index([tenant_id])
   @@map("api_keys")
+}
+
+model GitHubIntegration {
+  id                   String   @id @default(uuid()) @db.VarChar(36)
+  tenant_id            String   @db.VarChar(36)
+  webhook_id           String   @unique @db.VarChar(64)
+  webhook_secret       String   @db.VarChar(255)
+  repository_full_name String?  @db.VarChar(255)
+  is_active            Boolean  @default(true)
+  last_delivery_id     String?  @db.VarChar(128)
+  last_seen_at         DateTime?
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+  tenant               Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, is_active])
+  @@index([repository_full_name])
+  @@map("github_integrations")
 }
 
 model Workflow {
@@ -271,6 +443,7 @@ model Incident {
   policy      AlertPolicy?   @relation(fields: [policy_id], references: [id], onDelete: SetNull)
   workflow    Workflow?      @relation(fields: [workflow_id], references: [id], onDelete: SetNull)
   events      IncidentEvent[]
+  finding_links FindingIncidentLink[]
 
   @@index([tenant_id, status])
   @@index([tenant_id, status, sla_due_at])

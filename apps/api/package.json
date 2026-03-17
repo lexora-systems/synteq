@@ -16,6 +16,8 @@
     "job:aggregate": "tsx src/jobs/aggregate-metrics-job.ts",
     "job:anomaly": "tsx src/jobs/anomaly-job.ts",
     "job:alerts": "tsx src/jobs/alert-dispatch-job.ts",
+    "worker:operational-events": "tsx src/workers/operational-events-worker.ts",
+    "worker:incident-bridge": "tsx src/workers/incident-bridge-worker.ts",
     "sample:sender": "tsx scripts/sample-sender.ts",
     "test": "vitest run",
     "test:preflight": "vitest run tests/production-preflight.test.ts",

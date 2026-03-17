@@ -36,6 +36,60 @@ export const ingestHeartbeatSchema = z.object({
   payload: z.union([z.string(), z.record(z.any())]).optional()
 });
 
+export const operationalEventSeveritySchema = z.enum(["warn", "low", "medium", "high", "critical"]);
+
+export const ingestOperationalEventSchema = z
+  .object({
+    source: z.string().trim().min(1).max(64),
+    event_type: z.string().trim().min(1).max(128),
+    service: z.string().trim().min(1).max(191).optional(),
+    system: z.string().trim().min(1).max(191).optional(),
+    environment: z.string().trim().min(1).max(64).optional(),
+    timestamp: z.coerce.date(),
+    severity: operationalEventSeveritySchema.optional(),
+    correlation_key: z.string().trim().min(1).max(191).optional(),
+    metadata: z.record(z.unknown()).optional(),
+    attributes: z.record(z.unknown()).optional()
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (!value.service && !value.system) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["service"],
+        message: "Either service or system is required"
+      });
+    }
+  });
+
+const ingestOperationalEventsEnvelopeSchema = z
+  .object({
+    event: ingestOperationalEventSchema.optional(),
+    events: z.array(ingestOperationalEventSchema).min(1).max(50).optional()
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (!value.event && !value.events) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["event"],
+        message: "Provide event or events"
+      });
+    }
+
+    if (value.event && value.events) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["events"],
+        message: "Provide either event or events, not both"
+      });
+    }
+  });
+
+export const ingestOperationalEventsRequestSchema = ingestOperationalEventsEnvelopeSchema.transform((value) => ({
+  events: value.event ? [value.event] : value.events ?? []
+}));
+
 export const workflowRegisterSchema = z.object({
   slug: z.string().trim().regex(/^[a-z0-9\-]+$/),
   display_name: z.string().trim().min(1).max(255),
