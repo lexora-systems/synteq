@@ -121,6 +121,70 @@ Synteq is now upgraded from MVP to a production-ready, multi-tenant observabilit
 
 - `POST /v1/ingest/execution`
 - `POST /v1/ingest/heartbeat`
+- `POST /v1/ingest/events` (normalized operational events, single or batch)
+- `POST /v1/integrations/github/webhook` (GitHub Actions webhook adapter)
+
+Example single event payload:
+
+```json
+{
+  "event": {
+    "source": "github_actions",
+    "event_type": "workflow_failed",
+    "service": "payments-api",
+    "environment": "production",
+    "timestamp": "2026-03-17T10:00:00Z",
+    "severity": "high",
+    "correlation_key": "deploy-123",
+    "metadata": {
+      "repository": "acme/payments",
+      "workflow": "deploy-prod"
+    }
+  }
+}
+```
+
+Example batch payload:
+
+```json
+{
+  "events": [
+    {
+      "source": "ci",
+      "event_type": "deployment_started",
+      "system": "payments-api",
+      "timestamp": "2026-03-17T10:00:00Z",
+      "metadata": {
+        "pipeline": "deploy-prod"
+      }
+    }
+  ]
+}
+```
+
+GitHub Actions webhook adapter notes (Step 2 foundation):
+
+- Route: `POST /v1/integrations/github/webhook`
+- Security: validates `X-Hub-Signature-256` against tenant integration `webhook_secret`
+- Tenant resolution: via `github_integrations.webhook_id` (`X-GitHub-Hook-ID`), not payload tenant fields
+- Supported event types:
+  - `workflow_run` (`requested`, `in_progress`, `completed`)
+  - `workflow_job` (`queued`, `in_progress`, `completed`)
+- Unsupported event types are accepted as safe no-op (`202`, `processed=false`)
+
+Durable event idempotency ledger notes (Step 5 foundation):
+
+- Ingestion now records tenant-scoped idempotency entries in `event_idempotency_ledger`.
+- Uniqueness key: `(tenant_id, source, idempotency_key)`.
+- State machine:
+  - `processing` while reservation is active
+  - `completed` after `operational_events` persistence succeeds
+  - `failed` when persistence fails (retryable)
+- Duplicate behavior:
+  - completed duplicate -> no new `operational_events` row
+  - in-flight duplicate -> skipped no-op
+  - batch requests return mixed counters: `ingested`, `duplicates`, `skipped`, `failed`
+- GitHub webhooks use durable delivery-aware hints for idempotency keys, so duplicate deliveries remain deduped even after Redis restart/eviction.
 
 ### Internal queue worker (Pub/Sub push)
 
@@ -278,8 +342,17 @@ Use existing deploy flow; ensure new env vars are present for Pub/Sub + HMAC + R
 - `npm run job:aggregate --workspace api`
 - `npm run job:anomaly --workspace api`
 - `npm run job:alerts --workspace api`
+- `npm run worker:operational-events --workspace api`
+- `npm run worker:incident-bridge --workspace api`
 
-Schedule all three with Cloud Scheduler (1m or 2m cadence).
+Schedule these jobs/workers with Cloud Scheduler (1m or 2m cadence as needed).
+Operational events worker is the Step 3 bridge: it consumes normalized `operational_events`, derives deterministic GitHub rule findings, and writes durable `operational_findings` records for future incident correlation.
+Incident bridge worker is the Step 4 bridge: it consumes eligible open/resolved `operational_findings`, deduplicates with durable finding->incident links, and opens/refreshes/resolves incidents safely for lifecycle tracking.
+Worker lease locking is enabled for `worker:operational-events` and `worker:incident-bridge`:
+- each worker acquires a named DB lease in `worker_leases` before processing
+- overlap behavior is safe no-op (`skipped`) when an active lease is held by another instance
+- leases are renewed on heartbeat while running and released on completion
+- crashes rely on `lease_expires_at` expiry for recovery/reclaim
 
 ## Scaling Notes
 

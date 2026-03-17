@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ingestExecutionSchema } from "@synteq/shared";
+import { ingestExecutionSchema, ingestOperationalEventsRequestSchema } from "@synteq/shared";
 
 describe("ingestion validation", () => {
   it("accepts a valid execution payload", () => {
@@ -30,5 +30,24 @@ describe("ingestion validation", () => {
 
     const parsed = ingestExecutionSchema.safeParse(payload);
     expect(parsed.success).toBe(false);
+  });
+
+  it("accepts normalized operational event envelopes", () => {
+    const parsed = ingestOperationalEventsRequestSchema.safeParse({
+      event: {
+        source: "github_actions",
+        event_type: "workflow_failed",
+        service: "payments-api",
+        timestamp: new Date().toISOString(),
+        metadata: {
+          repository: "acme/payments"
+        }
+      }
+    });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.events).toHaveLength(1);
+    }
   });
 });

@@ -1,4 +1,27 @@
+import type { Prisma, Severity } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+
+function asObject(value: Prisma.JsonValue): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+function computeSlaDueAt(startedAt: Date, severity: Severity): Date {
+  const minutesBySeverity: Record<Severity, number> = {
+    warn: 240,
+    low: 180,
+    medium: 120,
+    high: 60,
+    critical: 15
+  };
+
+  const due = new Date(startedAt);
+  due.setMinutes(due.getMinutes() + minutesBySeverity[severity]);
+  return due;
+}
 
 export async function listIncidents(params: {
   tenantId: string;
@@ -169,4 +192,147 @@ export async function resolveIncident(tenantId: string, incidentId: string) {
   });
 
   return updated;
+}
+
+export async function openOrRefreshBridgeIncident(input: {
+  tenantId: string;
+  incidentId?: string | null;
+  severity: Severity;
+  summary: string;
+  fingerprint: string;
+  details: Record<string, unknown>;
+  lastSeenAt: Date;
+}) {
+  const now = new Date();
+
+  const existing = input.incidentId
+    ? await prisma.incident.findFirst({
+        where: {
+          id: input.incidentId,
+          tenant_id: input.tenantId
+        }
+      })
+    : await prisma.incident.findFirst({
+        where: {
+          tenant_id: input.tenantId,
+          fingerprint: input.fingerprint
+        },
+        orderBy: {
+          started_at: "desc"
+        }
+      });
+
+  if (!existing) {
+    const created = await prisma.incident.create({
+      data: {
+        tenant_id: input.tenantId,
+        status: "open",
+        severity: input.severity,
+        started_at: now,
+        last_seen_at: input.lastSeenAt,
+        sla_due_at: computeSlaDueAt(now, input.severity),
+        fingerprint: input.fingerprint,
+        summary: input.summary,
+        details_json: input.details as Prisma.InputJsonValue
+      }
+    });
+
+    await prisma.incidentEvent.create({
+      data: {
+        incident_id: created.id,
+        event_type: "BRIDGE_OPENED",
+        payload_json: {
+          source: "operational_finding_bridge",
+          at: now.toISOString()
+        }
+      }
+    });
+
+    return {
+      incident: created,
+      action: "created" as const
+    };
+  }
+
+  const reopened = existing.status === "resolved";
+  const startedAt = reopened ? now : existing.started_at;
+  const updated = await prisma.incident.update({
+    where: { id: existing.id },
+    data: {
+      status: "open",
+      severity: input.severity,
+      resolved_at: null,
+      started_at: startedAt,
+      last_seen_at: input.lastSeenAt,
+      sla_due_at: computeSlaDueAt(startedAt, input.severity),
+      summary: input.summary,
+      fingerprint: input.fingerprint,
+      details_json: input.details as Prisma.InputJsonValue
+    }
+  });
+
+  await prisma.incidentEvent.create({
+    data: {
+      incident_id: existing.id,
+      event_type: reopened ? "BRIDGE_REOPENED" : "BRIDGE_REFRESHED",
+      payload_json: {
+        source: "operational_finding_bridge",
+        at: now.toISOString()
+      }
+    }
+  });
+
+  return {
+    incident: updated,
+    action: reopened ? ("reopened" as const) : ("updated" as const)
+  };
+}
+
+export async function resolveBridgeIncident(input: {
+  tenantId: string;
+  incidentId: string;
+  resolvedAt: Date;
+  reason: string;
+}) {
+  const incident = await prisma.incident.findFirst({
+    where: {
+      id: input.incidentId,
+      tenant_id: input.tenantId
+    }
+  });
+
+  if (!incident || incident.status === "resolved") {
+    return {
+      resolved: false
+    };
+  }
+
+  await prisma.incident.update({
+    where: { id: incident.id },
+    data: {
+      status: "resolved",
+      resolved_at: input.resolvedAt,
+      details_json: {
+        ...asObject(incident.details_json),
+        resolved_by: "operational_finding_bridge",
+        bridge_resolution_reason: input.reason
+      }
+    }
+  });
+
+  await prisma.incidentEvent.create({
+    data: {
+      incident_id: incident.id,
+      event_type: "BRIDGE_RESOLVED",
+      payload_json: {
+        source: "operational_finding_bridge",
+        reason: input.reason,
+        at: input.resolvedAt.toISOString()
+      }
+    }
+  });
+
+  return {
+    resolved: true
+  };
 }
