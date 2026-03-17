@@ -6,7 +6,7 @@ Synteq is now upgraded from MVP to a production-ready, multi-tenant observabilit
 
 ### Ingestion Hardening
 
-- API ingestion is now buffered through **Pub/Sub** (`PUBSUB_TOPIC_INGEST`) before BigQuery writes.
+- Execution/heartbeat ingestion is buffered through **Pub/Sub** (`PUBSUB_TOPIC_INGEST`) before BigQuery writes, with direct BigQuery fallback when Pub/Sub is not configured.
 - Added idempotency fingerprint per execution:
   - `fingerprint = sha256(tenant_id + workflow_id + minute_bucket + execution_id)`
 - Added distributed dedupe guard in subscriber worker (Redis TTL keys) plus BigQuery `insertId` usage.
@@ -237,14 +237,19 @@ Core:
 - `BIGQUERY_PROJECT_ID`
 - `BIGQUERY_DATASET` (default: `synteq`)
 - `BIGQUERY_KEY_JSON`
+- `BIGQUERY_AGG_LOOKBACK_MINUTES`
 - `SYNTEQ_API_KEY_SALT`
 - `JWT_SECRET`
 - `ACCESS_TOKEN_TTL` (default: `15m`)
 - `REFRESH_TOKEN_TTL` (default: `30d`)
 - `BREVO_API_KEY`
 - `EMAIL_DEV_MODE` (`true|false`)
+- `ENABLE_SECRET_MANAGER` (`true|false`)
 - `DASHBOARD_ADMIN_EMAIL`
 - `DASHBOARD_ADMIN_PASSWORD`
+- `SLACK_DEFAULT_WEBHOOK_URL`
+- `DEFAULT_TENANT_ID`
+- `CORS_ORIGIN`
 
 Ingestion security:
 
@@ -272,6 +277,8 @@ Ops/perf:
 - `LOGOUT_ALL_ENABLED`
 - `METRICS_CACHE_TTL_SEC`
 - `INGEST_DEDUPE_TTL_SEC`
+- `WORKER_LEASE_DURATION_MS`
+- `WORKER_LEASE_RENEW_INTERVAL_MS`
 - `INCIDENT_ESCALATION_MINUTES`
 - `INCIDENT_COOLDOWN_WINDOWS`
 - `ALERT_DISPATCH_MAX_RETRIES`
@@ -356,7 +363,7 @@ Worker lease locking is enabled for `worker:operational-events` and `worker:inci
 
 ## Scaling Notes
 
-- **Ingestion API is decoupled** from BigQuery write latency via Pub/Sub.
+- **Execution/heartbeat ingestion is decoupled** from BigQuery write latency via Pub/Sub (with direct fallback if Pub/Sub is disabled).
 - Run multiple API replicas safely; dedupe/replay/rate limits/cache now use Redis shared state.
 - Keep aggregation and anomaly jobs independent from API scaling.
 - For higher throughput, split topics by tenant tier or region.
