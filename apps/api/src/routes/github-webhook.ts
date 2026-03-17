@@ -59,7 +59,8 @@ const githubWebhookRoutes: FastifyPluginAsync = async (app) => {
       }
     },
     async (request, reply) => {
-      const rawBody = request.rawBody ?? JSON.stringify(request.body ?? {});
+      const rawBodyInput = request.rawBody ?? JSON.stringify(request.body ?? {});
+      const rawBody = typeof rawBodyInput === "string" ? rawBodyInput : rawBodyInput.toString("utf8");
       if (Buffer.byteLength(rawBody, "utf8") > config.MAX_INGEST_BODY_BYTES) {
         runtimeMetrics.increment("github_webhook_payload_too_large_total");
         return reply.code(413).send({ error: "Payload too large" });
@@ -89,7 +90,7 @@ const githubWebhookRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const integration = await prisma.githubIntegration.findFirst({
+      const integration = await prisma.gitHubIntegration.findFirst({
         where: {
           webhook_id: hookId,
           is_active: true
@@ -162,14 +163,17 @@ const githubWebhookRoutes: FastifyPluginAsync = async (app) => {
       const normalized = parseWithSchema(ingestOperationalEventsRequestSchema, {
         events: mapped.events
       });
-      const idempotencyHints = normalized.events.map((_, index) =>
-        deliveryId
-          ? {
-              namespace: "github_delivery",
-              upstreamKey: `${integration.id}:${deliveryId}:${index}`
-            }
-          : undefined
-      );
+      const idempotencyHints: Array<{ namespace: string; upstreamKey: string } | undefined> = [];
+      for (let index = 0; index < normalized.events.length; index += 1) {
+        idempotencyHints.push(
+          deliveryId
+            ? {
+                namespace: "github_delivery",
+                upstreamKey: `${integration.id}:${deliveryId}:${index}`
+              }
+            : undefined
+        );
+      }
 
       const ingested = await ingestOperationalEvents(normalized, {
         tenantId: integration.tenant_id,
@@ -178,7 +182,7 @@ const githubWebhookRoutes: FastifyPluginAsync = async (app) => {
       });
       runtimeMetrics.increment("github_webhook_ingested_total", ingested.persisted);
 
-      prisma.githubIntegration
+      prisma.gitHubIntegration
         .update({
           where: { id: integration.id },
           data: {

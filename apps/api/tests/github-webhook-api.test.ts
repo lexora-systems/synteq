@@ -30,7 +30,7 @@ vi.mock("../src/services/operational-event-ingestion-service.js", () => ({
 
 vi.mock("../src/lib/prisma.js", () => ({
   prisma: {
-    githubIntegration: {
+    gitHubIntegration: {
       findFirst: githubIntegrationFindFirstMock,
       update: githubIntegrationUpdateMock
     }
