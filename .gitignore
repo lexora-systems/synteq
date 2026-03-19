@@ -12,7 +12,9 @@ npm-debug.log*
 apps/api/generated
 
 # Local secret storage and key artifacts (never commit)
-secrets/
+secrets/*
+!secrets/.gitkeep
 *.service-account.json
 *-sa-key.json
+*-credentials.json
 *.p12

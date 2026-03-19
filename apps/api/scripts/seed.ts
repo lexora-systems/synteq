@@ -14,7 +14,7 @@ async function main() {
       create: {
         id: defaultTenantId,
         name: "Synteq Demo",
-        plan: "mvp",
+        plan: "free",
         timezone: "UTC"
       },
       update: {}
@@ -27,7 +27,7 @@ async function main() {
       (await prisma.tenant.create({
         data: {
           name: "Synteq Demo",
-          plan: "mvp",
+          plan: "free",
           timezone: "UTC"
         }
       }));

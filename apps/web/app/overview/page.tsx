@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { TopNav } from "../../components/top-nav";
 import { MetricsChart } from "../../components/charts";
 import { ReliabilityTools } from "../../components/reliability-tools";
-import { fetchIncidents, fetchOverview, fetchWorkflows } from "../../lib/api";
+import { fetchIncidents, fetchOverview, fetchTenantSettings, fetchWorkflows } from "../../lib/api";
+import { resolveActivationState } from "../../lib/activation";
 import { requireToken } from "../../lib/auth";
 
 function asNumber(value: unknown): number {
@@ -84,12 +86,20 @@ function deploymentStatus(score: number): "Stable" | "Needs Attention" | "Unstab
 
 export default async function OverviewPage() {
   const token = await requireToken();
-  const [overviewResult, incidentsPayload, workflowsPayload] = await Promise.all([
+  const activation = await resolveActivationState(token);
+  if (!activation.activated && !activation.metricsUnavailable) {
+    redirect("/welcome");
+  }
+
+  const [overviewResult, incidentsPayload, workflowsPayload, settingsResult] = await Promise.all([
     fetchOverview(token, "1h")
       .then((payload) => ({ ok: true as const, payload }))
       .catch(() => ({ ok: false as const })),
     fetchIncidents(token, "open"),
-    fetchWorkflows(token)
+    fetchWorkflows(token),
+    fetchTenantSettings(token)
+      .then((payload) => ({ ok: true as const, payload }))
+      .catch(() => ({ ok: false as const }))
   ]);
   const monitoringDataUnavailable = !overviewResult.ok;
   const overview = overviewResult.ok
@@ -147,6 +157,37 @@ export default async function OverviewPage() {
       avg_cost_usd: asNumber(point.avg_cost_usd)
     };
   });
+  const latestSeriesTimestampMs = chartData.reduce((latest, point) => {
+    const parsed = new Date(point.bucket_ts).getTime();
+    if (!Number.isFinite(parsed)) {
+      return latest;
+    }
+    return Math.max(latest, parsed);
+  }, 0);
+  const telemetryAgeMinutes = latestSeriesTimestampMs > 0 ? (Date.now() - latestSeriesTimestampMs) / 60_000 : null;
+  const telemetryPossiblyStale =
+    !monitoringDataUnavailable && chartData.length > 0 && telemetryAgeMinutes !== null && telemetryAgeMinutes > 15;
+  const tenantSettings = settingsResult.ok
+    ? settingsResult.payload.settings
+    : {
+        tenant_id: "unknown",
+        default_currency: "USD" as const,
+        current_plan: "free" as const,
+        effective_plan: "free" as const,
+        trial: {
+          status: "none" as const,
+          available: false,
+          active: false,
+          consumed: false,
+          started_at: null,
+          ends_at: null,
+          source: null,
+          days_remaining: 0
+        }
+      };
+  const trial = tenantSettings.trial;
+  const showTrialActive = trial.active;
+  const showTrialEnded = !trial.active && trial.consumed && tenantSettings.current_plan === "free";
 
   return (
     <main className="min-h-screen bg-cloud pb-12">
@@ -169,6 +210,21 @@ export default async function OverviewPage() {
             </Link>
           </div>
         </div>
+
+        {showTrialActive ? (
+          <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 shadow-panel">
+            <p>Pro trial active: {trial.days_remaining} days remaining.</p>
+            {trial.started_at ? (
+              <p className="text-xs text-emerald-700">Started {new Date(trial.started_at).toLocaleDateString()}</p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {showTrialEnded ? (
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-panel">
+            Trial ended. Upgrade to Pro to continue full feature access.
+          </div>
+        ) : null}
 
         <div className="grid gap-4 lg:grid-cols-4">
           <div className="rounded-2xl border border-cyan-200 bg-white p-5 shadow-panel lg:col-span-2">
@@ -245,6 +301,13 @@ export default async function OverviewPage() {
             <p className="font-semibold text-ink">No data yet</p>
             <p className="mt-1">Connect a real workflow and ingest telemetry to start live platform risk monitoring.</p>
             <p className="mt-1">While setup is pending, run a simulation to validate detection and incident response.</p>
+          </div>
+        ) : null}
+
+        {telemetryPossiblyStale ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-panel">
+            Monitoring telemetry appears delayed (last metrics point about {Math.round(telemetryAgeMinutes ?? 0)} minutes ago).
+            Verify scheduler cadence and run `npm run check:pipeline:freshness`.
           </div>
         ) : null}
 

@@ -1,5 +1,10 @@
 import "dotenv/config";
 import { resolveEnvironmentSecrets } from "../lib/secret-manager.js";
+import {
+  markPipelineStageAttempt,
+  markPipelineStageFailure,
+  markPipelineStageSuccess
+} from "../services/pipeline-freshness-service.js";
 
 async function main() {
   await resolveEnvironmentSecrets([
@@ -9,14 +14,21 @@ async function main() {
     "JWT_SECRET",
     "SLACK_DEFAULT_WEBHOOK_URL"
   ]);
+  await markPipelineStageAttempt("anomaly");
 
-  const [{ runAnomalyDetectionJob }, { prisma }] = await Promise.all([
-    import("../services/anomaly-service.js"),
-    import("../lib/prisma.js")
-  ]);
+  try {
+    const [{ runAnomalyDetectionJob }, { prisma }] = await Promise.all([
+      import("../services/anomaly-service.js"),
+      import("../lib/prisma.js")
+    ]);
 
-  await runAnomalyDetectionJob();
-  await prisma.$disconnect();
+    await runAnomalyDetectionJob();
+    await markPipelineStageSuccess("anomaly");
+    await prisma.$disconnect();
+  } catch (error) {
+    await markPipelineStageFailure("anomaly");
+    throw error;
+  }
 }
 
 main().catch(async (error) => {

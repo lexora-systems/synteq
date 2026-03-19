@@ -124,7 +124,9 @@ async function checkBigQueryTables(): Promise<CheckResult> {
 }
 
 async function main() {
-  console.log("Synteq pipeline health check");
+  console.log("Synteq pipeline readiness check");
+  console.log("Checks dependency reachability and required data-source prerequisites.");
+  console.log("This does not verify scheduler cadence or missed runs.");
   console.log(`Target BigQuery dataset: ${config.BIGQUERY_PROJECT_ID}.${config.BIGQUERY_DATASET}`);
 
   const results = await Promise.all([checkMySql(), checkRedis(), checkBigQueryAuth(), checkBigQueryTables()]);
@@ -134,16 +136,16 @@ async function main() {
 
   const failed = results.filter((result) => !result.ok);
   if (failed.length > 0) {
-    console.error(`Pipeline health check failed (${failed.length} check${failed.length > 1 ? "s" : ""}).`);
+    console.error(`Pipeline readiness check failed (${failed.length} check${failed.length > 1 ? "s" : ""}).`);
     process.exitCode = 1;
   } else {
-    console.log("Pipeline health check passed.");
+    console.log("Pipeline readiness check passed.");
   }
 }
 
 main()
   .catch((error) => {
-    console.error("Pipeline health check failed unexpectedly:", error);
+    console.error("Pipeline readiness check failed unexpectedly:", error);
     process.exitCode = 1;
   })
   .finally(async () => {

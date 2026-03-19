@@ -1,5 +1,11 @@
 import "dotenv/config";
 import { resolveEnvironmentSecrets } from "../lib/secret-manager.js";
+import { prisma } from "../lib/prisma.js";
+import {
+  markPipelineStageAttempt,
+  markPipelineStageFailure,
+  markPipelineStageSuccess
+} from "../services/pipeline-freshness-service.js";
 
 function buildAggregationQuery(projectId: string, dataset: string, lookbackMinutes: number) {
   return `
@@ -131,27 +137,37 @@ WHEN NOT MATCHED THEN
 
 async function main() {
   await resolveEnvironmentSecrets(["BIGQUERY_KEY_JSON"]);
+  await markPipelineStageAttempt("aggregate");
 
-  const [{ config }, { getBigQueryClient }] = await Promise.all([
-    import("../config.js"),
-    import("../lib/bigquery.js")
-  ]);
+  try {
+    const [{ config }, { getBigQueryClient }] = await Promise.all([
+      import("../config.js"),
+      import("../lib/bigquery.js")
+    ]);
 
-  const query = buildAggregationQuery(
-    config.BIGQUERY_PROJECT_ID,
-    config.BIGQUERY_DATASET,
-    config.BIGQUERY_AGG_LOOKBACK_MINUTES
-  );
+    const query = buildAggregationQuery(
+      config.BIGQUERY_PROJECT_ID,
+      config.BIGQUERY_DATASET,
+      config.BIGQUERY_AGG_LOOKBACK_MINUTES
+    );
 
-  const bq = getBigQueryClient();
-  await bq.query({
-    query,
-    useLegacySql: false
-  });
-  console.log("aggregation job completed");
+    const bq = getBigQueryClient();
+    await bq.query({
+      query,
+      useLegacySql: false
+    });
+
+    console.log("aggregation job completed");
+    await markPipelineStageSuccess("aggregate");
+  } catch (error) {
+    await markPipelineStageFailure("aggregate");
+    throw error;
+  }
 }
 
 main().catch((error) => {
   console.error(error);
   process.exit(1);
+}).finally(async () => {
+  await prisma.$disconnect();
 });

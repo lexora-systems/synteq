@@ -36,7 +36,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/overview");
+    router.push("/");
   }
 
   return (

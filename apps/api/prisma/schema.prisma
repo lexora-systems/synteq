@@ -57,6 +57,10 @@ model Tenant {
   id         String           @id @default(uuid()) @db.VarChar(36)
   name       String           @db.VarChar(191)
   plan       String           @db.VarChar(64)
+  trial_status String         @default("none") @db.VarChar(32)
+  trial_started_at DateTime?
+  trial_ends_at DateTime?
+  trial_source String?        @db.VarChar(64)
   timezone   String           @default("UTC") @db.VarChar(64)
   default_currency String     @default("USD") @db.VarChar(3)
   created_at DateTime         @default(now())

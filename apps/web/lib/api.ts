@@ -31,9 +31,34 @@ export type WorkflowRow = {
   system: string;
 };
 
+export type WorkflowRegisterInput = {
+  slug: string;
+  display_name: string;
+  system: string;
+  environment: string;
+};
+
+export type BillingPlan = "free" | "pro" | "enterprise";
+export type TrialStatus = "none" | "active" | "expired";
+export type TrialSource = "manual" | "auto_ingest" | "auto_real_scan" | "auto_workflow_connect";
+
+export type TenantTrialState = {
+  status: TrialStatus;
+  available: boolean;
+  active: boolean;
+  consumed: boolean;
+  started_at: string | null;
+  ends_at: string | null;
+  source: TrialSource | null;
+  days_remaining: number;
+};
+
 export type TenantSettings = {
   tenant_id: string;
   default_currency: SupportedCurrency;
+  current_plan: BillingPlan;
+  effective_plan: BillingPlan;
+  trial: TenantTrialState;
 };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -75,6 +100,16 @@ export async function fetchWorkflows(token: string) {
   }>("/v1/workflows", { token });
 }
 
+export async function registerWorkflow(token: string, input: WorkflowRegisterInput) {
+  return request<{
+    workflow: WorkflowRow;
+  }>("/v1/workflows/register", {
+    token,
+    method: "POST",
+    body: input
+  });
+}
+
 export async function fetchTenantSettings(token: string) {
   return request<{
     settings: TenantSettings;
@@ -90,6 +125,20 @@ export async function updateTenantSettings(token: string, defaultCurrency: Suppo
     body: {
       default_currency: defaultCurrency
     }
+  });
+}
+
+export async function startTenantTrial(token: string) {
+  return request<{
+    result: {
+      code: "started" | "already_active" | "already_used" | "not_eligible";
+      started: boolean;
+      message: string;
+    };
+    settings: TenantSettings;
+  }>("/v1/settings/tenant/trial/start", {
+    token,
+    method: "POST"
   });
 }
 

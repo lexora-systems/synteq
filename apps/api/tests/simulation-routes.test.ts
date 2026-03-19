@@ -5,6 +5,7 @@ const workflowFindFirstMock = vi.fn();
 const alertPolicyFindFirstMock = vi.fn();
 const alertPolicyCreateMock = vi.fn();
 const enqueueExecutionEventMock = vi.fn();
+const startTrialIfEligibleMock = vi.fn();
 
 vi.mock("../src/lib/prisma.js", () => ({
   prisma: {
@@ -22,6 +23,10 @@ vi.mock("../src/services/ingest-queue-service.js", () => ({
   enqueueExecutionEvent: enqueueExecutionEventMock
 }));
 
+vi.mock("../src/services/tenant-trial-service.js", () => ({
+  startTrialIfEligible: startTrialIfEligibleMock
+}));
+
 describe("simulation routes", () => {
   let app: ReturnType<typeof Fastify>;
   let role: "owner" | "admin" | "engineer" | "viewer";
@@ -32,6 +37,7 @@ describe("simulation routes", () => {
     alertPolicyFindFirstMock.mockReset();
     alertPolicyCreateMock.mockReset();
     enqueueExecutionEventMock.mockReset();
+    startTrialIfEligibleMock.mockReset();
 
     workflowFindFirstMock.mockResolvedValue({
       id: "wf-1",
@@ -124,5 +130,6 @@ describe("simulation routes", () => {
       scenario: "duplicate-webhook"
     });
     expect(firstOptions.fingerprintOverride).toBeTruthy();
+    expect(startTrialIfEligibleMock).not.toHaveBeenCalled();
   });
 });

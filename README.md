@@ -283,6 +283,9 @@ Ops/perf:
 - `INCIDENT_COOLDOWN_WINDOWS`
 - `ALERT_DISPATCH_MAX_RETRIES`
 - `ALERT_DISPATCH_BACKOFF_BASE_SEC`
+- `SYNTEQ_PIPELINE_MAX_DELAY_AGGREGATE_MIN` (optional, freshness threshold override)
+- `SYNTEQ_PIPELINE_MAX_DELAY_ANOMALY_MIN` (optional, freshness threshold override)
+- `SYNTEQ_PIPELINE_MAX_DELAY_ALERTS_MIN` (optional, freshness threshold override)
 - `FX_RATE_USD`
 - `FX_RATE_PHP`
 - `FX_RATE_EUR`
@@ -330,12 +333,23 @@ npm run seed --workspace api
 npm run sample:sender --workspace api
 ```
 
-### Local Secret Handling (Important)
+### Secrets Handling Policy (Required)
 
 - Store local credentials under `secrets/` (for example: `secrets/synteq-bq-key.json`).
-- Keep real secrets only in local `.env` files or a secret manager.
-- Never commit real key material (service-account JSON, private keys, webhook secrets).
+- Keep real secrets only in local `.env` files or a secret manager reference (`sm://...`).
+- Never commit real key material (service-account JSON, private keys, webhook secrets, raw secret exports).
 - Commit only safe templates/examples such as `.env.example`.
+- Treat credentials pasted into chat, tickets, screenshots, or recordings as potentially exposed and rotate immediately.
+
+Developer checklist:
+
+- Use `secrets/` for local key files and keep that folder local-only.
+- Share configuration shape via `.env.example`, never via real `.env` values.
+- Validate local setup with readiness/freshness checks instead of sharing real credentials.
+- If exposure is suspected:
+  - revoke/rotate provider credentials first (GCP, Slack, Brevo, etc.)
+  - update local `.env` / secret references
+  - rerun `npm run check:pipeline:health` to confirm recovery
 
 Example local API env values:
 
@@ -356,6 +370,7 @@ Run these SQL files in order:
 3. `infra/bigquery/03_create_sliding_windows_view.sql`
 
 ## Cloud Run + Jobs + Scheduler
+Detailed operator runbook: `docs/operations-runbook.md`.
 
 ### API/Web deploy
 
@@ -369,7 +384,7 @@ Use existing deploy flow; ensure new env vars are present for Pub/Sub + HMAC + R
 - `npm run worker:operational-events --workspace api`
 - `npm run worker:incident-bridge --workspace api`
 
-Schedule these jobs/workers with Cloud Scheduler (1m or 2m cadence as needed).
+Schedule these jobs/workers with Cloud Scheduler (or equivalent) and keep workers always-on.
 Operational events worker is the Step 3 bridge: it consumes normalized `operational_events`, derives deterministic GitHub rule findings, and writes durable `operational_findings` records for future incident correlation.
 Incident bridge worker is the Step 4 bridge: it consumes eligible open/resolved `operational_findings`, deduplicates with durable finding->incident links, and opens/refreshes/resolves incidents safely for lifecycle tracking.
 Worker lease locking is enabled for `worker:operational-events` and `worker:incident-bridge`:
@@ -391,6 +406,18 @@ For stable risk detection in production, keep these runtime paths continuously a
   - anomaly detection job
   - alert dispatch job
 
+Recommended scheduler contract:
+
+- `aggregate`: every 1 minute
+- `anomaly`: every 1-2 minutes (after aggregate cadence)
+- `alerts`: every 1-2 minutes (after anomaly cadence)
+- `worker:operational-events`: continuously running service/worker
+- `worker:incident-bridge`: continuously running service/worker
+
+Execution dependency order:
+
+- aggregate -> anomaly -> alerts
+
 Minimum healthy pipeline behavior:
 
 - New telemetry arrives through ingestion endpoints.
@@ -398,20 +425,64 @@ Minimum healthy pipeline behavior:
 - Anomaly job evaluates current windows.
 - Alert job processes pending dispatch safely.
 
-### Pipeline Health Validation (Operator Check)
+Missed-run symptoms:
 
-Use this lightweight non-destructive check from repo root:
+- Dashboard trends stop updating while ingestion is still active.
+- Incidents stop opening/resolving despite new telemetry.
+- Alert notifications are delayed while incidents remain open.
+
+Operator first checks:
+
+- Run readiness check (`check:pipeline:readiness`) for dependency reachability.
+- Run freshness check (`check:pipeline:freshness`) for scheduler/cadence drift.
+- Inspect scheduler history for skipped triggers and confirm job logs for latest run timestamps.
+
+### Pipeline Readiness vs Freshness (Operator Checks)
+
+Readiness check (dependency sanity):
 
 ```bash
 npm run check:pipeline:health
 ```
 
-This validates:
+`check:pipeline:health` is an alias of:
+
+```bash
+npm run check:pipeline:readiness
+```
+
+This validates dependency reachability:
 
 - MySQL connectivity
 - Redis reachability (when configured)
 - BigQuery auth/query access
 - Presence of required BigQuery tables used by monitoring
+
+Freshness check (missed-run detection):
+
+```bash
+npm run check:pipeline:freshness
+```
+
+This validates job cadence/freshness for:
+
+- aggregate (`job:aggregate`)
+- anomaly (`job:anomaly`)
+- alerts (`job:alerts`)
+
+The freshness check uses recorded successful job run metadata in `worker_leases.last_completed_at` and returns non-zero when any stage is stale.
+
+Machine-readable output:
+
+```bash
+npm run check:pipeline:freshness -- --json
+```
+
+Combined operator check:
+
+```bash
+npm run check:pipeline:ops
+```
 
 To manually force pipeline progression in local/dev:
 

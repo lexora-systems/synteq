@@ -6,9 +6,49 @@ import { config } from "../config.js";
 import { runtimeMetrics } from "../lib/runtime-metrics.js";
 import { consumeRateLimit } from "../services/rate-limit-service.js";
 import { ingestOperationalEvents } from "../services/operational-event-ingestion-service.js";
+import { startTrialIfEligible } from "../services/tenant-trial-service.js";
 
 function getIngestionRateLimitKey(request: { apiKeyId?: string; ip: string }) {
   return request.apiKeyId ? `api_key:${request.apiKeyId}` : `ip:${request.ip}`;
+}
+
+function looksSynthetic(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return record.simulation === true || record.synthetic === true;
+}
+
+function isSimulationOperationalIngest(body: { events: Array<Record<string, unknown>> }) {
+  if (body.events.length === 0) {
+    return false;
+  }
+  return body.events.every((event) => looksSynthetic(event.metadata) || looksSynthetic(event.attributes));
+}
+
+async function tryAutoStartTrialFromIngest(input: {
+  tenantId: string;
+  request: {
+    id: string;
+    log: {
+      warn: (payload: Record<string, unknown>, message: string) => void;
+    };
+  };
+}) {
+  await startTrialIfEligible({
+    tenantId: input.tenantId,
+    source: "auto_ingest"
+  }).catch((error) => {
+    input.request.log.warn(
+      {
+        err: error,
+        tenant_id: input.tenantId,
+        request_id: input.request.id
+      },
+      "trial auto-start failed for ingest"
+    );
+  });
 }
 
 const ingestRoutes: FastifyPluginAsync = async (app) => {
@@ -46,6 +86,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parseWithSchema(ingestOperationalEventsRequestSchema, request.body);
+      const simulationOnlyPayload = isSimulationOperationalIngest(body as { events: Array<Record<string, unknown>> });
 
       try {
         const result = await ingestOperationalEvents(body, {
@@ -53,6 +94,12 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
           apiKeyId: request.apiKeyId,
           requestId: request.id
         });
+        if (result.accepted > 0 && !simulationOnlyPayload) {
+          await tryAutoStartTrialFromIngest({
+            tenantId: request.tenantId,
+            request
+          });
+        }
 
         runtimeMetrics.increment("ingest_operational_accepted_total", result.accepted);
 
@@ -104,14 +151,23 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(413).send({ error: "Payload too large" });
       }
 
+      const tenantId = request.tenantId;
+      if (!tenantId) {
+        return reply.code(401).send({ error: "Unauthorized" });
+      }
+
       const body = parseWithSchema(ingestExecutionSchema, request.body);
-      if (body.tenant_id !== request.tenantId) {
+      if (body.tenant_id !== tenantId) {
         runtimeMetrics.increment("ingest_rejected_tenant_mismatch_total");
         return reply.code(403).send({ error: "tenant_id mismatch for API key" });
       }
 
       try {
         const queued = await enqueueExecutionEvent(body, request.id);
+        await tryAutoStartTrialFromIngest({
+          tenantId,
+          request
+        });
         runtimeMetrics.increment("ingest_execution_accepted_total");
         return reply.code(200).send({
           ok: true,
@@ -156,14 +212,23 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(413).send({ error: "Payload too large" });
       }
 
+      const tenantId = request.tenantId;
+      if (!tenantId) {
+        return reply.code(401).send({ error: "Unauthorized" });
+      }
+
       const body = parseWithSchema(ingestHeartbeatSchema, request.body);
-      if (body.tenant_id !== request.tenantId) {
+      if (body.tenant_id !== tenantId) {
         runtimeMetrics.increment("ingest_rejected_tenant_mismatch_total");
         return reply.code(403).send({ error: "tenant_id mismatch for API key" });
       }
 
       try {
         const queued = await enqueueHeartbeatEvent(body, request.id);
+        await tryAutoStartTrialFromIngest({
+          tenantId,
+          request
+        });
         runtimeMetrics.increment("ingest_heartbeat_accepted_total");
         return reply.code(200).send({
           ok: true,

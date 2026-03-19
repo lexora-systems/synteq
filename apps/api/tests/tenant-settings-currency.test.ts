@@ -3,10 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const getTenantSettingsMock = vi.fn();
 const updateTenantSettingsMock = vi.fn();
+const startTrialIfEligibleMock = vi.fn();
 
 vi.mock("../src/services/settings-service.js", () => ({
   getTenantSettings: getTenantSettingsMock,
   updateTenantSettings: updateTenantSettingsMock
+}));
+
+vi.mock("../src/services/tenant-trial-service.js", () => ({
+  startTrialIfEligible: startTrialIfEligibleMock
 }));
 
 describe("tenant settings currency", () => {
@@ -17,13 +22,56 @@ describe("tenant settings currency", () => {
     role = "owner";
     getTenantSettingsMock.mockReset();
     updateTenantSettingsMock.mockReset();
+    startTrialIfEligibleMock.mockReset();
     getTenantSettingsMock.mockResolvedValue({
       tenant_id: "tenant-A",
-      default_currency: "USD"
+      default_currency: "USD",
+      current_plan: "free",
+      effective_plan: "free",
+      trial: {
+        status: "none",
+        available: true,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
     });
     updateTenantSettingsMock.mockResolvedValue({
       tenant_id: "tenant-A",
-      default_currency: "PHP"
+      default_currency: "PHP",
+      current_plan: "free",
+      effective_plan: "free",
+      trial: {
+        status: "none",
+        available: true,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
+    });
+    startTrialIfEligibleMock.mockResolvedValue({
+      code: "started",
+      entitlements: {
+        tenant_id: "tenant-A",
+        current_plan: "free",
+        effective_plan: "pro",
+        trial: {
+          status: "active",
+          available: false,
+          active: true,
+          consumed: true,
+          started_at: new Date().toISOString(),
+          ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          source: "manual",
+          days_remaining: 14
+        }
+      }
     });
 
     app = Fastify();
@@ -110,5 +158,24 @@ describe("tenant settings currency", () => {
     });
 
     expect(response.statusCode).toBe(403);
+  });
+
+  it("starts trial manually for owner/admin", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/settings/tenant/trial/start"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(startTrialIfEligibleMock).toHaveBeenCalledWith({
+      tenantId: "tenant-A",
+      source: "manual"
+    });
+    expect(response.json()).toMatchObject({
+      result: {
+        code: "started",
+        started: true
+      }
+    });
   });
 });
