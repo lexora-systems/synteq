@@ -224,10 +224,11 @@ describe("worker lease service", () => {
 
   it("run wrapper exits cleanly when lease is not acquired", async () => {
     const { client } = makeClient();
+    const now = new Date();
     await acquireWorkerLease({
       workerName: "operational-events-worker",
       ownerToken: "owner-A",
-      now: new Date("2026-03-17T12:00:00.000Z"),
+      now,
       leaseDurationMs: 60_000,
       client: client as any
     });

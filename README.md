@@ -330,6 +330,23 @@ npm run seed --workspace api
 npm run sample:sender --workspace api
 ```
 
+### Local Secret Handling (Important)
+
+- Store local credentials under `secrets/` (for example: `secrets/synteq-bq-key.json`).
+- Keep real secrets only in local `.env` files or a secret manager.
+- Never commit real key material (service-account JSON, private keys, webhook secrets).
+- Commit only safe templates/examples such as `.env.example`.
+
+Example local API env values:
+
+```env
+BIGQUERY_PROJECT_ID=your-gcp-project
+BIGQUERY_DATASET=synteq
+BIGQUERY_KEY_JSON=C:/path/to/your/local/secrets/synteq-bq-key.json
+```
+
+If a credential is exposed, rotate it immediately in the provider console and replace local references.
+
 ## BigQuery Setup
 
 Run these SQL files in order:
@@ -360,6 +377,47 @@ Worker lease locking is enabled for `worker:operational-events` and `worker:inci
 - overlap behavior is safe no-op (`skipped`) when an active lease is held by another instance
 - leases are renewed on heartbeat while running and released on completion
 - crashes rely on `lease_expires_at` expiry for recovery/reclaim
+
+### Always-On Runtime Expectations (Production)
+
+For stable risk detection in production, keep these runtime paths continuously available:
+
+- API service (`/v1` routes)
+- MySQL (tenant/auth/workflow/incidents state)
+- Redis (shared limits, dedupe, auth abuse state, cache)
+- BigQuery dataset access for metrics + scan reads
+- Scheduled execution of:
+  - aggregate metrics job
+  - anomaly detection job
+  - alert dispatch job
+
+Minimum healthy pipeline behavior:
+
+- New telemetry arrives through ingestion endpoints.
+- Aggregate job completes on schedule.
+- Anomaly job evaluates current windows.
+- Alert job processes pending dispatch safely.
+
+### Pipeline Health Validation (Operator Check)
+
+Use this lightweight non-destructive check from repo root:
+
+```bash
+npm run check:pipeline:health
+```
+
+This validates:
+
+- MySQL connectivity
+- Redis reachability (when configured)
+- BigQuery auth/query access
+- Presence of required BigQuery tables used by monitoring
+
+To manually force pipeline progression in local/dev:
+
+```bash
+npm run check:local:pipeline
+```
 
 ## Scaling Notes
 
@@ -460,9 +518,7 @@ Monthly risk estimate is deterministic and uses workload volume with fallback as
 - Synthetic events are explicitly tagged in payload metadata (`simulation=true`, scenario, batch).
 - Simulations can influence aggregate metrics by design in v1.
 - Incident detection is asynchronous; after simulation, run:
-  - `npm run job:aggregate --workspace api`
-  - `npm run job:anomaly --workspace api`
-  - `npm run job:alerts --workspace api`
+  - `npm run check:local:pipeline`
 - For duplicate-webhook simulation, Synteq applies a simulation-only fingerprint override so duplicate execution IDs remain observable while preserving normal ingestion behavior for non-synthetic traffic.
 
 ## Multi-Currency Revenue Risk Display

@@ -10,3 +10,9 @@ npm-debug.log*
 .DS_Store
 *.tsbuildinfo
 apps/api/generated
+
+# Local secret storage and key artifacts (never commit)
+secrets/
+*.service-account.json
+*-sa-key.json
+*.p12

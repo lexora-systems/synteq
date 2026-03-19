@@ -19,6 +19,8 @@
     "check:api:test": "npm run test --workspace api",
     "check:api:preflight": "npm run test:preflight --workspace api",
     "check:api:smoke": "npm run smoke --workspace api",
+    "check:pipeline:health": "npm run health:pipeline --workspace api",
+    "check:local:pipeline": "npm run job:aggregate --workspace api && npm run job:anomaly --workspace api && npm run job:alerts --workspace api",
     "check:prisma:validate": "npm run prisma:validate --workspace api",
     "check:prisma:migrate:deploy": "npm run prisma:migrate --workspace api",
     "check:prisma:migrate:status": "npm run prisma:migrate:status --workspace api",
