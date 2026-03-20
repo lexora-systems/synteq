@@ -306,7 +306,20 @@ Secret Manager:
 npm install
 ```
 
-2. Start local stack:
+2. Bootstrap local DB + Prisma (one command, recommended):
+
+```bash
+npm run local:bootstrap
+```
+
+What this does:
+
+- verifies `DATABASE_URL` target reachability
+- for `localhost:3306`, auto-starts (or creates) `synteq-mysql` when Docker Desktop is available
+- waits with retry/backoff until MySQL is accepting connections
+- runs `prisma migrate deploy` and `prisma migrate status`
+
+3. (Optional) Start full local stack with containers:
 
 ```bash
 docker compose up --build -d
@@ -314,20 +327,20 @@ docker compose up --build -d
 
 This starts MySQL + Redis + API + Web.
 
-3. Generate Prisma client and apply migrations:
+4. If you prefer manual Prisma setup instead of `local:bootstrap`:
 
 ```bash
 npm run prisma:generate --workspace api
 npm run prisma:migrate --workspace api
 ```
 
-4. Seed base tenant/user/API key:
+5. Seed base tenant/user/API key:
 
 ```bash
 npm run seed --workspace api
 ```
 
-5. Run sample sender (supports HMAC if `INGEST_HMAC_SECRET` is set):
+6. Run sample sender (supports HMAC if `INGEST_HMAC_SECRET` is set):
 
 ```bash
 npm run sample:sender --workspace api

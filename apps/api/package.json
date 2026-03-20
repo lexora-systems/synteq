@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "check:db:ready": "tsx scripts/local-db-ready.ts",
+    "local:bootstrap:db": "npm run check:db:ready && npm run prisma:migrate && npm run prisma:migrate:status",
     "prebuild": "npm run prisma:generate",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
