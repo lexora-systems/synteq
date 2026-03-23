@@ -384,6 +384,7 @@ Run these SQL files in order:
 
 ## Cloud Run + Jobs + Scheduler
 Detailed operator runbook: `docs/operations-runbook.md`.
+Staging deploy + smoke + pipeline gates workflow: `docs/staging-deploy-smoke-workflow.md`.
 
 ### API/Web deploy
 

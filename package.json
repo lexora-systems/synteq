@@ -21,6 +21,7 @@
     "check:api:test": "npm run test --workspace api",
     "check:api:preflight": "npm run test:preflight --workspace api",
     "check:api:smoke": "npm run smoke --workspace api",
+    "check:staging:smoke": "node scripts/staging-smoke-check.mjs",
     "check:pipeline:health": "npm run check:pipeline:readiness",
     "check:pipeline:readiness": "npm run health:pipeline --workspace api",
     "check:pipeline:freshness": "npm run check:db:ready && npm run health:pipeline:freshness --workspace api --",

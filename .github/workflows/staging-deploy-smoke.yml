@@ -1,0 +1,216 @@
+name: Staging Deploy Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/staging-deploy-smoke.yml"
+      - "apps/api/**"
+      - "apps/web/**"
+      - "packages/shared/**"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/staging-smoke-check.mjs"
+
+concurrency:
+  group: staging-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy_staging:
+    name: Deploy API and Web (staging)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: staging
+    env:
+      GCP_PROJECT_ID: ${{ secrets.STAGING_GCP_PROJECT_ID }}
+      GCP_REGION: ${{ secrets.STAGING_GCP_REGION }}
+      GAR_REPOSITORY: ${{ secrets.STAGING_GAR_REPOSITORY }}
+      STAGING_API_SERVICE: ${{ secrets.STAGING_API_SERVICE }}
+      STAGING_WEB_SERVICE: ${{ secrets.STAGING_WEB_SERVICE }}
+      STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+      STAGING_GCP_SA_KEY: ${{ secrets.STAGING_GCP_SA_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deploy configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          required_vars=(
+            GCP_PROJECT_ID
+            GCP_REGION
+            GAR_REPOSITORY
+            STAGING_API_SERVICE
+            STAGING_WEB_SERVICE
+            STAGING_API_BASE_URL
+            STAGING_GCP_SA_KEY
+          )
+          for key in "${required_vars[@]}"; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error::$key is required for staging deploy"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.STAGING_GCP_SA_KEY }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.STAGING_GCP_PROJECT_ID }}
+
+      - name: Build and deploy API (Cloud Run)
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/synteq-api:${GITHUB_SHA}"
+          gcloud builds submit \
+            --project "${GCP_PROJECT_ID}" \
+            --tag "${API_IMAGE}" \
+            --file apps/api/Dockerfile \
+            .
+
+          gcloud run deploy "${STAGING_API_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --image "${API_IMAGE}" \
+            --quiet
+
+      - name: Build and deploy Web (Cloud Run)
+        shell: bash
+        run: |
+          set -euo pipefail
+          WEB_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/synteq-web:${GITHUB_SHA}"
+          gcloud builds submit \
+            --project "${GCP_PROJECT_ID}" \
+            --tag "${WEB_IMAGE}" \
+            --file apps/web/Dockerfile \
+            .
+
+          gcloud run deploy "${STAGING_WEB_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --image "${WEB_IMAGE}" \
+            --update-env-vars "API_BASE_URL=${STAGING_API_BASE_URL},NEXT_PUBLIC_API_BASE_URL=${STAGING_API_BASE_URL}" \
+            --quiet
+
+  verify_staging:
+    name: Smoke and pipeline gates (staging)
+    needs: deploy_staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    env:
+      STAGING_WEB_BASE_URL: ${{ secrets.STAGING_WEB_BASE_URL }}
+      STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+      STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+      STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      STAGING_SMOKE_TENANT_ID: ${{ secrets.STAGING_SMOKE_TENANT_ID }}
+
+      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      REDIS_URL: ${{ secrets.STAGING_REDIS_URL }}
+      REDIS_REQUIRED: ${{ secrets.STAGING_REDIS_REQUIRED || 'false' }}
+      REDIS_KEY_PREFIX: ${{ vars.STAGING_REDIS_KEY_PREFIX || 'synteq-staging' }}
+      BIGQUERY_PROJECT_ID: ${{ secrets.STAGING_BIGQUERY_PROJECT_ID || secrets.STAGING_GCP_PROJECT_ID }}
+      BIGQUERY_DATASET: ${{ secrets.STAGING_BIGQUERY_DATASET || 'synteq' }}
+      BIGQUERY_KEY_JSON: ${{ secrets.STAGING_BIGQUERY_KEY_JSON }}
+
+      NODE_ENV: production
+      SYNTEQ_API_KEY_SALT: ${{ secrets.STAGING_SYNTEQ_API_KEY_SALT || 'staging-ci-api-key-salt-that-is-long-enough-123456' }}
+      JWT_SECRET: ${{ secrets.STAGING_JWT_SECRET || 'staging-ci-jwt-secret-that-is-long-enough-123456' }}
+      INGEST_HMAC_SECRET: ${{ secrets.STAGING_INGEST_HMAC_SECRET || 'staging-ci-ingest-hmac-secret-that-is-long-enough-123456' }}
+      DASHBOARD_ADMIN_EMAIL: ${{ secrets.STAGING_DASHBOARD_ADMIN_EMAIL || 'admin@synteq.local' }}
+      DASHBOARD_ADMIN_PASSWORD: ${{ secrets.STAGING_DASHBOARD_ADMIN_PASSWORD || 'StagingSmokePassword123!' }}
+      EMAIL_DEV_MODE: "true"
+      CORS_ORIGIN: ${{ secrets.STAGING_CORS_ORIGIN || 'http://localhost:3000' }}
+
+      STAGING_GCP_SA_KEY: ${{ secrets.STAGING_GCP_SA_KEY }}
+      STAGING_GCP_PROJECT_ID: ${{ secrets.STAGING_GCP_PROJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate smoke configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          required_vars=(
+            STAGING_WEB_BASE_URL
+            STAGING_API_BASE_URL
+            STAGING_SMOKE_EMAIL
+            STAGING_SMOKE_PASSWORD
+          )
+          for key in "${required_vars[@]}"; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error::$key is required for staging smoke"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: Run staging smoke checks
+        run: npm run check:staging:smoke
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.STAGING_GCP_SA_KEY }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.STAGING_GCP_PROJECT_ID }}
+
+      - name: Validate pipeline gate configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          required_vars=(
+            DATABASE_URL
+            BIGQUERY_PROJECT_ID
+          )
+          for key in "${required_vars[@]}"; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error::$key is required for post-deploy pipeline gates"
+              missing=1
+            fi
+          done
+          if [[ "${REDIS_REQUIRED}" == "true" && -z "${REDIS_URL:-}" ]]; then
+            echo "::error::REDIS_URL is required when REDIS_REQUIRED=true"
+            missing=1
+          fi
+          exit $missing
+
+      - name: Run pipeline readiness gate
+        run: npm run check:pipeline:readiness
+
+      - name: Run pipeline freshness gate
+        run: npm run check:pipeline:freshness -- --json
