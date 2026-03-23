@@ -30,7 +30,9 @@
     "check:prisma:migrate:deploy": "npm run check:db:ready && npm run prisma:migrate --workspace api",
     "check:prisma:migrate:status": "npm run check:db:ready && npm run prisma:migrate:status --workspace api",
     "check:web:build": "npm run build --workspace web",
-    "check:release": "npm run check:shared && npm run check:api:build && npm run check:prisma:validate && npm run check:prisma:migrate:deploy && npm run check:prisma:migrate:status && npm run check:api:test && npm run check:api:preflight && npm run check:api:smoke && npm run check:web:build"
+    "check:web:e2e:install": "npm run test:e2e:install --workspace web",
+    "check:web:e2e": "npm run test:e2e --workspace web",
+    "check:release": "npm run check:shared && npm run check:api:build && npm run check:prisma:validate && npm run check:prisma:migrate:deploy && npm run check:prisma:migrate:status && npm run check:api:test && npm run check:api:preflight && npm run check:api:smoke && npm run check:web:build && npm run check:web:e2e:install && npm run check:web:e2e"
   },
   "engines": {
     "node": ">=20"

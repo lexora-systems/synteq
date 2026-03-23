@@ -10,6 +10,10 @@ npm-debug.log*
 .DS_Store
 *.tsbuildinfo
 apps/api/generated
+test-results/
+playwright-report/
+apps/web/test-results/
+apps/web/playwright-report/
 
 # Local secret storage and key artifacts (never commit)
 secrets/*

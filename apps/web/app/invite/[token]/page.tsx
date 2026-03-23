@@ -50,7 +50,7 @@ async function acceptInviteAction(formData: FormData) {
     maxAge: 60 * 60 * 24 * 30
   });
 
-  redirect("/overview");
+  redirect("/welcome");
 }
 
 export default async function InviteAcceptPage({ params }: { params: Promise<{ token: string }> }) {
