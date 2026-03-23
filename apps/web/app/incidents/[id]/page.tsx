@@ -81,7 +81,7 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
           <div className="rounded-2xl bg-white p-6 shadow-panel">
             <h3 className="text-lg font-semibold text-ink">Likely cause</h3>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
-              {guidance.likely_causes.map((cause) => (
+              {guidance.likely_causes.map((cause: string) => (
                 <li key={cause}>{cause}</li>
               ))}
             </ul>
@@ -95,7 +95,7 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
           <div className="rounded-2xl bg-white p-6 shadow-panel">
             <h3 className="text-lg font-semibold text-ink">Recommended actions</h3>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
-              {guidance.recommended_actions.map((action) => (
+              {guidance.recommended_actions.map((action: string) => (
                 <li key={action}>{action}</li>
               ))}
             </ul>
@@ -104,7 +104,7 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
           <div className="rounded-2xl bg-white p-6 shadow-panel">
             <h3 className="text-lg font-semibold text-ink">Evidence</h3>
             <ul className="mt-2 space-y-1 text-xs text-slate-600">
-              {guidance.evidence.map((item) => (
+              {guidance.evidence.map((item: string) => (
                 <li key={item} className="font-mono">{item}</li>
               ))}
             </ul>

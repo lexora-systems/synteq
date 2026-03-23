@@ -1,5 +1,16 @@
 import { apiBaseUrl } from "./config";
-import type { IncidentGuidance, SupportedCurrency } from "@synteq/shared";
+
+export type SupportedCurrency = "USD" | "PHP" | "EUR" | "GBP" | "JPY" | "AUD" | "CAD";
+export type IncidentGuidance = {
+  incident_type: "duplicate_webhook" | "retry_storm" | "latency_spike" | "failure_rate_spike" | "missing_heartbeat" | "cost_spike" | "unknown";
+  likely_causes: string[];
+  business_impact: string;
+  recommended_actions: string[];
+  confidence: "low" | "medium" | "high";
+  evidence: string[];
+  generated_by: "rules_v1";
+  summary_text: string;
+};
 
 type RequestOptions = {
   token?: string;

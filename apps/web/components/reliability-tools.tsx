@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import type { WorkflowRow } from "../lib/api";
-import type { SupportedCurrency } from "@synteq/shared";
+import type { SupportedCurrency, WorkflowRow } from "../lib/api";
 
 type ScanPayload = {
   workflow_id: string;

@@ -1,8 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { SupportedCurrency } from "@synteq/shared";
 import { TopNav } from "../../../components/top-nav";
 import { fetchMe, fetchTenantSettings, updateTenantSettings } from "../../../lib/api";
+import type { SupportedCurrency } from "../../../lib/api";
 import { requireToken } from "../../../lib/auth";
 
 const supportedCurrencies: SupportedCurrency[] = ["USD", "PHP", "EUR", "GBP", "JPY", "AUD", "CAD"];
