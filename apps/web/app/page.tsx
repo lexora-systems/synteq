@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { getToken } from "../lib/auth";
+import { resolveActivationState } from "../lib/activation";
 
 const capabilityItems = [
   {
@@ -85,7 +86,10 @@ function CircuitDivider({ reverse = false }: { reverse?: boolean }) {
 
 export default async function PublicLandingPage() {
   const token = await getToken();
-  const startHref = token ? "/welcome" : "/login";
+  const activation = token ? await resolveActivationState(token) : null;
+  const isActivated = Boolean(activation?.activated && !activation?.metricsUnavailable);
+  const startHref = token ? (isActivated ? "/overview" : "/welcome") : "/signup";
+  const startLabel = isActivated ? "Open Dashboard" : "Start Free Trial";
   const loginHref = token ? "/overview" : "/login";
   const simulationHref = token ? "/overview#investigation-tools" : "/login";
 
@@ -172,7 +176,7 @@ export default async function PublicLandingPage() {
           />
         </div>
 
-        <header className="relative z-20 border-b border-cyan-400/20">
+        <header className="syn-landing-topbar relative z-20">
           <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-3">
               <Image
@@ -185,28 +189,30 @@ export default async function PublicLandingPage() {
                 sizes="(max-width: 640px) 40px, 44px"
               />
               <div>
-                <p className="text-xs uppercase tracking-[0.24em] text-cyan-200/90">Synteq</p>
+                <p className="text-xs uppercase tracking-[0.24em] text-cyan-200/90">Synteq by Lexora</p>
                 <p className="bg-gradient-to-r from-cyan-200 via-sky-300 to-teal-200 bg-clip-text text-sm font-semibold text-transparent">
                   DevOps Risk Intelligence
                 </p>
               </div>
             </div>
             <nav className="hidden items-center gap-6 text-sm font-medium text-slate-200/90 md:flex">
-              <a href="#problem" className="hover:text-cyan-200">Problem</a>
-              <a href="#how-it-works" className="hover:text-cyan-200">Capabilities</a>
-              <a href="#dashboard-preview" className="hover:text-cyan-200">Dashboard</a>
-              <a href="#benefits" className="hover:text-cyan-200">Benefits</a>
+              <a href="#problem" className="syn-nav-lift hover:text-cyan-200">Problem</a>
+              <a href="#how-it-works" className="syn-nav-lift hover:text-cyan-200">Capabilities</a>
+              <a href="#dashboard-preview" className="syn-nav-lift hover:text-cyan-200">Dashboard</a>
+              <a href="#benefits" className="syn-nav-lift hover:text-cyan-200">Benefits</a>
             </nav>
-            <Link
-              href={loginHref}
-              className="inline-flex h-10 items-center rounded-xl border border-cyan-300/60 bg-transparent px-4 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/15"
-            >
-              {token ? "Open Dashboard" : "Login"}
-            </Link>
+            {token ? (
+              <Link
+                href={loginHref}
+                className="inline-flex h-10 items-center rounded-xl border border-cyan-300/60 bg-transparent px-4 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/15"
+              >
+                Open Dashboard
+              </Link>
+            ) : null}
           </div>
         </header>
 
-        <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-12 lg:px-8 lg:py-24">
+        <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-4 pb-14 pt-8 sm:px-6 lg:grid-cols-12 lg:px-8 lg:pb-24 lg:pt-14">
           <div className="lg:col-span-10">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/90">Pipeline Intelligence Platform</p>
             <h1 className="mt-4 max-w-[820px] text-4xl font-semibold leading-[1.06] text-slate-50 sm:text-6xl lg:text-7xl">
@@ -218,16 +224,16 @@ export default async function PublicLandingPage() {
             <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
                 href={startHref}
-                className="inline-flex h-12 items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 px-7 text-sm font-semibold text-white shadow-[0_14px_40px_rgba(56,189,248,0.3)] transition hover:brightness-105"
+                className="syn-cta-lift inline-flex h-12 items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 px-7 text-sm font-semibold text-white shadow-[0_14px_40px_rgba(56,189,248,0.3)]"
               >
-                Start Free Trial
+                {startLabel}
               </Link>
-              <a
-                href="#how-it-works"
-                className="inline-flex h-12 items-center justify-center rounded-xl border border-cyan-300/55 bg-slate-900/35 px-7 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/15"
+              <Link
+                href={loginHref}
+                className="syn-cta-lift inline-flex h-12 items-center justify-center rounded-xl border border-cyan-300/55 bg-slate-900/35 px-7 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/15"
               >
-                See How It Works
-              </a>
+                {token ? "Open Dashboard" : "Log in"}
+              </Link>
             </div>
             <ul className="mt-8 grid gap-3 text-sm text-cyan-50/95 sm:grid-cols-3">
               <li className="rounded-xl border border-cyan-300/30 bg-slate-900/40 px-3 py-3 backdrop-blur">Detect pipeline instability early</li>
@@ -417,7 +423,7 @@ export default async function PublicLandingPage() {
                 href={startHref}
                 className="inline-flex h-11 items-center justify-center rounded-xl bg-white px-5 text-sm font-semibold text-ink"
               >
-                Start trial
+                {startLabel}
               </Link>
               <Link
                 href={startHref}
@@ -451,7 +457,7 @@ export default async function PublicLandingPage() {
                 sizes="44px"
               />
               <div>
-                <p className="text-xs uppercase tracking-[0.24em] text-cyan-200">Synteq</p>
+                <p className="text-xs uppercase tracking-[0.24em] text-cyan-200">Synteq by Lexora</p>
                 <p className="text-sm font-semibold text-slate-100">DevOps Risk Intelligence</p>
               </div>
             </div>
@@ -472,7 +478,7 @@ export default async function PublicLandingPage() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Flow</p>
               <div className="mt-3 flex flex-col gap-2 text-sm text-slate-300">
-                <Link href={startHref} className="hover:text-cyan-100">Start Free Trial</Link>
+                <Link href={startHref} className="hover:text-cyan-100">{startLabel}</Link>
                 <Link href={loginHref} className="hover:text-cyan-100">Login</Link>
                 <Link href={simulationHref} className="hover:text-cyan-100">Run First Simulation</Link>
               </div>
@@ -481,7 +487,7 @@ export default async function PublicLandingPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Company</p>
               <div className="mt-3 flex flex-col gap-2 text-sm text-slate-300">
                 <a href="#problem" className="hover:text-cyan-100">Why Synteq</a>
-                <Link href="/signup" className="hover:text-cyan-100">Signup Access</Link>
+                <Link href="/signup" className="hover:text-cyan-100">Sign Up</Link>
                 <Link href={loginHref} className="hover:text-cyan-100">Open App</Link>
               </div>
             </div>

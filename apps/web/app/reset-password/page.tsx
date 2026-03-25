@@ -25,7 +25,7 @@ export default async function ResetPasswordPage({
   return (
     <main className="login-shell">
       <div className="login-card">
-        <p className="eyebrow">Synteq</p>
+        <p className="eyebrow">Synteq by Lexora</p>
         <h1 className="login-title">Reset Password</h1>
         {token ? (
           <form className="login-form" action={resetPasswordAction}>

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 export default function LoginPage() {
   const router = useRouter();
   const [tenantId, setTenantId] = useState("");
-  const [email, setEmail] = useState("admin@synteq.local");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,7 +42,7 @@ export default function LoginPage() {
   return (
     <main className="login-shell">
       <div className="login-card">
-        <p className="eyebrow">Synteq</p>
+        <p className="eyebrow">Synteq by Lexora</p>
         <h1 className="login-title">Sign in to monitoring dashboard</h1>
         <p className="login-subtitle">Use workspace tenant ID for shared-email accounts.</p>
         <form className="login-form" onSubmit={onSubmit}>
@@ -57,7 +57,13 @@ export default function LoginPage() {
           </label>
           <label>
             Email
-            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@company.com"
+              required
+            />
           </label>
           <label>
             Password

@@ -25,7 +25,7 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
   });
 
   return (
-    <main className="min-h-screen bg-cloud pb-12">
+    <main className="min-h-screen syn-app-shell pb-12">
       <TopNav />
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pt-8">
         <div className="rounded-2xl bg-white p-6 shadow-panel">
@@ -43,3 +43,4 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
     </main>
   );
 }
+

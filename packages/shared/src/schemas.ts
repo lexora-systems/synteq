@@ -238,6 +238,13 @@ export const loginSchema = z.object({
   password: z.string().min(8).max(200)
 });
 
+export const signupSchema = z.object({
+  workspace_name: z.string().trim().min(2).max(191),
+  full_name: z.string().trim().min(2).max(191),
+  email: z.string().email(),
+  password: z.string().min(8).max(200)
+});
+
 export const refreshTokenSchema = z.object({
   refresh_token: z.string().min(32).max(512)
 });

@@ -190,7 +190,7 @@ export default async function OverviewPage() {
   const showTrialEnded = !trial.active && trial.consumed && tenantSettings.current_plan === "free";
 
   return (
-    <main className="min-h-screen bg-cloud pb-12">
+    <main className="min-h-screen syn-app-shell pb-12">
       <TopNav />
       <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pt-8">
         <div className="rounded-3xl bg-gradient-to-r from-ink to-ocean p-6 text-white shadow-panel">
@@ -391,3 +391,4 @@ export default async function OverviewPage() {
     </main>
   );
 }
+

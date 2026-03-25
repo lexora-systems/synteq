@@ -3,11 +3,17 @@ import { cookies } from "next/headers";
 import { apiBaseUrl } from "../../../lib/config";
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as { tenant_id?: string; email?: string; password?: string };
+  const body = (await request.json()) as {
+    workspace_name?: string;
+    full_name?: string;
+    email?: string;
+    password?: string;
+  };
+
   let response: Response;
 
   try {
-    response = await fetch(`${apiBaseUrl}/v1/auth/login`, {
+    response = await fetch(`${apiBaseUrl}/v1/auth/signup`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -28,7 +34,7 @@ export async function POST(request: Request) {
     const payload = (await response.json().catch(() => ({}))) as { error?: string; code?: string };
     return NextResponse.json(
       {
-        error: payload.error ?? "Invalid credentials",
+        error: payload.error ?? "Signup failed",
         code: payload.code
       },
       { status: response.status }

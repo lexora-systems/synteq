@@ -1,22 +1,74 @@
+"use client";
+
 import Link from "next/link";
+import type { Route } from "next";
+import { usePathname } from "next/navigation";
+
+type NavItem = {
+  href: Route;
+  label: string;
+  match: (pathname: string) => boolean;
+};
 
 export function TopNav() {
+  const pathname = usePathname() ?? "";
+
+  const navItems: NavItem[] = [
+    {
+      href: "/overview",
+      label: "Overview",
+      match: (path) => path === "/overview"
+    },
+    {
+      href: "/incidents",
+      label: "Incidents",
+      match: (path) => path === "/incidents" || path.startsWith("/incidents/")
+    },
+    {
+      href: "/settings/profile",
+      label: "Profile",
+      match: (path) => path === "/profile" || path === "/settings/profile" || path.startsWith("/settings/profile/")
+    },
+    {
+      href: "/settings/tenant",
+      label: "Tenant",
+      match: (path) => path === "/settings/tenant" || path.startsWith("/settings/tenant/")
+    },
+    {
+      href: "/settings/team",
+      label: "Team",
+      match: (path) => path === "/settings/team" || path.startsWith("/settings/team/")
+    },
+    {
+      href: "/settings/security",
+      label: "Security",
+      match: (path) => path === "/settings/security" || path.startsWith("/settings/security/")
+    }
+  ];
+
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
+    <header className="syn-app-topbar sticky top-0 z-20 backdrop-blur">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.25em] text-ocean">Synteq</p>
-          <h1 className="text-lg font-semibold text-ink">Workflow Monitoring</h1>
+          <p className="syn-app-brand-accent text-xs uppercase tracking-[0.2em]">Synteq by Lexora</p>
+          <h1 className="syn-app-brand-title text-lg font-semibold">Workflow Monitoring</h1>
         </div>
-        <nav className="flex items-center gap-4 text-sm font-medium text-slate-600">
-          <Link href="/overview" className="hover:text-ocean">Overview</Link>
-          <Link href="/incidents" className="hover:text-ocean">Incidents</Link>
-          <Link href="/profile" className="hover:text-ocean">Profile</Link>
-          <Link href="/settings/tenant" className="hover:text-ocean">Tenant</Link>
-          <Link href="/settings/team" className="hover:text-ocean">Team</Link>
-          <Link href="/settings/security" className="hover:text-ocean">Security</Link>
+        <nav className="flex items-center gap-4 text-sm font-medium">
+          {navItems.map((item) => {
+            const isActive = item.match(pathname);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={isActive ? "page" : undefined}
+                className={`syn-app-topbar-link syn-nav-lift px-1 py-1 ${isActive ? "syn-app-topbar-link-active" : ""}`.trim()}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
           <form action="/api/logout" method="post">
-            <button className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs uppercase tracking-wide text-slate-700 hover:border-slate-300">
+            <button className="syn-app-topbar-logout rounded-lg border px-3 py-1.5 text-xs uppercase tracking-wide">
               Logout
             </button>
           </form>

@@ -22,7 +22,7 @@ export default async function VerifyEmailPage({
   return (
     <main className="login-shell">
       <div className="login-card">
-        <p className="eyebrow">Synteq</p>
+        <p className="eyebrow">Synteq by Lexora</p>
         <h1 className="login-title">Email Verification</h1>
         <p className="login-subtitle">
           {ok
@@ -33,7 +33,7 @@ export default async function VerifyEmailPage({
           <Link href="/login" className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700">
             Go to Login
           </Link>
-          <Link href="/profile" className="rounded-lg bg-ocean px-3 py-2 text-sm font-semibold text-white">
+          <Link href="/settings/profile" className="rounded-lg bg-ocean px-3 py-2 text-sm font-semibold text-white">
             Open Profile
           </Link>
         </div>

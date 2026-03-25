@@ -14,7 +14,7 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <main className="min-h-screen bg-cloud p-6">
+    <main className="min-h-screen syn-app-shell p-6">
       <section className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-panel">
         <p className="text-xs uppercase tracking-[0.2em] text-ember">Dashboard Error</p>
         <h2 className="mt-2 text-2xl font-semibold text-ink">Something failed while loading this page</h2>
@@ -29,3 +29,4 @@ export default function GlobalError({
     </main>
   );
 }
+
