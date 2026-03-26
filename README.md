@@ -190,8 +190,15 @@ Durable event idempotency ledger notes (Step 5 foundation):
 
 - `POST /v1/internal/pubsub/ingest`
 
+### Internal scheduler triggers (Cloud Scheduler HTTP)
+
+- `POST /v1/internal/scheduler/aggregate`
+- `POST /v1/internal/scheduler/anomaly`
+- `POST /v1/internal/scheduler/alerts`
+
 ### Dashboard API (JWT)
 
+- `POST /v1/auth/signup` (public signup; creates tenant workspace + owner account + auth session)
 - `POST /v1/auth/login`
 - `POST /v1/auth/logout`
 - `POST /v1/auth/logout-all`
@@ -249,6 +256,7 @@ Core:
 - `DASHBOARD_ADMIN_PASSWORD`
 - `SLACK_DEFAULT_WEBHOOK_URL`
 - `DEFAULT_TENANT_ID`
+- `ALLOW_PUBLIC_SIGNUP` (default: `true`; reserved for future signup gating, not enforced yet)
 - `CORS_ORIGIN`
 
 Ingestion security:
@@ -264,6 +272,7 @@ Queueing:
 - `PUBSUB_PROJECT_ID`
 - `PUBSUB_TOPIC_INGEST`
 - `PUBSUB_PUSH_SHARED_SECRET`
+- `SCHEDULER_SHARED_SECRET`
 
 Ops/perf:
 
@@ -672,10 +681,12 @@ Covers:
 
 Synteq now includes an incremental SaaS identity layer that preserves existing ingestion, anomaly, metrics, and dashboard flows.
 
-### Invite-only model
+### Signup and invite model
 
-- Public signup is disabled.
-- Tenant `owner`/`admin` users can invite users.
+- Public signup is enabled.
+- Signup endpoint: `POST /v1/auth/signup`.
+- Signup creates a new tenant workspace and an `owner` user, then returns an auth session.
+- Tenant `owner`/`admin` users invite additional users into existing tenants.
 - Invite acceptance endpoint: `POST /v1/team/invite/:token/accept`.
 - Only hashed invite tokens are stored in Cloud SQL.
 

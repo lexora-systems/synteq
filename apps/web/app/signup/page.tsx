@@ -52,7 +52,7 @@ export default function SignupPage() {
       <div className="login-card">
         <p className="eyebrow">Synteq by Lexora</p>
         <h1 className="login-title">Create your account</h1>
-        <p className="login-subtitle">Set up your workspace, start trial onboarding, and invite your team later.</p>
+        <p className="login-subtitle">Create a new workspace owner account, continue onboarding, and invite your team later.</p>
         <form className="login-form" onSubmit={onSubmit}>
           <label>
             Workspace Name

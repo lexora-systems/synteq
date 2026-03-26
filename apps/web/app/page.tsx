@@ -89,7 +89,7 @@ export default async function PublicLandingPage() {
   const activation = token ? await resolveActivationState(token) : null;
   const isActivated = Boolean(activation?.activated && !activation?.metricsUnavailable);
   const startHref = token ? (isActivated ? "/overview" : "/welcome") : "/signup";
-  const startLabel = isActivated ? "Open Dashboard" : "Start Free Trial";
+  const startLabel = isActivated ? "Open Dashboard" : "Create Workspace";
   const loginHref = token ? "/overview" : "/login";
   const simulationHref = token ? "/overview#investigation-tools" : "/login";
 
