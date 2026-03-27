@@ -32,11 +32,14 @@ const targetsSharedWorkspace = workspaceSelection.some((value) =>
   value.endsWith("/packages/shared")
 );
 
-if (workspaceFilteredInstall && !targetsSharedWorkspace) {
-  console.log(
-    `[postinstall] skipping @synteq/shared build for workspace-filtered install: ${workspaceSelection.join(", ")}`
-  );
+function skipSharedBuild(reason) {
+  console.warn(`[postinstall] warning: ${reason}`);
+  console.warn("[postinstall] skipping @synteq/shared build");
   process.exit(0);
+}
+
+if (workspaceFilteredInstall && !targetsSharedWorkspace) {
+  skipSharedBuild(`workspace-filtered install excludes shared workspace (${workspaceSelection.join(", ")})`);
 }
 
 const sharedRequire = createRequire(new URL("../packages/shared/package.json", import.meta.url));
@@ -44,7 +47,13 @@ const sharedRequire = createRequire(new URL("../packages/shared/package.json", i
 try {
   sharedRequire.resolve("zod");
 } catch {
-  throw new Error("Missing required dependency 'zod' for @synteq/shared build during postinstall.");
+  skipSharedBuild("missing required dependency 'zod' for @synteq/shared in current install context");
+}
+
+try {
+  sharedRequire.resolve("typescript");
+} catch {
+  skipSharedBuild("missing build dependency 'typescript' for @synteq/shared in current install context");
 }
 
 execSync("npm run build --workspace @synteq/shared", {
