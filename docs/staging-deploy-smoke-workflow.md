@@ -10,6 +10,9 @@ This workflow is staging-focused and does three things in order:
 
 If smoke or pipeline checks fail, the workflow fails.
 
+This runbook is for the current Cloud Run API + Cloud Run web staging flow.
+For future Cloudflare-hosted frontend staging prep (while keeping API on Cloud Run), see `docs/cloudflare-web-staging-prep.md`.
+
 ## Required GitHub Secrets
 
 Deployment (Cloud Run + Artifact Registry):

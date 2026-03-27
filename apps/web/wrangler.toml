@@ -1,0 +1,12 @@
+name = "synteq-web-staging"
+main = ".open-next/worker.js"
+compatibility_date = "2026-03-27"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# Preparation-only defaults.
+# Set real environment values in Cloudflare environments/CI before staging deploy.
+[vars]
+SYNTEQ_WEB_API_BASE_URL = "https://api-staging.example.run.app"
+API_BASE_URL = "https://api-staging.example.run.app"
+NEXT_PUBLIC_API_BASE_URL = "https://api-staging.example.run.app"
