@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:cloudflare": "npm install --no-save --package-lock=false @opennextjs/cloudflare@1.13.1 && npx --yes opennextjs-cloudflare build",
+    "build:cloudflare": "npm --prefix ../.. install --workspace web --no-save --package-lock=false @opennextjs/cloudflare@1.13.1 && npm --prefix ../.. exec --workspace web opennextjs-cloudflare -- build",
     "start": "next start -p 3000",
     "test": "echo \"no tests for web\""
   },
