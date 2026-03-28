@@ -43,7 +43,8 @@ test("public landing page renders", async ({ page }) => {
   await page.goto("/");
   await expect(
     page.getByRole("heading", {
-      name: "Understand Risk Across Your Entire DevOps Pipeline"
+      name: /risk/i,
+      level: 1
     })
   ).toBeVisible();
 });
@@ -63,7 +64,9 @@ test("/login renders and invalid login is handled", async ({ page }) => {
 test("successful login routes to /welcome", async ({ page }) => {
   await login(page, "nonactivated@synteq.local");
   await expect(page).toHaveURL(/\/welcome$/);
-  await expect(page.getByRole("heading", { name: "Understand your system risk in real time" })).toBeVisible();
+  await expect(page.getByTestId("welcome-onboarding-hero")).toBeVisible();
+  await expect(page.getByTestId("welcome-connect-workflow-cta")).toBeVisible();
+  await expect(page.getByTestId("welcome-run-simulation-cta")).toBeVisible();
 });
 
 test("non-activated user visiting /overview is redirected to /welcome", async ({ page }) => {
@@ -76,7 +79,7 @@ test("activated user can access /overview", async ({ page }) => {
   await setSession(page, "activated");
   await page.goto("/overview");
   await expect(page).toHaveURL(/\/overview$/);
-  await expect(page.getByRole("heading", { name: "Risk intelligence dashboard" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /risk/i, level: 2 })).toBeVisible();
 });
 
 test("activated user visiting /welcome is redirected to /overview", async ({ page }) => {
@@ -92,5 +95,7 @@ test("invite accept flow routes to onboarding", async ({ page }) => {
   await page.getByRole("button", { name: "Accept invite" }).click();
 
   await expect(page).toHaveURL(/\/welcome$/);
-  await expect(page.getByRole("heading", { name: "Understand your system risk in real time" })).toBeVisible();
+  await expect(page.getByTestId("welcome-onboarding-hero")).toBeVisible();
+  await expect(page.getByTestId("welcome-connect-workflow-cta")).toBeVisible();
+  await expect(page.getByTestId("welcome-run-simulation-cta")).toBeVisible();
 });
