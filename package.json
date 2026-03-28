@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "postinstall": "npm run build --workspace @synteq/shared",
+    "postinstall": "node ./scripts/postinstall-build-shared.mjs",
     "build": "npm run build -ws",
     "dev": "npm run dev --workspace api",
     "dev:web": "npm run dev --workspace web",
