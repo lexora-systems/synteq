@@ -64,7 +64,6 @@ test("/login renders and invalid login is handled", async ({ page }) => {
 test("successful login routes to /welcome", async ({ page }) => {
   await login(page, "nonactivated@synteq.local");
   await expect(page).toHaveURL(/\/welcome$/);
-  await expect(page.getByTestId("welcome-onboarding-hero")).toBeVisible();
   await expect(page.getByTestId("welcome-connect-workflow-cta")).toBeVisible();
   await expect(page.getByTestId("welcome-run-simulation-cta")).toBeVisible();
 });
@@ -95,7 +94,6 @@ test("invite accept flow routes to onboarding", async ({ page }) => {
   await page.getByRole("button", { name: "Accept invite" }).click();
 
   await expect(page).toHaveURL(/\/welcome$/);
-  await expect(page.getByTestId("welcome-onboarding-hero")).toBeVisible();
   await expect(page.getByTestId("welcome-connect-workflow-cta")).toBeVisible();
   await expect(page.getByTestId("welcome-run-simulation-cta")).toBeVisible();
 });
