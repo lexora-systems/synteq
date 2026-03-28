@@ -7,8 +7,13 @@ const bodyFont = Manrope({ subsets: ["latin"], variable: "--font-body" });
 const headingFont = Space_Grotesk({ subsets: ["latin"], variable: "--font-heading" });
 
 export const metadata: Metadata = {
-  title: "Synteq by Lexora",
-  description: "AI workflow monitoring and anomaly detection"
+  title: "Synteq",
+  description: "AI workflow monitoring and anomaly detection",
+  icons: {
+    icon: "/syn-logo.png",
+    shortcut: "/syn-logo.png",
+    apple: "/syn-logo.png"
+  }
 };
 
 export default function RootLayout({
