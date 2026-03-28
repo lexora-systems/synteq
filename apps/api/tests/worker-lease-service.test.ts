@@ -224,11 +224,13 @@ describe("worker lease service", () => {
 
   it("run wrapper exits cleanly when lease is not acquired", async () => {
     const { client } = makeClient();
+    const now = new Date();
+    const longLeaseMs = 6 * 60 * 60 * 1000;
     await acquireWorkerLease({
       workerName: "operational-events-worker",
       ownerToken: "owner-A",
-      now: new Date("2026-03-17T12:00:00.000Z"),
-      leaseDurationMs: 60_000,
+      now,
+      leaseDurationMs: longLeaseMs,
       client: client as any
     });
 
@@ -237,7 +239,7 @@ describe("worker lease service", () => {
       workerName: "operational-events-worker",
       ownerToken: "owner-B",
       settings: {
-        leaseDurationMs: 60_000,
+        leaseDurationMs: longLeaseMs,
         renewIntervalMs: 10_000
       },
       run: runMock,
