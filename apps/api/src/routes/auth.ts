@@ -6,7 +6,8 @@ import {
   passwordChangeSchema,
   passwordResetConfirmSchema,
   passwordResetRequestSchema,
-  refreshTokenSchema
+  refreshTokenSchema,
+  signupSchema
 } from "@synteq/shared";
 import { parseWithSchema } from "../utils/validation.js";
 import { prisma } from "../lib/prisma.js";
@@ -81,6 +82,60 @@ async function resolveUserForTenantScopedAuth(input: {
 }
 
 const authRoutes: FastifyPluginAsync = async (app) => {
+  app.post("/auth/signup", async (request, reply) => {
+    const body = parseWithSchema(signupSchema, request.body);
+    const email = body.email.toLowerCase();
+    const workspaceName = body.workspace_name.trim();
+    const fullName = body.full_name.trim();
+
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        email,
+        disabled_at: null
+      },
+      select: {
+        id: true
+      }
+    });
+
+    if (existingUser) {
+      return reply.code(409).send({
+        error: "Email is already in use.",
+        code: "AUTH_SIGNUP_EMAIL_EXISTS"
+      });
+    }
+
+    const passwordHash = await hashPassword(body.password);
+
+    const user = await prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.create({
+        data: {
+          name: workspaceName,
+          plan: "free"
+        }
+      });
+
+      return tx.user.create({
+        data: {
+          tenant_id: tenant.id,
+          email,
+          full_name: fullName,
+          password_hash: passwordHash,
+          role: "owner"
+        }
+      });
+    });
+
+    const session = await createAuthSession(reply, asAuthUser(user));
+    return reply.code(201).send({
+      token: session.access_token,
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      refresh_expires_at: session.refresh_expires_at,
+      user: session.user
+    });
+  });
+
   app.post("/auth/login", async (request, reply) => {
     const body = parseWithSchema(loginSchema, request.body);
     const tenantId = body.tenant_id?.trim();

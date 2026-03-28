@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import type { WorkflowRow } from "../lib/api";
-import type { SupportedCurrency } from "@synteq/shared";
+import type { SupportedCurrency, WorkflowRow } from "../lib/api";
 
 type ScanPayload = {
   workflow_id: string;
@@ -59,6 +58,20 @@ function formatMoney(amount: number, currency: SupportedCurrency) {
   }).format(amount);
 }
 
+function toScanErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("unauthorized") || message.includes("401")) {
+    return "Session expired. Please sign in again.";
+  }
+  if (message.includes("forbidden") || message.includes("403") || message.includes("permission")) {
+    return "Monitoring data access is blocked. Verify project permissions and try again.";
+  }
+  if (message.includes("bigquery") || message.includes("credential") || message.includes("500")) {
+    return "Monitoring data is temporarily unavailable. Check pipeline health and data source configuration.";
+  }
+  return "Unable to run reliability scan right now. Please try again in a moment.";
+}
+
 export function ReliabilityTools({ workflows }: { workflows: WorkflowRow[] }) {
   const [workflowId, setWorkflowId] = useState(workflows[0]?.id ?? "");
   const [range, setRange] = useState<"24h" | "7d" | "30d">("7d");
@@ -101,7 +114,7 @@ export function ReliabilityTools({ workflows }: { workflows: WorkflowRow[] }) {
       setScanResult(payload);
     } catch (error) {
       setScanResult(null);
-      setScanError(error instanceof Error ? error.message : "Failed to run reliability scan");
+      setScanError(toScanErrorMessage(error));
     } finally {
       setScanLoading(false);
     }
@@ -132,7 +145,7 @@ export function ReliabilityTools({ workflows }: { workflows: WorkflowRow[] }) {
       }
 
       setSimulationMessage(
-        `${payload.result.injected_events} synthetic events injected for ${payload.result.scenario}. ${payload.result.recommendation}`
+        `${payload.result.injected_events} synthetic events injected for ${payload.result.scenario}. Monitoring signals will update shortly.`
       );
     } catch (error) {
       setSimulationMessage(error instanceof Error ? error.message : "Simulation request failed");
@@ -145,7 +158,7 @@ export function ReliabilityTools({ workflows }: { workflows: WorkflowRow[] }) {
     <div className="grid gap-4 lg:grid-cols-2">
       <section className="rounded-2xl bg-white p-6 shadow-panel">
         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Reliability Scan</p>
-        <h3 className="mt-1 text-xl font-semibold text-ink">Run a Synteq Reliability Scan</h3>
+        <h3 className="mt-1 text-xl font-semibold text-ink">Run Reliability Scan</h3>
         <p className="mt-1 text-sm text-slate-600">Detect hidden automation failures in minutes.</p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-[2fr_1fr_auto]">
@@ -176,11 +189,11 @@ export function ReliabilityTools({ workflows }: { workflows: WorkflowRow[] }) {
             </select>
           </label>
           <button
-            className="self-end rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            className="self-end rounded-lg bg-gradient-to-r from-ink to-ocean px-4 py-2 text-sm font-semibold text-white shadow-panel disabled:opacity-60"
             onClick={runScan}
             disabled={!workflowId || scanLoading}
           >
-            {scanLoading ? "Running..." : "Run Scan"}
+            {scanLoading ? "Running..." : "Run Reliability Scan"}
           </button>
         </div>
 
@@ -212,7 +225,7 @@ export function ReliabilityTools({ workflows }: { workflows: WorkflowRow[] }) {
               <p className="md:col-span-2 text-xs text-slate-500">
                 {scanResult.currency === "USD"
                   ? "Base currency USD"
-                  : `≈ ${formatMoney(scanResult.estimated_monthly_risk_usd, "USD")} USD (FX ${scanResult.conversion_rate})`}
+                  : `Approx. ${formatMoney(scanResult.estimated_monthly_risk_usd, "USD")} USD (FX ${scanResult.conversion_rate})`}
               </p>
             </div>
 
@@ -261,8 +274,16 @@ export function ReliabilityTools({ workflows }: { workflows: WorkflowRow[] }) {
 
         {simulationMessage ? <p className="mt-3 text-sm text-slate-700">{simulationMessage}</p> : null}
 
+        <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-slate-700">
+          <p className="font-semibold text-ink">Connect a real workflow for live monitoring</p>
+          <p className="mt-1">
+            Simulations validate detection behavior. For real risk monitoring, connect a production workflow and ingest live telemetry.
+            While setup is pending, keep using simulations to validate incident response.
+          </p>
+        </div>
+
         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          Incident generation is asynchronous. Run aggregate/anomaly/alerts jobs and check incidents after a short delay.
+          Incidents will appear in a few seconds after simulation.
         </div>
 
         <div className="mt-3 flex gap-2 text-sm">

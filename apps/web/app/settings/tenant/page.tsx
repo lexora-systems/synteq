@@ -1,8 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { SupportedCurrency } from "@synteq/shared";
 import { TopNav } from "../../../components/top-nav";
 import { fetchMe, fetchTenantSettings, updateTenantSettings } from "../../../lib/api";
+import type { SupportedCurrency } from "../../../lib/api";
 import { requireToken } from "../../../lib/auth";
 
 const supportedCurrencies: SupportedCurrency[] = ["USD", "PHP", "EUR", "GBP", "JPY", "AUD", "CAD"];
@@ -28,7 +28,7 @@ export default async function TenantSettingsPage({
 
   if (!["owner", "admin"].includes(me.user.role)) {
     return (
-      <main className="min-h-screen bg-cloud pb-12">
+      <main className="min-h-screen syn-app-shell pb-12">
         <TopNav />
         <section className="mx-auto w-full max-w-3xl px-4 pt-8">
           <div className="rounded-2xl bg-white p-6 shadow-panel">
@@ -43,7 +43,7 @@ export default async function TenantSettingsPage({
   const { settings } = await fetchTenantSettings(token);
 
   return (
-    <main className="min-h-screen bg-cloud pb-12">
+    <main className="min-h-screen syn-app-shell pb-12">
       <TopNav />
       <section className="mx-auto w-full max-w-3xl px-4 pt-8">
         <div className="rounded-2xl bg-white p-6 shadow-panel">
@@ -77,3 +77,4 @@ export default async function TenantSettingsPage({
     </main>
   );
 }
+

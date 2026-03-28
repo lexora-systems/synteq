@@ -4,14 +4,25 @@ import { apiBaseUrl } from "../../../lib/config";
 
 export async function POST(request: Request) {
   const body = (await request.json()) as { tenant_id?: string; email?: string; password?: string };
+  let response: Response;
 
-  const response = await fetch(`${apiBaseUrl}/v1/auth/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
+  try {
+    response = await fetch(`${apiBaseUrl}/v1/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+  } catch {
+    return NextResponse.json(
+      {
+        error: "API is unreachable. Start backend on http://localhost:8080 or set API_BASE_URL.",
+        code: "AUTH_API_UNREACHABLE"
+      },
+      { status: 503 }
+    );
+  }
 
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as { error?: string; code?: string };

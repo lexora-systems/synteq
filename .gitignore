@@ -4,9 +4,24 @@ node_modules
 !.env.example
 !.env.production.example
 .next
+.open-next
+.wrangler
+.dev.vars
 dist
 coverage
 npm-debug.log*
 .DS_Store
 *.tsbuildinfo
 apps/api/generated
+test-results/
+playwright-report/
+apps/web/test-results/
+apps/web/playwright-report/
+
+# Local secret storage and key artifacts (never commit)
+secrets/*
+!secrets/.gitkeep
+*.service-account.json
+*-sa-key.json
+*-credentials.json
+*.p12

@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "check:db:ready": "tsx scripts/local-db-ready.ts",
+    "local:bootstrap:db": "npm run check:db:ready && npm run prisma:migrate && npm run prisma:migrate:status",
     "prebuild": "npm run prisma:generate",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
@@ -18,6 +20,8 @@
     "job:alerts": "tsx src/jobs/alert-dispatch-job.ts",
     "worker:operational-events": "tsx src/workers/operational-events-worker.ts",
     "worker:incident-bridge": "tsx src/workers/incident-bridge-worker.ts",
+    "health:pipeline": "tsx scripts/pipeline-health-check.ts",
+    "health:pipeline:freshness": "tsx scripts/pipeline-freshness-check.ts",
     "sample:sender": "tsx scripts/sample-sender.ts",
     "test": "vitest run",
     "test:preflight": "vitest run tests/production-preflight.test.ts",

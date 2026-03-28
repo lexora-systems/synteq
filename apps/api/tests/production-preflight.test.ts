@@ -34,6 +34,7 @@ function buildConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     DASHBOARD_ADMIN_EMAIL: "admin@example.com",
     DASHBOARD_ADMIN_PASSWORD: "StrongAdminPassword123!",
     DEFAULT_TENANT_ID: undefined,
+    ALLOW_PUBLIC_SIGNUP: true,
     CORS_ORIGIN: "https://app.example.com",
     WEB_BASE_URL: "https://app.example.com",
     INVITE_RATE_LIMIT_PER_HOUR: 20,

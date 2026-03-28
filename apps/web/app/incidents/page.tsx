@@ -41,7 +41,7 @@ export default async function IncidentsPage({
   const payload = await fetchIncidents(token, status, page, 25, workflowId);
 
   return (
-    <main className="min-h-screen bg-cloud pb-12">
+    <main className="min-h-screen syn-app-shell pb-12">
       <TopNav />
       <section className="mx-auto w-full max-w-6xl px-4 pt-8">
         <div className="rounded-2xl bg-white p-6 shadow-panel">
@@ -161,4 +161,5 @@ export default async function IncidentsPage({
     </main>
   );
 }
+
 

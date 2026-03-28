@@ -3,6 +3,7 @@ import { workflowRegisterSchema } from "@synteq/shared";
 import { parseWithSchema } from "../utils/validation.js";
 import { prisma } from "../lib/prisma.js";
 import { Permission } from "../auth/permissions.js";
+import { startTrialIfEligible } from "../services/tenant-trial-service.js";
 
 const workflowRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -90,6 +91,15 @@ const workflowRoutes: FastifyPluginAsync = async (app) => {
           }
         });
       }
+      await startTrialIfEligible({
+        tenantId,
+        source: "auto_workflow_connect"
+      }).catch((error) => {
+        request.log.warn(
+          { err: error, tenant_id: tenantId, workflow_id: workflow.id },
+          "trial auto-start failed for workflow registration"
+        );
+      });
 
       return { workflow };
     }

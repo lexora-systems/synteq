@@ -46,7 +46,7 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
   const isSimulation = details.source === "simulation" || Number(details.synthetic_ratio ?? 0) > 0;
 
   return (
-    <main className="min-h-screen bg-cloud pb-12">
+    <main className="min-h-screen syn-app-shell pb-12">
       <TopNav />
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pt-8 lg:grid-cols-[1.7fr_1fr]">
         <div className="space-y-4">
@@ -81,7 +81,7 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
           <div className="rounded-2xl bg-white p-6 shadow-panel">
             <h3 className="text-lg font-semibold text-ink">Likely cause</h3>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
-              {guidance.likely_causes.map((cause) => (
+              {guidance.likely_causes.map((cause: string) => (
                 <li key={cause}>{cause}</li>
               ))}
             </ul>
@@ -95,7 +95,7 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
           <div className="rounded-2xl bg-white p-6 shadow-panel">
             <h3 className="text-lg font-semibold text-ink">Recommended actions</h3>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
-              {guidance.recommended_actions.map((action) => (
+              {guidance.recommended_actions.map((action: string) => (
                 <li key={action}>{action}</li>
               ))}
             </ul>
@@ -104,7 +104,7 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
           <div className="rounded-2xl bg-white p-6 shadow-panel">
             <h3 className="text-lg font-semibold text-ink">Evidence</h3>
             <ul className="mt-2 space-y-1 text-xs text-slate-600">
-              {guidance.evidence.map((item) => (
+              {guidance.evidence.map((item: string) => (
                 <li key={item} className="font-mono">{item}</li>
               ))}
             </ul>
@@ -177,3 +177,4 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
     </main>
   );
 }
+

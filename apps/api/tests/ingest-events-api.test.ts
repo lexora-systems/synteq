@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const consumeRateLimitMock = vi.fn();
 const ingestOperationalEventsMock = vi.fn();
+const startTrialIfEligibleMock = vi.fn();
 
 vi.mock("../src/config.js", () => ({
   config: {
@@ -19,12 +20,17 @@ vi.mock("../src/services/operational-event-ingestion-service.js", () => ({
   ingestOperationalEvents: ingestOperationalEventsMock
 }));
 
+vi.mock("../src/services/tenant-trial-service.js", () => ({
+  startTrialIfEligible: startTrialIfEligibleMock
+}));
+
 describe("ingest events api", () => {
   let app: ReturnType<typeof Fastify>;
 
   beforeEach(async () => {
     consumeRateLimitMock.mockReset();
     ingestOperationalEventsMock.mockReset();
+    startTrialIfEligibleMock.mockReset();
 
     consumeRateLimitMock.mockResolvedValue({
       allowed: true,
@@ -44,6 +50,9 @@ describe("ingest events api", () => {
         queued: 1,
         next_stage: "pending_worker"
       }
+    });
+    startTrialIfEligibleMock.mockResolvedValue({
+      code: "started"
     });
 
     app = Fastify();
@@ -150,6 +159,10 @@ describe("ingest events api", () => {
         tenantId: "tenant-B"
       })
     );
+    expect(startTrialIfEligibleMock).toHaveBeenCalledWith({
+      tenantId: "tenant-B",
+      source: "auto_ingest"
+    });
   });
 
   it("enforces ingestion key auth", async () => {
@@ -281,5 +294,30 @@ describe("ingest events api", () => {
       failed: 1,
       ingested: 1
     });
+  });
+
+  it("does not auto-start trial for simulation-tagged operational ingest", async () => {
+    await app.inject({
+      method: "POST",
+      url: "/v1/ingest/events",
+      headers: {
+        "x-synteq-key": "key-tenant-a"
+      },
+      payload: {
+        events: [
+          {
+            source: "simulation",
+            event_type: "synthetic_probe",
+            system: "demo",
+            timestamp: "2026-03-17T10:03:00Z",
+            metadata: {
+              simulation: true
+            }
+          }
+        ]
+      }
+    });
+
+    expect(startTrialIfEligibleMock).not.toHaveBeenCalled();
   });
 });

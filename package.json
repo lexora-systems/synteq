@@ -7,23 +7,33 @@
     "packages/*"
   ],
   "scripts": {
-    "postinstall": "npm run build --workspace @synteq/shared",
+    "postinstall": "node ./scripts/postinstall-build-shared.mjs",
     "build": "npm run build -ws",
     "dev": "npm run dev --workspace api",
     "dev:web": "npm run dev --workspace web",
     "dev:api": "npm run dev --workspace api",
     "test": "npm run test -ws",
     "seed": "npm run seed --workspace api",
+    "local:bootstrap": "npm run local:bootstrap:db --workspace api",
+    "check:db:ready": "npm run check:db:ready --workspace api",
     "check:shared": "npm run build --workspace @synteq/shared",
     "check:api:build": "npm run build --workspace api",
     "check:api:test": "npm run test --workspace api",
     "check:api:preflight": "npm run test:preflight --workspace api",
     "check:api:smoke": "npm run smoke --workspace api",
+    "check:staging:smoke": "node scripts/staging-smoke-check.mjs",
+    "check:pipeline:health": "npm run check:pipeline:readiness",
+    "check:pipeline:readiness": "npm run health:pipeline --workspace api",
+    "check:pipeline:freshness": "npm run check:db:ready && npm run health:pipeline:freshness --workspace api --",
+    "check:pipeline:ops": "npm run check:pipeline:readiness && npm run check:pipeline:freshness",
+    "check:local:pipeline": "npm run job:aggregate --workspace api && npm run job:anomaly --workspace api && npm run job:alerts --workspace api",
     "check:prisma:validate": "npm run prisma:validate --workspace api",
-    "check:prisma:migrate:deploy": "npm run prisma:migrate --workspace api",
-    "check:prisma:migrate:status": "npm run prisma:migrate:status --workspace api",
+    "check:prisma:migrate:deploy": "npm run check:db:ready && npm run prisma:migrate --workspace api",
+    "check:prisma:migrate:status": "npm run check:db:ready && npm run prisma:migrate:status --workspace api",
     "check:web:build": "npm run build --workspace web",
-    "check:release": "npm run check:shared && npm run check:api:build && npm run check:prisma:validate && npm run check:prisma:migrate:deploy && npm run check:prisma:migrate:status && npm run check:api:test && npm run check:api:preflight && npm run check:api:smoke && npm run check:web:build"
+    "check:web:e2e:install": "npm run test:e2e:install --workspace web",
+    "check:web:e2e": "npm run test:e2e --workspace web",
+    "check:release": "npm run check:shared && npm run check:api:build && npm run check:prisma:validate && npm run check:prisma:migrate:deploy && npm run check:prisma:migrate:status && npm run check:api:test && npm run check:api:preflight && npm run check:api:smoke && npm run check:web:build && npm run check:web:e2e:install && npm run check:web:e2e"
   },
   "engines": {
     "node": ">=20"

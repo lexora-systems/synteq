@@ -50,7 +50,7 @@ async function acceptInviteAction(formData: FormData) {
     maxAge: 60 * 60 * 24 * 30
   });
 
-  redirect("/overview");
+  redirect("/welcome");
 }
 
 export default async function InviteAcceptPage({ params }: { params: Promise<{ token: string }> }) {
@@ -59,7 +59,7 @@ export default async function InviteAcceptPage({ params }: { params: Promise<{ t
   return (
     <main className="login-shell">
       <div className="login-card">
-        <p className="eyebrow">Synteq</p>
+        <p className="eyebrow">Synteq by Lexora</p>
         <h1 className="login-title">Accept invite</h1>
         <p className="login-subtitle">Set your name and password to activate your account.</p>
         <form className="login-form" action={acceptInviteAction}>

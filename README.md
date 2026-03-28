@@ -190,8 +190,15 @@ Durable event idempotency ledger notes (Step 5 foundation):
 
 - `POST /v1/internal/pubsub/ingest`
 
+### Internal scheduler triggers (Cloud Scheduler HTTP)
+
+- `POST /v1/internal/scheduler/aggregate`
+- `POST /v1/internal/scheduler/anomaly`
+- `POST /v1/internal/scheduler/alerts`
+
 ### Dashboard API (JWT)
 
+- `POST /v1/auth/signup` (public signup; creates tenant workspace + owner account + auth session)
 - `POST /v1/auth/login`
 - `POST /v1/auth/logout`
 - `POST /v1/auth/logout-all`
@@ -249,6 +256,7 @@ Core:
 - `DASHBOARD_ADMIN_PASSWORD`
 - `SLACK_DEFAULT_WEBHOOK_URL`
 - `DEFAULT_TENANT_ID`
+- `ALLOW_PUBLIC_SIGNUP` (default: `true`; reserved for future signup gating, not enforced yet)
 - `CORS_ORIGIN`
 
 Ingestion security:
@@ -264,6 +272,7 @@ Queueing:
 - `PUBSUB_PROJECT_ID`
 - `PUBSUB_TOPIC_INGEST`
 - `PUBSUB_PUSH_SHARED_SECRET`
+- `SCHEDULER_SHARED_SECRET`
 
 Ops/perf:
 
@@ -283,6 +292,9 @@ Ops/perf:
 - `INCIDENT_COOLDOWN_WINDOWS`
 - `ALERT_DISPATCH_MAX_RETRIES`
 - `ALERT_DISPATCH_BACKOFF_BASE_SEC`
+- `SYNTEQ_PIPELINE_MAX_DELAY_AGGREGATE_MIN` (optional, freshness threshold override)
+- `SYNTEQ_PIPELINE_MAX_DELAY_ANOMALY_MIN` (optional, freshness threshold override)
+- `SYNTEQ_PIPELINE_MAX_DELAY_ALERTS_MIN` (optional, freshness threshold override)
 - `FX_RATE_USD`
 - `FX_RATE_PHP`
 - `FX_RATE_EUR`
@@ -303,7 +315,20 @@ Secret Manager:
 npm install
 ```
 
-2. Start local stack:
+2. Bootstrap local DB + Prisma (one command, recommended):
+
+```bash
+npm run local:bootstrap
+```
+
+What this does:
+
+- verifies `DATABASE_URL` target reachability
+- for `localhost:3306`, auto-starts (or creates) `synteq-mysql` when Docker Desktop is available
+- waits with retry/backoff until MySQL is accepting connections
+- runs `prisma migrate deploy` and `prisma migrate status`
+
+3. (Optional) Start full local stack with containers:
 
 ```bash
 docker compose up --build -d
@@ -311,24 +336,52 @@ docker compose up --build -d
 
 This starts MySQL + Redis + API + Web.
 
-3. Generate Prisma client and apply migrations:
+4. If you prefer manual Prisma setup instead of `local:bootstrap`:
 
 ```bash
 npm run prisma:generate --workspace api
 npm run prisma:migrate --workspace api
 ```
 
-4. Seed base tenant/user/API key:
+5. Seed base tenant/user/API key:
 
 ```bash
 npm run seed --workspace api
 ```
 
-5. Run sample sender (supports HMAC if `INGEST_HMAC_SECRET` is set):
+6. Run sample sender (supports HMAC if `INGEST_HMAC_SECRET` is set):
 
 ```bash
 npm run sample:sender --workspace api
 ```
+
+### Secrets Handling Policy (Required)
+
+- Store local credentials under `secrets/` (for example: `secrets/synteq-bq-key.json`).
+- Keep real secrets only in local `.env` files or a secret manager reference (`sm://...`).
+- Never commit real key material (service-account JSON, private keys, webhook secrets, raw secret exports).
+- Commit only safe templates/examples such as `.env.example`.
+- Treat credentials pasted into chat, tickets, screenshots, or recordings as potentially exposed and rotate immediately.
+
+Developer checklist:
+
+- Use `secrets/` for local key files and keep that folder local-only.
+- Share configuration shape via `.env.example`, never via real `.env` values.
+- Validate local setup with readiness/freshness checks instead of sharing real credentials.
+- If exposure is suspected:
+  - revoke/rotate provider credentials first (GCP, Slack, Brevo, etc.)
+  - update local `.env` / secret references
+  - rerun `npm run check:pipeline:health` to confirm recovery
+
+Example local API env values:
+
+```env
+BIGQUERY_PROJECT_ID=your-gcp-project
+BIGQUERY_DATASET=synteq
+BIGQUERY_KEY_JSON=C:/path/to/your/local/secrets/synteq-bq-key.json
+```
+
+If a credential is exposed, rotate it immediately in the provider console and replace local references.
 
 ## BigQuery Setup
 
@@ -339,6 +392,8 @@ Run these SQL files in order:
 3. `infra/bigquery/03_create_sliding_windows_view.sql`
 
 ## Cloud Run + Jobs + Scheduler
+Detailed operator runbook: `docs/operations-runbook.md`.
+Staging deploy + smoke + pipeline gates workflow: `docs/staging-deploy-smoke-workflow.md`.
 
 ### API/Web deploy
 
@@ -352,7 +407,7 @@ Use existing deploy flow; ensure new env vars are present for Pub/Sub + HMAC + R
 - `npm run worker:operational-events --workspace api`
 - `npm run worker:incident-bridge --workspace api`
 
-Schedule these jobs/workers with Cloud Scheduler (1m or 2m cadence as needed).
+Schedule these jobs/workers with Cloud Scheduler (or equivalent) and keep workers always-on.
 Operational events worker is the Step 3 bridge: it consumes normalized `operational_events`, derives deterministic GitHub rule findings, and writes durable `operational_findings` records for future incident correlation.
 Incident bridge worker is the Step 4 bridge: it consumes eligible open/resolved `operational_findings`, deduplicates with durable finding->incident links, and opens/refreshes/resolves incidents safely for lifecycle tracking.
 Worker lease locking is enabled for `worker:operational-events` and `worker:incident-bridge`:
@@ -360,6 +415,103 @@ Worker lease locking is enabled for `worker:operational-events` and `worker:inci
 - overlap behavior is safe no-op (`skipped`) when an active lease is held by another instance
 - leases are renewed on heartbeat while running and released on completion
 - crashes rely on `lease_expires_at` expiry for recovery/reclaim
+
+### Always-On Runtime Expectations (Production)
+
+For stable risk detection in production, keep these runtime paths continuously available:
+
+- API service (`/v1` routes)
+- MySQL (tenant/auth/workflow/incidents state)
+- Redis (shared limits, dedupe, auth abuse state, cache)
+- BigQuery dataset access for metrics + scan reads
+- Scheduled execution of:
+  - aggregate metrics job
+  - anomaly detection job
+  - alert dispatch job
+
+Recommended scheduler contract:
+
+- `aggregate`: every 1 minute
+- `anomaly`: every 1-2 minutes (after aggregate cadence)
+- `alerts`: every 1-2 minutes (after anomaly cadence)
+- `worker:operational-events`: continuously running service/worker
+- `worker:incident-bridge`: continuously running service/worker
+
+Execution dependency order:
+
+- aggregate -> anomaly -> alerts
+
+Minimum healthy pipeline behavior:
+
+- New telemetry arrives through ingestion endpoints.
+- Aggregate job completes on schedule.
+- Anomaly job evaluates current windows.
+- Alert job processes pending dispatch safely.
+
+Missed-run symptoms:
+
+- Dashboard trends stop updating while ingestion is still active.
+- Incidents stop opening/resolving despite new telemetry.
+- Alert notifications are delayed while incidents remain open.
+
+Operator first checks:
+
+- Run readiness check (`check:pipeline:readiness`) for dependency reachability.
+- Run freshness check (`check:pipeline:freshness`) for scheduler/cadence drift.
+- Inspect scheduler history for skipped triggers and confirm job logs for latest run timestamps.
+
+### Pipeline Readiness vs Freshness (Operator Checks)
+
+Readiness check (dependency sanity):
+
+```bash
+npm run check:pipeline:health
+```
+
+`check:pipeline:health` is an alias of:
+
+```bash
+npm run check:pipeline:readiness
+```
+
+This validates dependency reachability:
+
+- MySQL connectivity
+- Redis reachability (when configured)
+- BigQuery auth/query access
+- Presence of required BigQuery tables used by monitoring
+
+Freshness check (missed-run detection):
+
+```bash
+npm run check:pipeline:freshness
+```
+
+This validates job cadence/freshness for:
+
+- aggregate (`job:aggregate`)
+- anomaly (`job:anomaly`)
+- alerts (`job:alerts`)
+
+The freshness check uses recorded successful job run metadata in `worker_leases.last_completed_at` and returns non-zero when any stage is stale.
+
+Machine-readable output:
+
+```bash
+npm run check:pipeline:freshness -- --json
+```
+
+Combined operator check:
+
+```bash
+npm run check:pipeline:ops
+```
+
+To manually force pipeline progression in local/dev:
+
+```bash
+npm run check:local:pipeline
+```
 
 ## Scaling Notes
 
@@ -460,9 +612,7 @@ Monthly risk estimate is deterministic and uses workload volume with fallback as
 - Synthetic events are explicitly tagged in payload metadata (`simulation=true`, scenario, batch).
 - Simulations can influence aggregate metrics by design in v1.
 - Incident detection is asynchronous; after simulation, run:
-  - `npm run job:aggregate --workspace api`
-  - `npm run job:anomaly --workspace api`
-  - `npm run job:alerts --workspace api`
+  - `npm run check:local:pipeline`
 - For duplicate-webhook simulation, Synteq applies a simulation-only fingerprint override so duplicate execution IDs remain observable while preserving normal ingestion behavior for non-synthetic traffic.
 
 ## Multi-Currency Revenue Risk Display
@@ -531,10 +681,12 @@ Covers:
 
 Synteq now includes an incremental SaaS identity layer that preserves existing ingestion, anomaly, metrics, and dashboard flows.
 
-### Invite-only model
+### Signup and invite model
 
-- Public signup is disabled.
-- Tenant `owner`/`admin` users can invite users.
+- Public signup is enabled.
+- Signup endpoint: `POST /v1/auth/signup`.
+- Signup creates a new tenant workspace and an `owner` user, then returns an auth session.
+- Tenant `owner`/`admin` users invite additional users into existing tenants.
 - Invite acceptance endpoint: `POST /v1/team/invite/:token/accept`.
 - Only hashed invite tokens are stored in Cloud SQL.
 
