@@ -95,7 +95,8 @@ jobs:
                 break
                 ;;
               FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
-                gcloud builds describe "${API_BUILD_ID}" --project "${GCP_PROJECT_ID}" --format='yaml(status,logUrl,images)'
+                gcloud builds describe "${API_BUILD_ID}" --project "${GCP_PROJECT_ID}" --format='yaml(id,status,statusDetail,failureInfo,logUrl,images,results)'
+                gcloud logging read "resource.type=build AND resource.labels.build_id=${API_BUILD_ID}" --project "${GCP_PROJECT_ID}" --limit=50 --format='value(textPayload)' || true
                 exit 1
                 ;;
             esac
@@ -131,7 +132,8 @@ jobs:
                 break
                 ;;
               FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
-                gcloud builds describe "${WEB_BUILD_ID}" --project "${GCP_PROJECT_ID}" --format='yaml(status,logUrl,images)'
+                gcloud builds describe "${WEB_BUILD_ID}" --project "${GCP_PROJECT_ID}" --format='yaml(id,status,statusDetail,failureInfo,logUrl,images,results)'
+                gcloud logging read "resource.type=build AND resource.labels.build_id=${WEB_BUILD_ID}" --project "${GCP_PROJECT_ID}" --limit=50 --format='value(textPayload)' || true
                 exit 1
                 ;;
             esac
