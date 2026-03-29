@@ -7,6 +7,8 @@ on:
       - main
     paths:
       - ".github/workflows/staging-deploy-smoke.yml"
+      - "apps/api/cloudbuild.staging.yaml"
+      - "apps/web/cloudbuild.staging.yaml"
       - "apps/api/**"
       - "apps/web/**"
       - "packages/shared/**"
@@ -81,8 +83,8 @@ jobs:
             --project "${GCP_PROJECT_ID}" \
             --async \
             --format='value(id)' \
-            --file "apps/api/Dockerfile" \
-            --tag "${API_IMAGE}")"
+            --config "apps/api/cloudbuild.staging.yaml" \
+            --substitutions=_IMAGE="${API_IMAGE}")"
 
           echo "API build id: ${API_BUILD_ID}"
           while true; do
@@ -117,8 +119,8 @@ jobs:
             --project "${GCP_PROJECT_ID}" \
             --async \
             --format='value(id)' \
-            --file "apps/web/Dockerfile" \
-            --tag "${WEB_IMAGE}")"
+            --config "apps/web/cloudbuild.staging.yaml" \
+            --substitutions=_IMAGE="${WEB_IMAGE}")"
 
           echo "Web build id: ${WEB_BUILD_ID}"
           while true; do
