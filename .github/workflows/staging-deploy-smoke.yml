@@ -77,10 +77,27 @@ jobs:
         run: |
           set -euo pipefail
           API_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/synteq-api:${GITHUB_SHA}"
-          gcloud builds submit apps/api \
+          API_BUILD_ID="$(gcloud builds submit apps/api \
             --project "${GCP_PROJECT_ID}" \
-            --suppress-logs \
-            --tag "${API_IMAGE}"
+            --async \
+            --format='value(id)' \
+            --tag "${API_IMAGE}")"
+
+          echo "API build id: ${API_BUILD_ID}"
+          while true; do
+            API_BUILD_STATUS="$(gcloud builds describe "${API_BUILD_ID}" --project "${GCP_PROJECT_ID}" --format='value(status)')"
+            echo "API build status: ${API_BUILD_STATUS}"
+            case "${API_BUILD_STATUS}" in
+              SUCCESS)
+                break
+                ;;
+              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                gcloud builds describe "${API_BUILD_ID}" --project "${GCP_PROJECT_ID}" --format='yaml(status,logUrl,images)'
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
 
           gcloud run deploy "${STAGING_API_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
@@ -95,10 +112,27 @@ jobs:
         run: |
           set -euo pipefail
           WEB_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/synteq-web:${GITHUB_SHA}"
-          gcloud builds submit apps/web \
+          WEB_BUILD_ID="$(gcloud builds submit apps/web \
             --project "${GCP_PROJECT_ID}" \
-            --suppress-logs \
-            --tag "${WEB_IMAGE}"
+            --async \
+            --format='value(id)' \
+            --tag "${WEB_IMAGE}")"
+
+          echo "Web build id: ${WEB_BUILD_ID}"
+          while true; do
+            WEB_BUILD_STATUS="$(gcloud builds describe "${WEB_BUILD_ID}" --project "${GCP_PROJECT_ID}" --format='value(status)')"
+            echo "Web build status: ${WEB_BUILD_STATUS}"
+            case "${WEB_BUILD_STATUS}" in
+              SUCCESS)
+                break
+                ;;
+              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                gcloud builds describe "${WEB_BUILD_ID}" --project "${GCP_PROJECT_ID}" --format='yaml(status,logUrl,images)'
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
 
           gcloud run deploy "${STAGING_WEB_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
