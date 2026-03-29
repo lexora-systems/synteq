@@ -193,12 +193,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${DATABASE_URL}" != *"@/cloudsql/"* ]]; then
+          DATABASE_URL_DECODED="$(python3 -c 'import os, urllib.parse; print(urllib.parse.unquote(os.environ["DATABASE_URL"]))')"
+          if [[ "${DATABASE_URL_DECODED}" != *"@/cloudsql/"* ]]; then
             echo "DATABASE_URL is not using Cloud SQL socket; skipping proxy setup."
             exit 0
           fi
 
-          CONNECTION_NAME="$(echo "${DATABASE_URL}" | sed -nE 's|.*@/cloudsql/([^:/?]+:[^:/?]+:[^:/?]+)(:[0-9]+)?/.*|\1|p')"
+          CONNECTION_NAME="$(echo "${DATABASE_URL_DECODED}" | sed -nE 's|.*@/cloudsql/([^:/?]+:[^:/?]+:[^:/?]+)(:[0-9]+)?/.*|\1|p')"
           if [[ -z "${CONNECTION_NAME}" ]]; then
             echo "::error::Failed to parse Cloud SQL connection name from DATABASE_URL"
             exit 1
@@ -224,8 +225,8 @@ jobs:
             exit 1
           fi
 
-          DATABASE_URL_LOCAL="$(echo "${DATABASE_URL}" | sed -E 's|@/cloudsql/[^/?]+|@127.0.0.1:3306|')"
-          echo "DATABASE_URL=${DATABASE_URL_LOCAL}" >> "${GITHUB_ENV}"
+          DATABASE_URL_LOCAL="$(echo "${DATABASE_URL_DECODED}" | sed -E 's|@/cloudsql/[^/?]+|@127.0.0.1:3306|')"
+          echo "DATABASE_URL_LOCAL=${DATABASE_URL_LOCAL}" >> "${GITHUB_ENV}"
           echo "Cloud SQL proxy started for ${CONNECTION_NAME}"
 
       - name: Validate pipeline gate configuration
@@ -253,16 +254,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${DATABASE_URL}" == *"@/cloudsql/"* ]]; then
-            export DATABASE_URL="$(echo "${DATABASE_URL}" | sed -E 's|@/cloudsql/[^/?]+|@127.0.0.1:3306|')"
-          fi
+          export DATABASE_URL="${DATABASE_URL_LOCAL:-${DATABASE_URL}}"
           npm run check:pipeline:readiness
 
       - name: Run pipeline freshness gate
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${DATABASE_URL}" == *"@/cloudsql/"* ]]; then
-            export DATABASE_URL="$(echo "${DATABASE_URL}" | sed -E 's|@/cloudsql/[^/?]+|@127.0.0.1:3306|')"
-          fi
+          export DATABASE_URL="${DATABASE_URL_LOCAL:-${DATABASE_URL}}"
           npm run check:pipeline:freshness -- --json
