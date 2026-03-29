@@ -198,7 +198,7 @@ jobs:
             exit 0
           fi
 
-          CONNECTION_NAME="$(echo "${DATABASE_URL}" | sed -nE 's|.*@/cloudsql/([^/?]+).*|\1|p')"
+          CONNECTION_NAME="$(echo "${DATABASE_URL}" | sed -nE 's|.*@/cloudsql/([^:/?]+:[^:/?]+:[^:/?]+)(:[0-9]+)?/.*|\1|p')"
           if [[ -z "${CONNECTION_NAME}" ]]; then
             echo "::error::Failed to parse Cloud SQL connection name from DATABASE_URL"
             exit 1
@@ -250,7 +250,19 @@ jobs:
           exit $missing
 
       - name: Run pipeline readiness gate
-        run: npm run check:pipeline:readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${DATABASE_URL}" == *"@/cloudsql/"* ]]; then
+            export DATABASE_URL="$(echo "${DATABASE_URL}" | sed -E 's|@/cloudsql/[^/?]+|@127.0.0.1:3306|')"
+          fi
+          npm run check:pipeline:readiness
 
       - name: Run pipeline freshness gate
-        run: npm run check:pipeline:freshness -- --json
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${DATABASE_URL}" == *"@/cloudsql/"* ]]; then
+            export DATABASE_URL="$(echo "${DATABASE_URL}" | sed -E 's|@/cloudsql/[^/?]+|@127.0.0.1:3306|')"
+          fi
+          npm run check:pipeline:freshness -- --json
