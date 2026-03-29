@@ -202,7 +202,7 @@ jobs:
 
           CONNECTION_NAME="$(echo "${DATABASE_URL_DECODED}" | sed -nE 's|.*@/cloudsql/([^:/?]+:[^:/?]+:[^:/?]+).*|\1|p')"
           if [[ -z "${CONNECTION_NAME}" ]]; then
-            CONNECTION_NAME="$(echo "${DATABASE_URL_DECODED}" | sed -nE 's|.*[?&](socket|unix_socket)=/cloudsql/([^&:/?]+:[^&:/?]+:[^&:/?]+).*|\2|p')"
+            CONNECTION_NAME="$(echo "${DATABASE_URL_DECODED}" | sed -nE 's~.*[?&](socket|unix_socket)=/cloudsql/([^&:/?]+:[^&:/?]+:[^&:/?]+).*~\2~p')"
           fi
           if [[ -z "${CONNECTION_NAME}" ]]; then
             echo "::error::Failed to parse Cloud SQL connection name from DATABASE_URL"
