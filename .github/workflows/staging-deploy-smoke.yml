@@ -196,6 +196,7 @@ jobs:
           DATABASE_URL_DECODED="$(python3 -c 'import os, urllib.parse; print(urllib.parse.unquote(os.environ["DATABASE_URL"]))')"
           if [[ "${DATABASE_URL_DECODED}" != *"/cloudsql/"* ]]; then
             echo "DATABASE_URL is not using Cloud SQL socket; skipping proxy setup."
+            echo "DATABASE_URL=${DATABASE_URL_DECODED}" >> "${GITHUB_ENV}"
             exit 0
           fi
 
@@ -211,9 +212,7 @@ jobs:
           curl -fsSL -o cloud-sql-proxy \
             https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.18.2/cloud-sql-proxy.linux.amd64
           chmod +x cloud-sql-proxy
-          sudo mkdir -p /cloudsql
-          sudo chmod 777 /cloudsql
-          ./cloud-sql-proxy --unix-socket /cloudsql "${CONNECTION_NAME}" >/tmp/cloud-sql-proxy.log 2>&1 &
+          ./cloud-sql-proxy --address 127.0.0.1 --port 3306 "${CONNECTION_NAME}" >/tmp/cloud-sql-proxy.log 2>&1 &
           PROXY_PID=$!
 
           ready=0
@@ -235,6 +234,34 @@ jobs:
           fi
 
           echo "Cloud SQL proxy started for ${CONNECTION_NAME}"
+
+          DATABASE_URL_LOCAL="$(python3 -c '
+import os
+import re
+import urllib.parse
+
+raw = urllib.parse.unquote(os.environ["DATABASE_URL"])
+parts = urllib.parse.urlsplit(raw)
+netloc = parts.netloc
+userinfo = ""
+if "@" in netloc:
+    userinfo, _ = netloc.rsplit("@", 1)
+elif netloc.endswith("@"):
+    userinfo = netloc[:-1]
+host = "127.0.0.1:3306"
+new_netloc = f"{userinfo}@{host}" if userinfo else host
+path = parts.path or "/"
+path = re.sub(r"^/cloudsql/[^/]+", "", path) or "/"
+query_pairs = [
+    (k, v)
+    for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+    if k not in ("socket", "unix_socket")
+]
+new_query = urllib.parse.urlencode(query_pairs)
+print(urllib.parse.urlunsplit((parts.scheme, new_netloc, path, new_query, parts.fragment)))
+')"
+          echo "DATABASE_URL=${DATABASE_URL_LOCAL}" >> "${GITHUB_ENV}"
+          echo "DATABASE_URL rewritten to local proxy endpoint for pipeline gates."
 
       - name: Validate pipeline gate configuration
         shell: bash
