@@ -77,10 +77,11 @@ jobs:
         run: |
           set -euo pipefail
           API_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/synteq-api:${GITHUB_SHA}"
-          API_BUILD_ID="$(gcloud builds submit apps/api \
+          API_BUILD_ID="$(gcloud builds submit . \
             --project "${GCP_PROJECT_ID}" \
             --async \
             --format='value(id)' \
+            --file "apps/api/Dockerfile" \
             --tag "${API_IMAGE}")"
 
           echo "API build id: ${API_BUILD_ID}"
@@ -112,10 +113,11 @@ jobs:
         run: |
           set -euo pipefail
           WEB_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/synteq-web:${GITHUB_SHA}"
-          WEB_BUILD_ID="$(gcloud builds submit apps/web \
+          WEB_BUILD_ID="$(gcloud builds submit . \
             --project "${GCP_PROJECT_ID}" \
             --async \
             --format='value(id)' \
+            --file "apps/web/Dockerfile" \
             --tag "${WEB_IMAGE}")"
 
           echo "Web build id: ${WEB_BUILD_ID}"
