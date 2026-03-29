@@ -79,29 +79,9 @@ jobs:
         run: |
           set -euo pipefail
           API_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/synteq-api:${GITHUB_SHA}"
-          API_BUILD_ID="$(gcloud builds submit . \
-            --project "${GCP_PROJECT_ID}" \
-            --async \
-            --format='value(id)' \
-            --config "apps/api/cloudbuild.staging.yaml" \
-            --substitutions=_IMAGE="${API_IMAGE}")"
-
-          echo "API build id: ${API_BUILD_ID}"
-          while true; do
-            API_BUILD_STATUS="$(gcloud builds describe "${API_BUILD_ID}" --project "${GCP_PROJECT_ID}" --format='value(status)')"
-            echo "API build status: ${API_BUILD_STATUS}"
-            case "${API_BUILD_STATUS}" in
-              SUCCESS)
-                break
-                ;;
-              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
-                gcloud builds describe "${API_BUILD_ID}" --project "${GCP_PROJECT_ID}" --format='yaml(id,status,statusDetail,failureInfo,logUrl,images,results)'
-                gcloud logging read "resource.type=build AND resource.labels.build_id=${API_BUILD_ID}" --project "${GCP_PROJECT_ID}" --limit=50 --format='value(textPayload)' || true
-                exit 1
-                ;;
-            esac
-            sleep 10
-          done
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          docker build --progress=plain -f apps/api/Dockerfile -t "${API_IMAGE}" .
+          docker push "${API_IMAGE}"
 
           gcloud run deploy "${STAGING_API_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
@@ -116,29 +96,9 @@ jobs:
         run: |
           set -euo pipefail
           WEB_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/synteq-web:${GITHUB_SHA}"
-          WEB_BUILD_ID="$(gcloud builds submit . \
-            --project "${GCP_PROJECT_ID}" \
-            --async \
-            --format='value(id)' \
-            --config "apps/web/cloudbuild.staging.yaml" \
-            --substitutions=_IMAGE="${WEB_IMAGE}")"
-
-          echo "Web build id: ${WEB_BUILD_ID}"
-          while true; do
-            WEB_BUILD_STATUS="$(gcloud builds describe "${WEB_BUILD_ID}" --project "${GCP_PROJECT_ID}" --format='value(status)')"
-            echo "Web build status: ${WEB_BUILD_STATUS}"
-            case "${WEB_BUILD_STATUS}" in
-              SUCCESS)
-                break
-                ;;
-              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
-                gcloud builds describe "${WEB_BUILD_ID}" --project "${GCP_PROJECT_ID}" --format='yaml(id,status,statusDetail,failureInfo,logUrl,images,results)'
-                gcloud logging read "resource.type=build AND resource.labels.build_id=${WEB_BUILD_ID}" --project "${GCP_PROJECT_ID}" --limit=50 --format='value(textPayload)' || true
-                exit 1
-                ;;
-            esac
-            sleep 10
-          done
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          docker build --progress=plain -f apps/web/Dockerfile -t "${WEB_IMAGE}" .
+          docker push "${WEB_IMAGE}"
 
           gcloud run deploy "${STAGING_WEB_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
