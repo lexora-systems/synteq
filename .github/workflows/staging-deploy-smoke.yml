@@ -79,6 +79,7 @@ jobs:
           API_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/synteq-api:${GITHUB_SHA}"
           gcloud builds submit apps/api \
             --project "${GCP_PROJECT_ID}" \
+            --suppress-logs \
             --tag "${API_IMAGE}"
 
           gcloud run deploy "${STAGING_API_SERVICE}" \
@@ -96,6 +97,7 @@ jobs:
           WEB_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/synteq-web:${GITHUB_SHA}"
           gcloud builds submit apps/web \
             --project "${GCP_PROJECT_ID}" \
+            --suppress-logs \
             --tag "${WEB_IMAGE}"
 
           gcloud run deploy "${STAGING_WEB_SERVICE}" \
