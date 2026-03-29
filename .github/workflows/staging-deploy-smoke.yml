@@ -7,6 +7,8 @@ on:
       - main
     paths:
       - ".github/workflows/staging-deploy-smoke.yml"
+      - "apps/api/cloudbuild.staging.yaml"
+      - "apps/web/cloudbuild.staging.yaml"
       - "apps/api/**"
       - "apps/web/**"
       - "packages/shared/**"
@@ -77,10 +79,9 @@ jobs:
         run: |
           set -euo pipefail
           API_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/synteq-api:${GITHUB_SHA}"
-          gcloud builds submit apps/api \
-            --project "${GCP_PROJECT_ID}" \
-            --suppress-logs \
-            --tag "${API_IMAGE}"
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          docker build --progress=plain -f apps/api/Dockerfile -t "${API_IMAGE}" .
+          docker push "${API_IMAGE}"
 
           gcloud run deploy "${STAGING_API_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
@@ -95,10 +96,9 @@ jobs:
         run: |
           set -euo pipefail
           WEB_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/synteq-web:${GITHUB_SHA}"
-          gcloud builds submit apps/web \
-            --project "${GCP_PROJECT_ID}" \
-            --suppress-logs \
-            --tag "${WEB_IMAGE}"
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          docker build --progress=plain -f apps/web/Dockerfile -t "${WEB_IMAGE}" .
+          docker push "${WEB_IMAGE}"
 
           gcloud run deploy "${STAGING_WEB_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
@@ -152,7 +152,10 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=dev
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate --workspace api
 
       - name: Validate smoke configuration
         shell: bash
@@ -186,6 +189,80 @@ jobs:
         with:
           project_id: ${{ secrets.STAGING_GCP_PROJECT_ID }}
 
+      - name: Start Cloud SQL proxy (if DATABASE_URL uses /cloudsql)
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATABASE_URL_DECODED="$(python3 -c 'import os, urllib.parse; print(urllib.parse.unquote(os.environ["DATABASE_URL"]))')"
+          if [[ "${DATABASE_URL_DECODED}" != *"/cloudsql/"* ]]; then
+            echo "DATABASE_URL is not using Cloud SQL socket; skipping proxy setup."
+            echo "DATABASE_URL=${DATABASE_URL_DECODED}" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+
+          CONNECTION_NAME="$(echo "${DATABASE_URL_DECODED}" | sed -nE 's|.*@/cloudsql/([^:/?]+:[^:/?]+:[^:/?]+).*|\1|p')"
+          if [[ -z "${CONNECTION_NAME}" ]]; then
+            CONNECTION_NAME="$(echo "${DATABASE_URL_DECODED}" | sed -nE 's|.*[?&](socket|unix_socket)=/cloudsql/([^&:/?]+:[^&:/?]+:[^&:/?]+).*|\2|p')"
+          fi
+          if [[ -z "${CONNECTION_NAME}" ]]; then
+            echo "::error::Failed to parse Cloud SQL connection name from DATABASE_URL"
+            exit 1
+          fi
+
+          curl -fsSL -o cloud-sql-proxy \
+            https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.18.2/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          ./cloud-sql-proxy --address 127.0.0.1 --port 3306 "${CONNECTION_NAME}" >/tmp/cloud-sql-proxy.log 2>&1 &
+          PROXY_PID=$!
+
+          ready=0
+          for _ in {1..30}; do
+            if grep -q "Ready for new connections" /tmp/cloud-sql-proxy.log; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "${PROXY_PID}" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+
+          if [[ "${ready}" != "1" ]]; then
+            echo "::error::Cloud SQL proxy failed to start"
+            cat /tmp/cloud-sql-proxy.log
+            exit 1
+          fi
+
+          echo "Cloud SQL proxy started for ${CONNECTION_NAME}"
+
+          DATABASE_URL_LOCAL="$(python3 -c '
+import os
+import re
+import urllib.parse
+
+raw = urllib.parse.unquote(os.environ["DATABASE_URL"])
+parts = urllib.parse.urlsplit(raw)
+netloc = parts.netloc
+userinfo = ""
+if "@" in netloc:
+    userinfo, _ = netloc.rsplit("@", 1)
+elif netloc.endswith("@"):
+    userinfo = netloc[:-1]
+host = "127.0.0.1:3306"
+new_netloc = f"{userinfo}@{host}" if userinfo else host
+path = parts.path or "/"
+path = re.sub(r"^/cloudsql/[^/]+", "", path) or "/"
+query_pairs = [
+    (k, v)
+    for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+    if k not in ("socket", "unix_socket")
+]
+new_query = urllib.parse.urlencode(query_pairs)
+print(urllib.parse.urlunsplit((parts.scheme, new_netloc, path, new_query, parts.fragment)))
+')"
+          echo "DATABASE_URL=${DATABASE_URL_LOCAL}" >> "${GITHUB_ENV}"
+          echo "DATABASE_URL rewritten to local proxy endpoint for pipeline gates."
+
       - name: Validate pipeline gate configuration
         shell: bash
         run: |
@@ -208,7 +285,13 @@ jobs:
           exit $missing
 
       - name: Run pipeline readiness gate
-        run: npm run check:pipeline:readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run check:pipeline:readiness
 
       - name: Run pipeline freshness gate
-        run: npm run check:pipeline:freshness -- --json
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run check:pipeline:freshness -- --json

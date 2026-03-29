@@ -6,7 +6,7 @@ FROM base AS deps
 COPY package.json tsconfig.base.json ./
 COPY packages/shared/package.json ./packages/shared/package.json
 COPY apps/web/package.json ./apps/web/package.json
-RUN npm install --ignore-scripts
+RUN npm install --ignore-scripts --legacy-peer-deps
 
 FROM deps AS build
 COPY . .
