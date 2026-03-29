@@ -189,6 +189,45 @@ jobs:
         with:
           project_id: ${{ secrets.STAGING_GCP_PROJECT_ID }}
 
+      - name: Start Cloud SQL proxy (if DATABASE_URL uses /cloudsql)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${DATABASE_URL}" != *"@/cloudsql/"* ]]; then
+            echo "DATABASE_URL is not using Cloud SQL socket; skipping proxy setup."
+            exit 0
+          fi
+
+          CONNECTION_NAME="$(echo "${DATABASE_URL}" | sed -nE 's|.*@/cloudsql/([^/?]+).*|\1|p')"
+          if [[ -z "${CONNECTION_NAME}" ]]; then
+            echo "::error::Failed to parse Cloud SQL connection name from DATABASE_URL"
+            exit 1
+          fi
+
+          curl -fsSL -o cloud-sql-proxy \
+            https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.18.2/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          ./cloud-sql-proxy --address 127.0.0.1 --port 3306 "${CONNECTION_NAME}" >/tmp/cloud-sql-proxy.log 2>&1 &
+
+          ready=0
+          for _ in {1..30}; do
+            if (echo >/dev/tcp/127.0.0.1/3306) >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+
+          if [[ "${ready}" != "1" ]]; then
+            echo "::error::Cloud SQL proxy failed to start"
+            cat /tmp/cloud-sql-proxy.log
+            exit 1
+          fi
+
+          DATABASE_URL_LOCAL="$(echo "${DATABASE_URL}" | sed -E 's|@/cloudsql/[^/?]+|@127.0.0.1:3306|')"
+          echo "DATABASE_URL=${DATABASE_URL_LOCAL}" >> "${GITHUB_ENV}"
+          echo "Cloud SQL proxy started for ${CONNECTION_NAME}"
+
       - name: Validate pipeline gate configuration
         shell: bash
         run: |
