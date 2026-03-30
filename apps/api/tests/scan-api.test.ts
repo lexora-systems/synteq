@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const runReliabilityScanMock = vi.fn();
 const redisGetJsonMock = vi.fn();
 const redisSetJsonMock = vi.fn();
+const getTenantEntitlementsMock = vi.fn();
 
 vi.mock("../src/services/reliability-scan-service.js", () => ({
   runReliabilityScan: runReliabilityScanMock
@@ -13,6 +14,10 @@ vi.mock("../src/lib/redis.js", () => ({
   redisKey: (...parts: Array<string | number>) => parts.join(":"),
   redisGetJson: redisGetJsonMock,
   redisSetJson: redisSetJsonMock
+}));
+
+vi.mock("../src/services/tenant-trial-service.js", () => ({
+  getTenantEntitlements: getTenantEntitlementsMock
 }));
 
 describe("scan api", () => {
@@ -43,9 +48,25 @@ describe("scan api", () => {
     runReliabilityScanMock.mockReset();
     redisGetJsonMock.mockReset();
     redisSetJsonMock.mockReset();
+    getTenantEntitlementsMock.mockReset();
     runReliabilityScanMock.mockResolvedValue(sampleScan);
     redisSetJsonMock.mockResolvedValue(undefined);
     redisGetJsonMock.mockResolvedValue(null);
+    getTenantEntitlementsMock.mockResolvedValue({
+      tenant_id: "tenant-A",
+      current_plan: "pro",
+      effective_plan: "pro",
+      trial: {
+        status: "none",
+        available: false,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
+    });
 
     app = Fastify();
     app.decorate("requireDashboardAuth", async (request: any) => {
@@ -125,5 +146,38 @@ describe("scan api", () => {
     });
     expect(runReliabilityScanMock).not.toHaveBeenCalled();
   });
-});
 
+  it("blocks free tenants from premium scan intelligence routes", async () => {
+    getTenantEntitlementsMock.mockResolvedValueOnce({
+      tenant_id: "tenant-A",
+      current_plan: "free",
+      effective_plan: "free",
+      trial: {
+        status: "none",
+        available: false,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/scan/run",
+      payload: {
+        workflow_id: "wf-1",
+        range: "24h"
+      }
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      code: "UPGRADE_REQUIRED",
+      feature: "premium_intelligence"
+    });
+    expect(runReliabilityScanMock).not.toHaveBeenCalled();
+  });
+});

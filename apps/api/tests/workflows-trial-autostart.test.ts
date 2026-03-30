@@ -2,15 +2,20 @@ import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const workflowUpsertMock = vi.fn();
+const workflowFindUniqueMock = vi.fn();
+const workflowCountMock = vi.fn();
 const workflowVersionFindFirstMock = vi.fn();
 const workflowVersionCreateMock = vi.fn();
 const startTrialIfEligibleMock = vi.fn();
+const getTenantEntitlementsMock = vi.fn();
 
 vi.mock("../src/lib/prisma.js", () => ({
   prisma: {
     workflow: {
       upsert: workflowUpsertMock,
-      findMany: vi.fn()
+      findMany: vi.fn(),
+      findUnique: workflowFindUniqueMock,
+      count: workflowCountMock
     },
     workflowVersion: {
       findFirst: workflowVersionFindFirstMock,
@@ -20,7 +25,8 @@ vi.mock("../src/lib/prisma.js", () => ({
 }));
 
 vi.mock("../src/services/tenant-trial-service.js", () => ({
-  startTrialIfEligible: startTrialIfEligibleMock
+  startTrialIfEligible: startTrialIfEligibleMock,
+  getTenantEntitlements: getTenantEntitlementsMock
 }));
 
 describe("workflow register trial auto-start", () => {
@@ -28,9 +34,12 @@ describe("workflow register trial auto-start", () => {
 
   beforeEach(async () => {
     workflowUpsertMock.mockReset();
+    workflowFindUniqueMock.mockReset();
+    workflowCountMock.mockReset();
     workflowVersionFindFirstMock.mockReset();
     workflowVersionCreateMock.mockReset();
     startTrialIfEligibleMock.mockReset();
+    getTenantEntitlementsMock.mockReset();
 
     workflowUpsertMock.mockResolvedValue({
       id: "wf-1",
@@ -42,9 +51,26 @@ describe("workflow register trial auto-start", () => {
       is_active: true,
       created_at: new Date()
     });
+    workflowFindUniqueMock.mockResolvedValue(null);
+    workflowCountMock.mockResolvedValue(0);
     workflowVersionFindFirstMock.mockResolvedValue(null);
     workflowVersionCreateMock.mockResolvedValue({ id: "ver-1" });
     startTrialIfEligibleMock.mockResolvedValue({ code: "started" });
+    getTenantEntitlementsMock.mockResolvedValue({
+      tenant_id: "tenant-A",
+      current_plan: "free",
+      effective_plan: "free",
+      trial: {
+        status: "none",
+        available: true,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
+    });
 
     app = Fastify();
     app.decorate("requireDashboardAuth", async (request: any) => {
@@ -92,5 +118,49 @@ describe("workflow register trial auto-start", () => {
       tenantId: "tenant-A",
       source: "auto_workflow_connect"
     });
+  });
+
+  it("blocks free tenants from registering a second active source", async () => {
+    workflowFindUniqueMock.mockResolvedValue(null);
+    workflowCountMock.mockResolvedValue(1);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/workflows/register",
+      payload: {
+        slug: "payments-weekly",
+        display_name: "Payments Weekly",
+        system: "airflow",
+        environment: "prod"
+      }
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      code: "UPGRADE_REQUIRED",
+      feature: "source_capacity"
+    });
+    expect(workflowUpsertMock).not.toHaveBeenCalled();
+    expect(startTrialIfEligibleMock).not.toHaveBeenCalled();
+  });
+
+  it("allows updates for existing sources even when tenant is already above free source limit", async () => {
+    workflowFindUniqueMock.mockResolvedValue({
+      id: "wf-1"
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/workflows/register",
+      payload: {
+        slug: "payments-daily",
+        display_name: "Payments Daily Updated",
+        system: "airflow",
+        environment: "prod"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(workflowUpsertMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -4,6 +4,7 @@ const findManyMock = vi.fn();
 const updateManyMock = vi.fn();
 const updateMock = vi.fn();
 const createMock = vi.fn();
+const getTenantEntitlementsMock = vi.fn();
 
 vi.mock("../src/lib/prisma.js", () => ({
   prisma: {
@@ -20,6 +21,10 @@ vi.mock("../src/services/email-service.js", () => ({
   sendIncidentAlert: vi.fn()
 }));
 
+vi.mock("../src/services/tenant-trial-service.js", () => ({
+  getTenantEntitlements: getTenantEntitlementsMock
+}));
+
 vi.mock("../src/config.js", () => ({
   config: {
     SLACK_DEFAULT_WEBHOOK_URL: "",
@@ -34,6 +39,22 @@ describe("alert dispatch idempotency", () => {
     updateManyMock.mockReset();
     updateMock.mockReset();
     createMock.mockReset();
+    getTenantEntitlementsMock.mockReset();
+    getTenantEntitlementsMock.mockResolvedValue({
+      tenant_id: "tenant-A",
+      current_plan: "pro",
+      effective_plan: "pro",
+      trial: {
+        status: "none",
+        available: false,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
+    });
     vi.resetModules();
   });
 
@@ -52,6 +73,7 @@ describe("alert dispatch idempotency", () => {
       payload_json: {},
       incident: {
         id: "inc-1",
+        tenant_id: "tenant-A",
         severity: "high",
         summary: "Failure rate spike",
         workflow_id: "wf-1",
@@ -99,5 +121,82 @@ describe("alert dispatch idempotency", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(updateManyMock).toHaveBeenCalledTimes(2);
     expect(updateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips alert dispatch for free tenants", async () => {
+    getTenantEntitlementsMock.mockResolvedValueOnce({
+      tenant_id: "tenant-A",
+      current_plan: "free",
+      effective_plan: "free",
+      trial: {
+        status: "none",
+        available: false,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => ""
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pendingEvent = {
+      id: 301,
+      event_type: "ALERT_PENDING",
+      payload_json: {},
+      incident: {
+        id: "inc-free-1",
+        tenant_id: "tenant-A",
+        severity: "medium",
+        summary: "Retry storm",
+        workflow_id: "wf-2",
+        environment: "prod",
+        status: "open",
+        details_json: {},
+        sla_due_at: new Date(Date.now() + 300000),
+        sla_breached_at: null,
+        policy: {
+          channels: [
+            {
+              channel: {
+                id: "channel-1",
+                type: "slack",
+                is_enabled: true,
+                config_json: {
+                  webhook_url: "https://hooks.slack.test/abc"
+                }
+              }
+            }
+          ]
+        }
+      }
+    };
+
+    findManyMock.mockResolvedValue([pendingEvent]);
+    updateManyMock.mockResolvedValue({ count: 1 });
+    createMock.mockResolvedValue({});
+
+    const { dispatchPendingAlertEvents } = await import("../src/services/alert-service.js");
+    await dispatchPendingAlertEvents(10);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(updateManyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 301,
+          event_type: "ALERT_PENDING"
+        },
+        data: expect.objectContaining({
+          event_type: "ALERT_SKIPPED"
+        })
+      })
+    );
   });
 });
