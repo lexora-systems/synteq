@@ -10,6 +10,7 @@ import { sendInviteEmail } from "../services/email-service.js";
 import { Permission } from "../auth/permissions.js";
 import { config } from "../config.js";
 import { logSecurityEvent } from "../services/security-event-service.js";
+import { replyIfEntitlementError, requireTeamAccess, resolveTenantAccess } from "../services/entitlement-guard-service.js";
 
 const tokenParamSchema = z.object({
   token: z.string().min(32).max(512)
@@ -119,6 +120,17 @@ const teamRoutes: FastifyPluginAsync = async (app) => {
       const authUser = request.authUser;
       if (!authUser) {
         return reply.code(401).send({ error: "Unauthorized" });
+      }
+      try {
+        const access = await resolveTenantAccess({
+          tenantId: authUser.tenant_id
+        });
+        requireTeamAccess(access);
+      } catch (error) {
+        if (replyIfEntitlementError(reply, request.id, error)) {
+          return;
+        }
+        throw error;
       }
 
       const body = parseWithSchema(inviteCreateSchema, request.body);
@@ -237,6 +249,17 @@ const teamRoutes: FastifyPluginAsync = async (app) => {
       const authUser = request.authUser;
       if (!authUser) {
         return reply.code(401).send({ error: "Unauthorized" });
+      }
+      try {
+        const access = await resolveTenantAccess({
+          tenantId: authUser.tenant_id
+        });
+        requireTeamAccess(access);
+      } catch (error) {
+        if (replyIfEntitlementError(reply, request.id, error)) {
+          return;
+        }
+        throw error;
       }
 
       const body = parseWithSchema(inviteResendSchema, request.body);
@@ -377,6 +400,17 @@ const teamRoutes: FastifyPluginAsync = async (app) => {
         error: "Invite has expired",
         code: "INVITE_EXPIRED"
       });
+    }
+    try {
+      const access = await resolveTenantAccess({
+        tenantId: invite.tenant_id
+      });
+      requireTeamAccess(access);
+    } catch (error) {
+      if (replyIfEntitlementError(reply, request.id, error)) {
+        return;
+      }
+      throw error;
     }
 
     const passwordHash = await hashPassword(body.password);

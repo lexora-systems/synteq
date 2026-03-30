@@ -5,6 +5,7 @@ import { Permission, hasRequiredPermissions } from "../auth/permissions.js";
 import { parseWithSchema } from "../utils/validation.js";
 import { runReliabilityScan } from "../services/reliability-scan-service.js";
 import { redisGetJson, redisKey, redisSetJson } from "../lib/redis.js";
+import { replyIfEntitlementError, requireFeature, resolveTenantAccess } from "../services/entitlement-guard-service.js";
 
 const scanLatestParamsSchema = z.object({
   workflowId: z.string().min(1)
@@ -102,6 +103,17 @@ const scanRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const tenantId = request.authUser.tenant_id;
+      try {
+        const access = await resolveTenantAccess({
+          tenantId
+        });
+        requireFeature(access, "premium_intelligence");
+      } catch (error) {
+        if (replyIfEntitlementError(reply, request.id, error)) {
+          return;
+        }
+        throw error;
+      }
       const body = parseWithSchema(scanRunRequestSchema, request.body);
       const scan = await runReliabilityScan({
         tenantId,
@@ -155,6 +167,17 @@ const scanRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const tenantId = request.authUser.tenant_id;
+      try {
+        const access = await resolveTenantAccess({
+          tenantId
+        });
+        requireFeature(access, "premium_intelligence");
+      } catch (error) {
+        if (replyIfEntitlementError(reply, request.id, error)) {
+          return;
+        }
+        throw error;
+      }
       const params = parseWithSchema(scanLatestParamsSchema, request.params);
       const query = parseWithSchema(scanLatestQuerySchema, request.query);
       const range = query.range ?? "7d";

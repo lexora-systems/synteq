@@ -13,6 +13,7 @@ import {
 } from "../utils/anomaly-math.js";
 import { buildIncidentFingerprint } from "../utils/crypto.js";
 import { markBreachedSla } from "./incidents-service.js";
+import { hasFeature, resolveTenantAccess, type ResolvedTenantAccess } from "./entitlement-guard-service.js";
 
 type WindowSummary = {
   total: number;
@@ -762,8 +763,28 @@ export async function runAnomalyDetectionJob(now = new Date()) {
       is_enabled: true
     }
   });
+  const tenantAccessCache = new Map<string, ResolvedTenantAccess>();
+
+  async function accessForTenant(tenantId: string): Promise<ResolvedTenantAccess> {
+    const cached = tenantAccessCache.get(tenantId);
+    if (cached) {
+      return cached;
+    }
+
+    const resolved = await resolveTenantAccess({
+      tenantId,
+      now
+    });
+    tenantAccessCache.set(tenantId, resolved);
+    return resolved;
+  }
 
   for (const policy of policies) {
+    const access = await accessForTenant(policy.tenant_id);
+    if (!hasFeature(access, "premium_intelligence")) {
+      continue;
+    }
+
     const workflows = await prisma.workflow.findMany({
       where: {
         tenant_id: policy.tenant_id,

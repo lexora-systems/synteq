@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const runReliabilityScanMock = vi.fn();
 const redisGetJsonMock = vi.fn();
 const redisSetJsonMock = vi.fn();
+const getTenantEntitlementsMock = vi.fn();
 
 vi.mock("../src/services/reliability-scan-service.js", () => ({
   runReliabilityScan: runReliabilityScanMock
@@ -15,6 +16,10 @@ vi.mock("../src/lib/redis.js", () => ({
   redisSetJson: redisSetJsonMock
 }));
 
+vi.mock("../src/services/tenant-trial-service.js", () => ({
+  getTenantEntitlements: getTenantEntitlementsMock
+}));
+
 describe("scan api currency fields", () => {
   let app: ReturnType<typeof Fastify>;
 
@@ -22,8 +27,24 @@ describe("scan api currency fields", () => {
     runReliabilityScanMock.mockReset();
     redisGetJsonMock.mockReset();
     redisSetJsonMock.mockReset();
+    getTenantEntitlementsMock.mockReset();
     redisGetJsonMock.mockResolvedValue(null);
     redisSetJsonMock.mockResolvedValue(undefined);
+    getTenantEntitlementsMock.mockResolvedValue({
+      tenant_id: "tenant-A",
+      current_plan: "pro",
+      effective_plan: "pro",
+      trial: {
+        status: "none",
+        available: false,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
+    });
     runReliabilityScanMock.mockResolvedValue({
       workflow_id: "wf-1",
       workflow_name: "Payments",
@@ -89,4 +110,3 @@ describe("scan api currency fields", () => {
     });
   });
 });
-

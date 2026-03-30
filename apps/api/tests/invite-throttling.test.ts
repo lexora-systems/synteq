@@ -6,6 +6,7 @@ const inviteCreate = vi.fn();
 const inviteFindFirst = vi.fn();
 const tenantFindFirst = vi.fn();
 const securityEventCreate = vi.fn();
+const getTenantEntitlementsMock = vi.fn();
 
 vi.mock("../src/lib/prisma.js", () => ({
   prisma: {
@@ -53,6 +54,10 @@ vi.mock("../src/config.js", () => ({
   }
 }));
 
+vi.mock("../src/services/tenant-trial-service.js", () => ({
+  getTenantEntitlements: getTenantEntitlementsMock
+}));
+
 describe("invite throttling", () => {
   let app: ReturnType<typeof Fastify>;
 
@@ -62,6 +67,22 @@ describe("invite throttling", () => {
     inviteFindFirst.mockReset();
     tenantFindFirst.mockReset();
     securityEventCreate.mockReset();
+    getTenantEntitlementsMock.mockReset();
+    getTenantEntitlementsMock.mockResolvedValue({
+      tenant_id: "tenant-1",
+      current_plan: "pro",
+      effective_plan: "pro",
+      trial: {
+        status: "none",
+        available: false,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
+    });
 
     app = Fastify();
     app.decorate("requireDashboardAuth", async (request: any) => {
@@ -154,6 +175,40 @@ describe("invite throttling", () => {
     expect(response.statusCode).toBe(429);
     expect(response.json()).toMatchObject({
       code: "INVITE_RATE_LIMITED"
+    });
+    expect(inviteCreate).not.toHaveBeenCalled();
+  });
+
+  it("blocks team invites for free tenants", async () => {
+    getTenantEntitlementsMock.mockResolvedValueOnce({
+      tenant_id: "tenant-1",
+      current_plan: "free",
+      effective_plan: "free",
+      trial: {
+        status: "none",
+        available: false,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/team/invite",
+      payload: {
+        email: "engineer@synteq.local",
+        role: "engineer"
+      }
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      code: "UPGRADE_REQUIRED",
+      feature: "team_members"
     });
     expect(inviteCreate).not.toHaveBeenCalled();
   });

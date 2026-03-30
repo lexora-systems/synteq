@@ -1,6 +1,8 @@
+import type { Prisma } from "@prisma/client";
 import { config } from "../config.js";
 import { prisma } from "../lib/prisma.js";
 import { sendIncidentAlert } from "./email-service.js";
+import { hasFeature, resolveTenantAccess, type ResolvedTenantAccess } from "./entitlement-guard-service.js";
 
 type DispatchResult = {
   channel_id: string;
@@ -153,6 +155,51 @@ async function scheduleRetryIfNeeded(input: {
   };
 }
 
+async function skipPendingAlertForPlan(input: {
+  eventId: number;
+  incidentId: string;
+  payload: unknown;
+  access: ResolvedTenantAccess;
+}): Promise<boolean> {
+  const skippedAt = new Date().toISOString();
+  const marked = await prisma.incidentEvent.updateMany({
+    where: {
+      id: input.eventId,
+      event_type: "ALERT_PENDING"
+    },
+    data: {
+      event_type: "ALERT_SKIPPED",
+      payload_json: {
+        original_payload: asObject(input.payload),
+        skipped_at: skippedAt,
+        reason: "alerts_not_entitled",
+        effective_plan: input.access.effectivePlan
+      } as Prisma.InputJsonValue
+    }
+  });
+
+  if (marked.count !== 1) {
+    return false;
+  }
+
+  await prisma.incidentEvent.create({
+    data: {
+      incident_id: input.incidentId,
+      event_type: "NOTIFICATION_RESULT",
+      payload_json: {
+        pending_event_id: input.eventId,
+        all_ok: false,
+        skipped: true,
+        skipped_at: skippedAt,
+        reason: "alerts_not_entitled",
+        effective_plan: input.access.effectivePlan
+      }
+    }
+  });
+
+  return true;
+}
+
 export async function dispatchPendingAlertEvents(limit = 100) {
   const pendingEvents = await prisma.incidentEvent.findMany({
     where: {
@@ -178,8 +225,34 @@ export async function dispatchPendingAlertEvents(limit = 100) {
     },
     take: limit
   });
+  const tenantAccessCache = new Map<string, ResolvedTenantAccess>();
+
+  async function accessForTenant(tenantId: string): Promise<ResolvedTenantAccess> {
+    const cached = tenantAccessCache.get(tenantId);
+    if (cached) {
+      return cached;
+    }
+
+    const resolved = await resolveTenantAccess({
+      tenantId
+    });
+    tenantAccessCache.set(tenantId, resolved);
+    return resolved;
+  }
 
   for (const event of pendingEvents) {
+    const incident = event.incident;
+    const access = await accessForTenant(incident.tenant_id);
+    if (!hasFeature(access, "alerts")) {
+      await skipPendingAlertForPlan({
+        eventId: event.id,
+        incidentId: incident.id,
+        payload: event.payload_json,
+        access
+      });
+      continue;
+    }
+
     const pendingPayload = parsePendingPayload(event.payload_json);
     const notBefore = retryNotBefore(pendingPayload);
     if (notBefore && notBefore.getTime() > Date.now()) {
@@ -191,7 +264,6 @@ export async function dispatchPendingAlertEvents(limit = 100) {
       continue;
     }
 
-    const incident = event.incident;
     const policyChannels =
       incident.policy?.channels
         .map((row) => row.channel)

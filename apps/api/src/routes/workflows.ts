@@ -4,6 +4,7 @@ import { parseWithSchema } from "../utils/validation.js";
 import { prisma } from "../lib/prisma.js";
 import { Permission } from "../auth/permissions.js";
 import { startTrialIfEligible } from "../services/tenant-trial-service.js";
+import { replyIfEntitlementError, requireSourceCapacity, resolveTenantAccess } from "../services/entitlement-guard-service.js";
 
 const workflowRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -50,6 +51,41 @@ const workflowRoutes: FastifyPluginAsync = async (app) => {
 
       if (!tenantId) {
         return reply.code(401).send({ error: "Missing tenant context" });
+      }
+      try {
+        const access = await resolveTenantAccess({
+          tenantId
+        });
+        const existingWorkflow = await prisma.workflow.findUnique({
+          where: {
+            tenant_id_slug_environment: {
+              tenant_id: tenantId,
+              slug: body.slug,
+              environment: body.environment
+            }
+          },
+          select: {
+            id: true
+          }
+        });
+
+        if (!existingWorkflow) {
+          const currentActiveSources = await prisma.workflow.count({
+            where: {
+              tenant_id: tenantId,
+              is_active: true
+            }
+          });
+          requireSourceCapacity({
+            access,
+            currentActiveSources
+          });
+        }
+      } catch (error) {
+        if (replyIfEntitlementError(reply, request.id, error)) {
+          return;
+        }
+        throw error;
       }
 
       const workflow = await prisma.workflow.upsert({
