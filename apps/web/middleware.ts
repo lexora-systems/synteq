@@ -1,8 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-
-const apiBaseUrl =
-  process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+import { apiBaseUrl } from "./lib/config";
 
 function decodeJwtExp(token: string): number | null {
   const parts = token.split(".");
@@ -95,5 +93,13 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/welcome/:path*", "/overview/:path*", "/incidents/:path*", "/profile/:path*", "/settings/:path*", "/workflows/:path*"]
+  matcher: [
+    "/welcome/:path*",
+    "/overview/:path*",
+    "/incidents/:path*",
+    "/sources/:path*",
+    "/profile/:path*",
+    "/settings/:path*",
+    "/workflows/:path*"
+  ]
 };

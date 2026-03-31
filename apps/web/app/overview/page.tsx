@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { TopNav } from "../../components/top-nav";
 import { MetricsChart } from "../../components/charts";
 import { ReliabilityTools } from "../../components/reliability-tools";
-import { fetchIncidents, fetchOverview, fetchTenantSettings, fetchWorkflows } from "../../lib/api";
+import { fetchConnectedSources, fetchIncidents, fetchOverview, fetchTenantSettings, fetchWorkflows } from "../../lib/api";
 import { resolveActivationState } from "../../lib/activation";
 import { requireToken } from "../../lib/auth";
 
@@ -91,7 +91,7 @@ export default async function OverviewPage() {
     redirect("/welcome");
   }
 
-  const [overviewResult, incidentsPayload, workflowsPayload, settingsResult] = await Promise.all([
+  const [overviewResult, incidentsPayload, workflowsPayload, settingsResult, sourcesResult] = await Promise.all([
     fetchOverview(token, "1h")
       .then((payload) => ({ ok: true as const, payload }))
       .catch(() => ({ ok: false as const })),
@@ -99,7 +99,25 @@ export default async function OverviewPage() {
     fetchWorkflows(token),
     fetchTenantSettings(token)
       .then((payload) => ({ ok: true as const, payload }))
-      .catch(() => ({ ok: false as const }))
+      .catch(() => ({ ok: false as const })),
+    fetchConnectedSources(token)
+      .then((payload) => ({ ok: true as const, payload }))
+      .catch(() => ({
+        ok: false as const,
+        payload: {
+          summary: {
+            workflow_sources: 0,
+            github_sources: 0,
+            ingestion_keys_active: 0,
+            alert_channels_ready: 0
+          },
+          sources: [],
+          readiness: {
+            ingestion_api_keys_configured: false,
+            alert_dispatch_ready: false
+          }
+        }
+      }))
   ]);
   const monitoringDataUnavailable = !overviewResult.ok;
   const overview = overviewResult.ok
@@ -139,6 +157,14 @@ export default async function OverviewPage() {
   const stabilityLabel = deploymentStatus(stabilityScore);
   const estimatedExposure = totalCost > 0 ? totalCost : avgCost * total;
   const hasLimitedData = total < 5 && openIncidents === 0;
+  const connectedSourcesSummary = sourcesResult.payload.summary;
+  const connectedSources = sourcesResult.payload.sources;
+  const hasConnectedSources = connectedSources.length > 0;
+  const hasTelemetrySignals = total > 0;
+  const noIncidentsYet = openIncidents === 0;
+  const sourceSetupPending = !hasConnectedSources;
+  const connectedButQuiet = hasConnectedSources && noIncidentsYet && !hasTelemetrySignals;
+  const connectedAndStable = hasConnectedSources && noIncidentsYet && hasTelemetrySignals;
   const window5m = overview.windows?.["5m"] as Record<string, unknown> | undefined;
   const window15m = overview.windows?.["15m"] as Record<string, unknown> | undefined;
 
@@ -210,6 +236,30 @@ export default async function OverviewPage() {
             </Link>
           </div>
         </div>
+
+        {sourceSetupPending ? (
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-panel">
+            <p className="font-semibold text-ink">No sources connected yet</p>
+            <p className="mt-1">Connect a source to start live monitoring. Synteq is continuously monitoring once operational signals begin arriving.</p>
+            <p className="mt-1">You&apos;ll be alerted when failure spikes, retries, latency drift, or missing heartbeat risks are detected.</p>
+            <Link href="/settings/control-plane" className="mt-2 inline-flex rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">
+              Open control plane
+            </Link>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-panel">
+            <p className="font-semibold">
+              Synteq is continuously monitoring {connectedSources.length} source{connectedSources.length === 1 ? "" : "s"}.
+            </p>
+            <p className="mt-1">
+              Watching {connectedSourcesSummary.workflow_sources} workflow signal source{connectedSourcesSummary.workflow_sources === 1 ? "" : "s"} and{" "}
+              {connectedSourcesSummary.github_sources} GitHub integration{connectedSourcesSummary.github_sources === 1 ? "" : "s"}.
+            </p>
+            <p className="mt-1">
+              You&apos;ll be alerted when failure-rate spikes, retry storms, missing heartbeats, or latency-related risks are detected.
+            </p>
+          </div>
+        )}
 
         {showTrialActive ? (
           <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 shadow-panel">
@@ -296,11 +346,18 @@ export default async function OverviewPage() {
           </div>
         ) : null}
 
-        {hasLimitedData ? (
+        {connectedButQuiet ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-panel">
-            <p className="font-semibold text-ink">No data yet</p>
-            <p className="mt-1">Connect a real workflow and ingest telemetry to start live platform risk monitoring.</p>
-            <p className="mt-1">While setup is pending, run a simulation to validate detection and incident response.</p>
+            <p className="font-semibold text-ink">Source connected, waiting for first signal batch</p>
+            <p className="mt-1">Synteq is continuously monitoring now. As events arrive, risk scoring and incident detection will populate automatically.</p>
+            <p className="mt-1">You&apos;ll be alerted when monitored risk conditions are met.</p>
+          </div>
+        ) : null}
+
+        {connectedAndStable && hasLimitedData ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 shadow-panel">
+            <p className="font-semibold">Connected and monitoring</p>
+            <p className="mt-1">No active incidents right now. Synteq is watching incoming signals and will alert when risk patterns appear.</p>
           </div>
         ) : null}
 

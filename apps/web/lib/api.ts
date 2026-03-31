@@ -72,6 +72,67 @@ export type TenantSettings = {
   trial: TenantTrialState;
 };
 
+export type ApiKeyRow = {
+  id: string;
+  name: string;
+  key_preview: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+};
+
+export type GitHubIntegrationRow = {
+  id: string;
+  webhook_id: string;
+  repository_full_name: string | null;
+  is_active: boolean;
+  last_delivery_id: string | null;
+  last_seen_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AlertChannelRow = {
+  id: string;
+  name: string;
+  type: "slack" | "webhook" | "email";
+  is_enabled: boolean;
+  created_at: string;
+  config_preview: Record<string, unknown>;
+};
+
+export type AlertPolicyRow = {
+  id: string;
+  name: string;
+  metric: string;
+  window_sec: number;
+  threshold: number;
+  comparator: "gt" | "gte" | "lt" | "lte" | "eq";
+  min_events: number;
+  severity: "warn" | "low" | "medium" | "high" | "critical";
+  is_enabled: boolean;
+  filter_workflow_id: string | null;
+  filter_env: string | null;
+  created_at: string;
+  channels: Array<{
+    id: string;
+    name: string;
+    type: "slack" | "webhook" | "email";
+    is_enabled: boolean;
+  }>;
+};
+
+export type ConnectedSourceRow = {
+  id: string;
+  type: "workflow" | "github_integration";
+  name: string;
+  status: "active" | "inactive";
+  powers: string;
+  details: Record<string, unknown>;
+  last_activity_at: string | null;
+  connected_at: string;
+};
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: options.method ?? "GET",
@@ -89,6 +150,19 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   return (await response.json()) as T;
+}
+
+export function extractApiErrorCode(error: unknown): string | null {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+  if (error.message.includes("UPGRADE_REQUIRED")) {
+    return "UPGRADE_REQUIRED";
+  }
+  if (error.message.includes("FORBIDDEN_PERMISSION")) {
+    return "FORBIDDEN_PERMISSION";
+  }
+  return null;
 }
 
 export async function fetchOverview(token: string, range: "15m" | "1h" | "6h" | "24h" | "7d", workflowId?: string) {
@@ -353,4 +427,230 @@ export async function fetchSecurityEvents(
     }>;
     pagination: { page: number; limit: number; total: number; has_next: boolean };
   }>(`/v1/security-events?${params.toString()}`, { token });
+}
+
+export async function fetchApiKeys(token: string) {
+  return request<{
+    api_keys: ApiKeyRow[];
+  }>("/v1/control-plane/api-keys?include_revoked=true", { token });
+}
+
+export async function createApiKey(token: string, name: string) {
+  return request<{
+    api_key: ApiKeyRow;
+    secret: string;
+  }>("/v1/control-plane/api-keys", {
+    token,
+    method: "POST",
+    body: {
+      name
+    }
+  });
+}
+
+export async function revokeApiKey(token: string, id: string) {
+  return request<{
+    ok: boolean;
+    api_key_id: string;
+  }>(`/v1/control-plane/api-keys/${id}/revoke`, {
+    token,
+    method: "POST"
+  });
+}
+
+export async function rotateApiKey(token: string, id: string) {
+  return request<{
+    rotated_from_api_key_id: string;
+    api_key: ApiKeyRow;
+    secret: string;
+  }>(`/v1/control-plane/api-keys/${id}/rotate`, {
+    token,
+    method: "POST"
+  });
+}
+
+export async function fetchGitHubIntegrations(token: string) {
+  return request<{
+    webhook_url: string;
+    integrations: GitHubIntegrationRow[];
+  }>("/v1/control-plane/github-integrations", { token });
+}
+
+export async function createGitHubIntegration(token: string, repositoryFullName?: string) {
+  return request<{
+    webhook_url: string;
+    integration: GitHubIntegrationRow;
+    webhook_secret: string;
+  }>("/v1/control-plane/github-integrations", {
+    token,
+    method: "POST",
+    body: {
+      repository_full_name: repositoryFullName || undefined
+    }
+  });
+}
+
+export async function deactivateGitHubIntegration(token: string, id: string) {
+  return request<{
+    integration: GitHubIntegrationRow;
+  }>(`/v1/control-plane/github-integrations/${id}/deactivate`, {
+    token,
+    method: "POST"
+  });
+}
+
+export async function rotateGitHubIntegrationSecret(token: string, id: string) {
+  return request<{
+    webhook_url: string;
+    integration: GitHubIntegrationRow;
+    webhook_secret: string;
+  }>(`/v1/control-plane/github-integrations/${id}/rotate-secret`, {
+    token,
+    method: "POST"
+  });
+}
+
+export async function fetchAlertChannels(token: string) {
+  return request<{
+    channels: AlertChannelRow[];
+  }>("/v1/control-plane/alert-channels", { token });
+}
+
+export async function createAlertChannel(
+  token: string,
+  input:
+    | {
+        type: "slack";
+        name: string;
+        config: { webhook_url: string };
+      }
+    | {
+        type: "webhook";
+        name: string;
+        config: { url: string };
+      }
+    | {
+        type: "email";
+        name: string;
+        config: { email: string };
+      }
+) {
+  return request<{
+    channel: AlertChannelRow;
+  }>("/v1/control-plane/alert-channels", {
+    token,
+    method: "POST",
+    body: input
+  });
+}
+
+export async function updateAlertChannel(
+  token: string,
+  id: string,
+  input: {
+    name?: string;
+    is_enabled?: boolean;
+    config?: Record<string, unknown>;
+  }
+) {
+  return request<{
+    channel: AlertChannelRow;
+  }>(`/v1/control-plane/alert-channels/${id}`, {
+    token,
+    method: "PATCH",
+    body: input
+  });
+}
+
+export async function deleteAlertChannel(token: string, id: string) {
+  return request<{
+    ok: boolean;
+    channel_id: string;
+  }>(`/v1/control-plane/alert-channels/${id}`, {
+    token,
+    method: "DELETE"
+  });
+}
+
+export async function fetchAlertPolicies(token: string) {
+  return request<{
+    policies: AlertPolicyRow[];
+  }>("/v1/control-plane/alert-policies", { token });
+}
+
+export async function createAlertPolicy(
+  token: string,
+  input: {
+    name: string;
+    metric: string;
+    window_sec: number;
+    threshold: number;
+    comparator: "gt" | "gte" | "lt" | "lte" | "eq";
+    min_events: number;
+    severity: "warn" | "low" | "medium" | "high" | "critical";
+    is_enabled: boolean;
+    filter_workflow_id?: string;
+    filter_env?: string;
+    channel_ids: string[];
+  }
+) {
+  return request<{
+    policy: AlertPolicyRow;
+  }>("/v1/control-plane/alert-policies", {
+    token,
+    method: "POST",
+    body: input
+  });
+}
+
+export async function updateAlertPolicy(
+  token: string,
+  id: string,
+  input: Partial<{
+    name: string;
+    metric: string;
+    window_sec: number;
+    threshold: number;
+    comparator: "gt" | "gte" | "lt" | "lte" | "eq";
+    min_events: number;
+    severity: "warn" | "low" | "medium" | "high" | "critical";
+    is_enabled: boolean;
+    filter_workflow_id: string | null;
+    filter_env: string | null;
+    channel_ids: string[];
+  }>
+) {
+  return request<{
+    policy: AlertPolicyRow;
+  }>(`/v1/control-plane/alert-policies/${id}`, {
+    token,
+    method: "PATCH",
+    body: input
+  });
+}
+
+export async function deleteAlertPolicy(token: string, id: string) {
+  return request<{
+    ok: boolean;
+    policy_id: string;
+  }>(`/v1/control-plane/alert-policies/${id}`, {
+    token,
+    method: "DELETE"
+  });
+}
+
+export async function fetchConnectedSources(token: string) {
+  return request<{
+    summary: {
+      workflow_sources: number;
+      github_sources: number;
+      ingestion_keys_active: number;
+      alert_channels_ready: number;
+    };
+    sources: ConnectedSourceRow[];
+    readiness: {
+      ingestion_api_keys_configured: boolean;
+      alert_dispatch_ready: boolean;
+    };
+  }>("/v1/control-plane/sources", { token });
 }
