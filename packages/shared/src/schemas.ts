@@ -263,6 +263,112 @@ export const teamUpdateRoleSchema = z.object({
   role: userRoleSchema
 });
 
+export const apiKeyCreateSchema = z.object({
+  name: z.string().trim().min(2).max(191)
+});
+
+export const githubIntegrationCreateSchema = z.object({
+  repository_full_name: z
+    .string()
+    .trim()
+    .min(3)
+    .max(255)
+    .regex(/^[^/\s]+\/[^/\s]+$/)
+    .optional()
+});
+
+export const alertChannelTypeSchema = z.enum(["slack", "webhook", "email"]);
+
+const alertChannelNameSchema = z.string().trim().min(1).max(191);
+
+export const alertChannelCreateSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("slack"),
+    name: alertChannelNameSchema,
+    config: z.object({
+      webhook_url: z.string().url()
+    })
+  }),
+  z.object({
+    type: z.literal("webhook"),
+    name: alertChannelNameSchema,
+    config: z.object({
+      url: z.string().url()
+    })
+  }),
+  z.object({
+    type: z.literal("email"),
+    name: alertChannelNameSchema,
+    config: z.object({
+      email: z.string().email()
+    })
+  })
+]);
+
+export const alertChannelUpdateSchema = z
+  .object({
+    name: alertChannelNameSchema.optional(),
+    is_enabled: z.boolean().optional(),
+    config: z.record(z.unknown()).optional()
+  })
+  .refine((value) => value.name !== undefined || value.is_enabled !== undefined || value.config !== undefined, {
+    message: "Provide at least one field to update"
+  });
+
+export const alertPolicyMetricSchema = z.enum([
+  "failure_rate",
+  "latency_p95",
+  "retry_rate",
+  "duplicate_rate",
+  "cost_spike",
+  "latency_drift_ewma",
+  "missing_heartbeat"
+]);
+
+export const comparatorSchema = z.enum(["gt", "gte", "lt", "lte", "eq"]);
+
+const alertPolicyNameSchema = z.string().trim().min(1).max(191);
+
+const alertPolicyBaseSchema = z.object({
+  name: alertPolicyNameSchema,
+  metric: alertPolicyMetricSchema,
+  window_sec: z.number().int().positive().max(86_400).default(300),
+  threshold: z.number(),
+  comparator: comparatorSchema.default("gte"),
+  min_events: z.number().int().nonnegative().max(1_000).default(20),
+  severity: operationalEventSeveritySchema.default("medium"),
+  is_enabled: z.boolean().default(true),
+  filter_workflow_id: z.string().trim().min(1).max(36).optional(),
+  filter_env: z.string().trim().min(1).max(64).optional(),
+  channel_ids: z.array(z.string().trim().min(1).max(36)).max(25).default([])
+});
+
+export const alertPolicyCreateSchema = alertPolicyBaseSchema;
+
+export const alertPolicyUpdateSchema = alertPolicyBaseSchema
+  .partial()
+  .extend({
+    filter_workflow_id: z.string().trim().min(1).max(36).nullable().optional(),
+    filter_env: z.string().trim().min(1).max(64).nullable().optional()
+  })
+  .refine(
+    (value) =>
+      value.name !== undefined ||
+      value.metric !== undefined ||
+      value.window_sec !== undefined ||
+      value.threshold !== undefined ||
+      value.comparator !== undefined ||
+      value.min_events !== undefined ||
+      value.severity !== undefined ||
+      value.is_enabled !== undefined ||
+      value.filter_workflow_id !== undefined ||
+      value.filter_env !== undefined ||
+      value.channel_ids !== undefined,
+    {
+      message: "Provide at least one field to update"
+    }
+  );
+
 export const passwordChangeSchema = z.object({
   current_password: z.string().min(8).max(200),
   new_password: z.string().min(8).max(200)

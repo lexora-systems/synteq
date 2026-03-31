@@ -1,7 +1,16 @@
 import { z } from "zod";
 import {
+  alertChannelCreateSchema,
+  alertChannelTypeSchema,
+  alertChannelUpdateSchema,
+  alertPolicyCreateSchema,
+  alertPolicyMetricSchema,
+  alertPolicyUpdateSchema,
+  apiKeyCreateSchema,
+  comparatorSchema,
   emailVerifyConfirmSchema,
   executionStatusSchema,
+  githubIntegrationCreateSchema,
   incidentConfidenceSchema,
   incidentGuidanceNarrationInputSchema,
   incidentGuidanceSchema,
@@ -76,6 +85,15 @@ export type EmailVerifyConfirmInput = z.infer<typeof emailVerifyConfirmSchema>;
 export type PasswordResetRequestInput = z.infer<typeof passwordResetRequestSchema>;
 export type PasswordResetConfirmInput = z.infer<typeof passwordResetConfirmSchema>;
 export type PubSubPushEnvelope = z.infer<typeof pubSubPushEnvelopeSchema>;
+export type ApiKeyCreateInput = z.infer<typeof apiKeyCreateSchema>;
+export type GitHubIntegrationCreateInput = z.infer<typeof githubIntegrationCreateSchema>;
+export type AlertChannelType = z.infer<typeof alertChannelTypeSchema>;
+export type AlertChannelCreateInput = z.infer<typeof alertChannelCreateSchema>;
+export type AlertChannelUpdateInput = z.infer<typeof alertChannelUpdateSchema>;
+export type AlertPolicyMetric = z.infer<typeof alertPolicyMetricSchema>;
+export type Comparator = z.infer<typeof comparatorSchema>;
+export type AlertPolicyCreateInput = z.infer<typeof alertPolicyCreateSchema>;
+export type AlertPolicyUpdateInput = z.infer<typeof alertPolicyUpdateSchema>;
 
 export type MetricPoint = {
   bucket_ts: string;

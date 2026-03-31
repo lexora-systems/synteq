@@ -100,6 +100,31 @@ function tenantSettings() {
   };
 }
 
+let apiKeyCounter = 1;
+let githubCounter = 1;
+let alertChannelCounter = 1;
+let alertPolicyCounter = 1;
+
+const API_KEYS = [
+  {
+    id: `key-${apiKeyCounter}`,
+    name: "Primary ingest key",
+    key_preview: "synteq_****abcdef",
+    created_at: new Date().toISOString(),
+    last_used_at: null,
+    revoked_at: null
+  }
+];
+
+const GITHUB_INTEGRATIONS = [];
+const ALERT_CHANNELS = [];
+const ALERT_POLICIES = [];
+
+function currentWebhookUrl(req) {
+  const host = req.headers.host ?? `127.0.0.1:${PORT}`;
+  return `http://${host}/v1/integrations/github/webhook`;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "127.0.0.1"}`);
   const { pathname } = url;
@@ -257,6 +282,390 @@ const server = http.createServer(async (req, res) => {
       incidents: [],
       pagination: { page: 1, page_size: 25, total: 0, has_next: false },
       last_updated: new Date().toISOString()
+    });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/v1/control-plane/api-keys") {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    sendJson(res, 200, {
+      api_keys: API_KEYS
+    });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/v1/control-plane/api-keys") {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const body = await parseJsonBody(req);
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) {
+      sendJson(res, 400, { error: "name required" });
+      return;
+    }
+    apiKeyCounter += 1;
+    const created = {
+      id: `key-${apiKeyCounter}`,
+      name,
+      key_preview: `synteq_****${String(apiKeyCounter).padStart(6, "0")}`,
+      created_at: new Date().toISOString(),
+      last_used_at: null,
+      revoked_at: null
+    };
+    API_KEYS.unshift(created);
+    sendJson(res, 201, {
+      api_key: created,
+      secret: `synteq_mock_secret_${apiKeyCounter}`
+    });
+    return;
+  }
+
+  if (req.method === "POST" && pathname.match(/^\/v1\/control-plane\/api-keys\/[^/]+\/revoke$/)) {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const id = pathname.split("/")[4];
+    const found = API_KEYS.find((item) => item.id === id);
+    if (!found) {
+      sendJson(res, 404, { error: "not found" });
+      return;
+    }
+    found.revoked_at = new Date().toISOString();
+    sendJson(res, 200, {
+      ok: true,
+      api_key_id: id
+    });
+    return;
+  }
+
+  if (req.method === "POST" && pathname.match(/^\/v1\/control-plane\/api-keys\/[^/]+\/rotate$/)) {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const id = pathname.split("/")[4];
+    const found = API_KEYS.find((item) => item.id === id);
+    if (!found) {
+      sendJson(res, 404, { error: "not found" });
+      return;
+    }
+    found.revoked_at = new Date().toISOString();
+    apiKeyCounter += 1;
+    const rotated = {
+      id: `key-${apiKeyCounter}`,
+      name: found.name,
+      key_preview: `synteq_****${String(apiKeyCounter).padStart(6, "0")}`,
+      created_at: new Date().toISOString(),
+      last_used_at: null,
+      revoked_at: null
+    };
+    API_KEYS.unshift(rotated);
+    sendJson(res, 200, {
+      rotated_from_api_key_id: id,
+      api_key: rotated,
+      secret: `synteq_mock_secret_${apiKeyCounter}`
+    });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/v1/control-plane/github-integrations") {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    sendJson(res, 200, {
+      webhook_url: currentWebhookUrl(req),
+      integrations: GITHUB_INTEGRATIONS
+    });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/v1/control-plane/github-integrations") {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const body = await parseJsonBody(req);
+    const repositoryFullName =
+      typeof body.repository_full_name === "string" && body.repository_full_name.trim().length > 0
+        ? body.repository_full_name.trim()
+        : null;
+
+    githubCounter += 1;
+    const integration = {
+      id: `gh-${githubCounter}`,
+      webhook_id: `hook-${githubCounter}`,
+      repository_full_name: repositoryFullName,
+      is_active: true,
+      last_delivery_id: null,
+      last_seen_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    GITHUB_INTEGRATIONS.unshift(integration);
+    sendJson(res, 201, {
+      webhook_url: currentWebhookUrl(req),
+      integration,
+      webhook_secret: `gh_mock_secret_${githubCounter}`
+    });
+    return;
+  }
+
+  if (req.method === "POST" && pathname.match(/^\/v1\/control-plane\/github-integrations\/[^/]+\/deactivate$/)) {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const id = pathname.split("/")[4];
+    const found = GITHUB_INTEGRATIONS.find((item) => item.id === id);
+    if (!found) {
+      sendJson(res, 404, { error: "not found" });
+      return;
+    }
+    found.is_active = false;
+    found.updated_at = new Date().toISOString();
+    sendJson(res, 200, {
+      integration: found
+    });
+    return;
+  }
+
+  if (req.method === "POST" && pathname.match(/^\/v1\/control-plane\/github-integrations\/[^/]+\/rotate-secret$/)) {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const id = pathname.split("/")[4];
+    const found = GITHUB_INTEGRATIONS.find((item) => item.id === id);
+    if (!found) {
+      sendJson(res, 404, { error: "not found" });
+      return;
+    }
+    found.updated_at = new Date().toISOString();
+    sendJson(res, 200, {
+      webhook_url: currentWebhookUrl(req),
+      integration: found,
+      webhook_secret: `gh_mock_rotated_${Date.now()}`
+    });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/v1/control-plane/alert-channels") {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    sendJson(res, 200, {
+      channels: ALERT_CHANNELS
+    });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/v1/control-plane/alert-channels") {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const body = await parseJsonBody(req);
+    const type = body.type;
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!["slack", "webhook", "email"].includes(type) || !name) {
+      sendJson(res, 400, { error: "invalid payload" });
+      return;
+    }
+    alertChannelCounter += 1;
+    const configPreview =
+      type === "email"
+        ? { email: body?.config?.email ?? "configured" }
+        : type === "slack"
+          ? { webhook_url: "https://hooks.slack.com/..." }
+          : { url: "https://example.com/..." };
+    const channel = {
+      id: `channel-${alertChannelCounter}`,
+      name,
+      type,
+      is_enabled: true,
+      created_at: new Date().toISOString(),
+      config_preview: configPreview
+    };
+    ALERT_CHANNELS.unshift(channel);
+    sendJson(res, 201, { channel });
+    return;
+  }
+
+  if (req.method === "PATCH" && pathname.match(/^\/v1\/control-plane\/alert-channels\/[^/]+$/)) {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const id = pathname.split("/")[4];
+    const body = await parseJsonBody(req);
+    const channel = ALERT_CHANNELS.find((item) => item.id === id);
+    if (!channel) {
+      sendJson(res, 404, { error: "not found" });
+      return;
+    }
+    if (typeof body.name === "string") {
+      channel.name = body.name;
+    }
+    if (typeof body.is_enabled === "boolean") {
+      channel.is_enabled = body.is_enabled;
+    }
+    sendJson(res, 200, { channel });
+    return;
+  }
+
+  if (req.method === "DELETE" && pathname.match(/^\/v1\/control-plane\/alert-channels\/[^/]+$/)) {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const id = pathname.split("/")[4];
+    const channel = ALERT_CHANNELS.find((item) => item.id === id);
+    if (!channel) {
+      sendJson(res, 404, { error: "not found" });
+      return;
+    }
+    channel.is_enabled = false;
+    sendJson(res, 200, { ok: true, channel_id: id });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/v1/control-plane/alert-policies") {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    sendJson(res, 200, {
+      policies: ALERT_POLICIES
+    });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/v1/control-plane/alert-policies") {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const body = await parseJsonBody(req);
+    alertPolicyCounter += 1;
+    const channels = Array.isArray(body.channel_ids)
+      ? ALERT_CHANNELS.filter((channel) => body.channel_ids.includes(channel.id)).map((channel) => ({
+          id: channel.id,
+          name: channel.name,
+          type: channel.type,
+          is_enabled: channel.is_enabled
+        }))
+      : [];
+    const policy = {
+      id: `policy-${alertPolicyCounter}`,
+      name: typeof body.name === "string" ? body.name : `Policy ${alertPolicyCounter}`,
+      metric: typeof body.metric === "string" ? body.metric : "failure_rate",
+      window_sec: Number(body.window_sec ?? 300),
+      threshold: Number(body.threshold ?? 0.2),
+      comparator: typeof body.comparator === "string" ? body.comparator : "gte",
+      min_events: Number(body.min_events ?? 20),
+      severity: typeof body.severity === "string" ? body.severity : "high",
+      is_enabled: true,
+      filter_workflow_id: typeof body.filter_workflow_id === "string" ? body.filter_workflow_id : null,
+      filter_env: typeof body.filter_env === "string" ? body.filter_env : null,
+      created_at: new Date().toISOString(),
+      channels
+    };
+    ALERT_POLICIES.unshift(policy);
+    sendJson(res, 201, { policy });
+    return;
+  }
+
+  if (req.method === "PATCH" && pathname.match(/^\/v1\/control-plane\/alert-policies\/[^/]+$/)) {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const id = pathname.split("/")[4];
+    const body = await parseJsonBody(req);
+    const policy = ALERT_POLICIES.find((item) => item.id === id);
+    if (!policy) {
+      sendJson(res, 404, { error: "not found" });
+      return;
+    }
+    if (typeof body.is_enabled === "boolean") {
+      policy.is_enabled = body.is_enabled;
+    }
+    sendJson(res, 200, { policy });
+    return;
+  }
+
+  if (req.method === "DELETE" && pathname.match(/^\/v1\/control-plane\/alert-policies\/[^/]+$/)) {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const id = pathname.split("/")[4];
+    const index = ALERT_POLICIES.findIndex((item) => item.id === id);
+    if (index < 0) {
+      sendJson(res, 404, { error: "not found" });
+      return;
+    }
+    ALERT_POLICIES.splice(index, 1);
+    sendJson(res, 200, { ok: true, policy_id: id });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/v1/control-plane/sources") {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+
+    const workflows =
+      persona === "activated"
+        ? [
+            {
+              id: "wf_1",
+              type: "workflow",
+              name: "Payments Daily",
+              status: "active",
+              powers: "Execution and heartbeat telemetry",
+              details: { slug: "payments-daily", system: "checkout-service", environment: "prod" },
+              last_activity_at: new Date().toISOString(),
+              connected_at: new Date().toISOString()
+            }
+          ]
+        : [];
+
+    const githubSources = GITHUB_INTEGRATIONS.map((integration) => ({
+      id: integration.id,
+      type: "github_integration",
+      name: integration.repository_full_name ?? `hook:${integration.webhook_id}`,
+      status: integration.is_active ? "active" : "inactive",
+      powers: "GitHub Actions operational events",
+      details: {
+        webhook_id: integration.webhook_id,
+        repository_full_name: integration.repository_full_name
+      },
+      last_activity_at: integration.last_seen_at,
+      connected_at: integration.created_at
+    }));
+
+    sendJson(res, 200, {
+      summary: {
+        workflow_sources: workflows.length,
+        github_sources: githubSources.filter((item) => item.status === "active").length,
+        ingestion_keys_active: API_KEYS.filter((item) => !item.revoked_at).length,
+        alert_channels_ready: ALERT_CHANNELS.filter((item) => item.is_enabled).length
+      },
+      sources: [...workflows, ...githubSources],
+      readiness: {
+        ingestion_api_keys_configured: API_KEYS.some((item) => !item.revoked_at),
+        alert_dispatch_ready: ALERT_CHANNELS.some((item) => item.is_enabled)
+      }
     });
     return;
   }

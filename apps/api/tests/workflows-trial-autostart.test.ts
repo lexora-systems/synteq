@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const workflowUpsertMock = vi.fn();
 const workflowFindUniqueMock = vi.fn();
 const workflowCountMock = vi.fn();
+const githubIntegrationCountMock = vi.fn();
 const workflowVersionFindFirstMock = vi.fn();
 const workflowVersionCreateMock = vi.fn();
 const startTrialIfEligibleMock = vi.fn();
@@ -16,6 +17,9 @@ vi.mock("../src/lib/prisma.js", () => ({
       findMany: vi.fn(),
       findUnique: workflowFindUniqueMock,
       count: workflowCountMock
+    },
+    gitHubIntegration: {
+      count: githubIntegrationCountMock
     },
     workflowVersion: {
       findFirst: workflowVersionFindFirstMock,
@@ -36,6 +40,7 @@ describe("workflow register trial auto-start", () => {
     workflowUpsertMock.mockReset();
     workflowFindUniqueMock.mockReset();
     workflowCountMock.mockReset();
+    githubIntegrationCountMock.mockReset();
     workflowVersionFindFirstMock.mockReset();
     workflowVersionCreateMock.mockReset();
     startTrialIfEligibleMock.mockReset();
@@ -53,6 +58,7 @@ describe("workflow register trial auto-start", () => {
     });
     workflowFindUniqueMock.mockResolvedValue(null);
     workflowCountMock.mockResolvedValue(0);
+    githubIntegrationCountMock.mockResolvedValue(0);
     workflowVersionFindFirstMock.mockResolvedValue(null);
     workflowVersionCreateMock.mockResolvedValue({ id: "ver-1" });
     startTrialIfEligibleMock.mockResolvedValue({ code: "started" });

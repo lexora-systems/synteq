@@ -70,15 +70,23 @@ const workflowRoutes: FastifyPluginAsync = async (app) => {
         });
 
         if (!existingWorkflow) {
-          const currentActiveSources = await prisma.workflow.count({
-            where: {
-              tenant_id: tenantId,
-              is_active: true
-            }
-          });
+          const [activeWorkflows, activeGitHubIntegrations] = await Promise.all([
+            prisma.workflow.count({
+              where: {
+                tenant_id: tenantId,
+                is_active: true
+              }
+            }),
+            prisma.gitHubIntegration.count({
+              where: {
+                tenant_id: tenantId,
+                is_active: true
+              }
+            })
+          ]);
           requireSourceCapacity({
             access,
-            currentActiveSources
+            currentActiveSources: activeWorkflows + activeGitHubIntegrations
           });
         }
       } catch (error) {

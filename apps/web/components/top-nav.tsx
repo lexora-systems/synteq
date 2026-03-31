@@ -25,24 +25,14 @@ export function TopNav() {
       match: (path) => path === "/incidents" || path.startsWith("/incidents/")
     },
     {
-      href: "/settings/profile",
-      label: "Profile",
-      match: (path) => path === "/profile" || path === "/settings/profile" || path.startsWith("/settings/profile/")
+      href: "/sources",
+      label: "Sources",
+      match: (path) => path === "/sources" || path.startsWith("/sources/")
     },
     {
-      href: "/settings/tenant",
-      label: "Tenant",
-      match: (path) => path === "/settings/tenant" || path.startsWith("/settings/tenant/")
-    },
-    {
-      href: "/settings/team",
-      label: "Team",
-      match: (path) => path === "/settings/team" || path.startsWith("/settings/team/")
-    },
-    {
-      href: "/settings/security",
-      label: "Security",
-      match: (path) => path === "/settings/security" || path.startsWith("/settings/security/")
+      href: "/settings",
+      label: "Settings",
+      match: (path) => path === "/settings" || path.startsWith("/settings/")
     }
   ];
 
@@ -51,7 +41,7 @@ export function TopNav() {
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3">
         <div>
           <p className="syn-app-brand-accent text-xs uppercase tracking-[0.2em]">Synteq by Lexora</p>
-          <h1 className="syn-app-brand-title text-lg font-semibold">Workflow Monitoring</h1>
+          <h1 className="syn-app-brand-title text-lg font-semibold">Operational Awareness</h1>
         </div>
         <nav className="flex items-center gap-4 text-sm font-medium">
           {navItems.map((item) => {

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { TopNav } from "../../components/top-nav";
-import { fetchMe, fetchTenantSettings, registerWorkflow, startTenantTrial } from "../../lib/api";
+import { fetchMe, fetchTenantSettings, fetchWorkflows, registerWorkflow, startTenantTrial } from "../../lib/api";
 import { resolveActivationState } from "../../lib/activation";
 import { requireToken } from "../../lib/auth";
 
@@ -71,13 +71,16 @@ export default async function WelcomePage({
     redirect("/overview");
   }
 
-  const [settingsResult, meResult] = await Promise.all([
+  const [settingsResult, meResult, workflowsResult] = await Promise.all([
     fetchTenantSettings(token)
       .then((payload) => ({ ok: true as const, payload }))
       .catch(() => ({ ok: false as const })),
     fetchMe(token)
       .then((payload) => ({ ok: true as const, payload }))
-      .catch(() => ({ ok: false as const }))
+      .catch(() => ({ ok: false as const })),
+    fetchWorkflows(token)
+      .then((payload) => ({ ok: true as const, payload }))
+      .catch(() => ({ ok: false as const, payload: { workflows: [] } }))
   ]);
 
   const tenantSettings = settingsResult.ok
@@ -107,6 +110,8 @@ export default async function WelcomePage({
     trial.available && !trial.active && tenantSettings.effective_plan === "free" && tenantSettings.current_plan === "free";
   const showTrialActive = trial.active;
   const showTrialEnded = !trial.active && trial.consumed && tenantSettings.current_plan === "free";
+  const connectedWorkflows = workflowsResult.ok ? workflowsResult.payload.workflows : [];
+  const hasConnectedWorkflow = connectedWorkflows.length > 0;
   const trialStatusLabel = showTrialActive
     ? `${trial.days_remaining}d left`
     : showTrialEnded
@@ -126,7 +131,10 @@ export default async function WelcomePage({
           </div>
         ) : null}
 
-        <section className="relative overflow-hidden rounded-3xl border border-cyan-400/25 bg-gradient-to-r from-[#071a35]/90 via-[#0a2b52]/80 to-[#0a3555]/85 p-6 sm:p-8">
+        <section
+          className="relative overflow-hidden rounded-3xl border border-cyan-400/25 bg-gradient-to-r from-[#071a35]/90 via-[#0a2b52]/80 to-[#0a3555]/85 p-6 sm:p-8"
+          data-testid="welcome-onboarding-hero"
+        >
           <div
             className="pointer-events-none absolute right-[-90px] top-[-110px] h-[260px] w-[260px] rounded-full opacity-70"
             style={{ background: "radial-gradient(circle, rgba(34,211,238,0.28) 0%, transparent 70%)" }}
@@ -137,7 +145,7 @@ export default async function WelcomePage({
               Understand risk clearly before it becomes an incident
             </h1>
             <p className="mt-4 max-w-[760px] text-base text-cyan-50/85 sm:text-lg">
-              Start with one workflow, validate your telemetry, then move into continuous risk monitoring with confidence.
+              Immediate value: continuous awareness and proactive alerts with minimal access required.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2.5">
@@ -147,10 +155,24 @@ export default async function WelcomePage({
             </div>
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <a href="#connect-workflow" className="syn-cta-lift syn-btn-primary w-full text-sm sm:w-auto">
+              <a
+                href="#connect-workflow"
+                className="syn-cta-lift syn-btn-primary w-full text-sm sm:w-auto"
+                data-testid="welcome-connect-workflow-cta"
+              >
                 Connect your first workflow
               </a>
-              <Link href="/overview#investigation-tools" className="syn-cta-lift syn-btn-secondary syn-btn-secondary-soft w-full text-sm sm:w-auto">
+              <Link
+                href="/settings/control-plane"
+                className="syn-cta-lift syn-btn-secondary syn-btn-secondary-soft w-full text-sm sm:w-auto"
+              >
+                Open control plane
+              </Link>
+              <Link
+                href="/overview#investigation-tools"
+                className="syn-cta-lift syn-btn-secondary syn-btn-secondary-soft w-full text-sm sm:w-auto"
+                data-testid="welcome-run-simulation-cta"
+              >
                 Run simulation first
               </Link>
             </div>
@@ -158,6 +180,27 @@ export default async function WelcomePage({
             <p className="mt-4 text-sm text-cyan-100/70">
               You can start trial now or let it activate automatically when live monitoring begins.
             </p>
+          </div>
+        </section>
+
+        <section className="mt-5">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Trust and Access</p>
+            <h2 className="mt-1 text-xl font-semibold text-ink">Minimal access required</h2>
+            <div className="mt-3 grid gap-3 text-sm text-slate-700 md:grid-cols-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What Synteq receives</p>
+                <p className="mt-1">Operational signals and event-level telemetry.</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What Synteq does NOT receive</p>
+                <p className="mt-1">Full system control, full repository access, or broad credentials.</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Access model and control</p>
+                <p className="mt-1">Webhook/event-based, read-only, signal-level access. Disconnect anytime.</p>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -172,7 +215,7 @@ export default async function WelcomePage({
               </div>
               <div className="syn-app-panel-muted rounded-2xl px-4 py-3">
                 <p className="syn-app-muted text-xs uppercase tracking-[0.2em]">Step 2</p>
-                <p className="syn-app-title mt-1 font-medium">Send telemetry events</p>
+                <p className="syn-app-title mt-1 font-medium">Configure ingestion keys/integrations</p>
               </div>
               <div className="syn-app-panel-muted rounded-2xl px-4 py-3">
                 <p className="syn-app-muted text-xs uppercase tracking-[0.2em]">Step 3</p>
@@ -205,7 +248,7 @@ export default async function WelcomePage({
           ) : null}
           {params.workflow === "connected" ? (
             <div className="rounded-2xl border border-emerald-300/70 bg-emerald-50/95 px-4 py-3 text-sm text-emerald-800 shadow-panel">
-              Workflow connected. Start sending telemetry to activate live monitoring.
+              Workflow connected. Synteq is now watching this source once telemetry arrives, and you&apos;ll be alerted when reliability risks are detected.
             </div>
           ) : null}
           {params.workflow === "invalid" ? (
@@ -219,6 +262,25 @@ export default async function WelcomePage({
             </div>
           ) : null}
         </div>
+
+        {hasConnectedWorkflow ? (
+          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-panel">
+            <p className="font-semibold">
+              Synteq is now watching {connectedWorkflows.length} workflow source{connectedWorkflows.length === 1 ? "" : "s"}.
+            </p>
+            <p className="mt-1">
+              Signals watched: execution outcomes, retry behavior, latency trends, and heartbeat continuity.
+            </p>
+            <p className="mt-1">
+              You&apos;ll be alerted when failure spikes, retry storms, missing heartbeats, or latency-related risks are detected.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-panel">
+            <p className="font-semibold text-ink">No connected source yet</p>
+            <p className="mt-1">Connect one source to start live monitoring. Synteq is continuously monitoring once signals begin arriving.</p>
+          </div>
+        )}
 
         <section className="mt-6 space-y-4">
           <div>
@@ -258,6 +320,19 @@ export default async function WelcomePage({
                 <a href="#connect-workflow" className="syn-cta-lift syn-btn-secondary syn-btn-secondary-soft text-sm">
                   Connect workflow
                 </a>
+              </div>
+            </article>
+
+            <article className="syn-app-panel rounded-2xl p-5">
+              <p className="syn-app-kicker text-[11px] font-medium uppercase tracking-[0.18em]">Signal Ingestion</p>
+              <h3 className="syn-app-title mt-2 text-lg font-semibold">Configure control plane</h3>
+              <p className="syn-app-copy mt-2 text-sm">
+                Create API keys, set up GitHub webhook integrations, and configure alert dispatch channels.
+              </p>
+              <div className="mt-4">
+                <Link href="/settings/control-plane" className="syn-cta-lift syn-btn-secondary syn-btn-secondary-soft text-sm">
+                  Open control plane
+                </Link>
               </div>
             </article>
 
