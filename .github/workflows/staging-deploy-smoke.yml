@@ -217,7 +217,7 @@ jobs:
 
           ready=0
           for _ in {1..30}; do
-            if grep -q "Ready for new connections" /tmp/cloud-sql-proxy.log; then
+            if grep -Eqi "ready for new connections" /tmp/cloud-sql-proxy.log; then
               ready=1
               break
             fi
