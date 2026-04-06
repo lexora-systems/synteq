@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ResolvedTenantAccess } from "../src/services/entitlement-guard-service.js";
 
 const openOrRefreshBridgeIncidentMock = vi.fn();
 const resolveBridgeIncidentMock = vi.fn();
@@ -150,11 +151,25 @@ function makeClient(seed: { findings: FindingRow[]; links?: LinkRow[] }) {
 }
 
 describe("incident bridge service", () => {
-  const proAccessResolver = async () => ({
+  const proAccessResolver = async (): Promise<ResolvedTenantAccess> => ({
     tenantId: "tenant-A",
-    currentPlan: "pro" as const,
-    effectivePlan: "pro" as const,
-    entitlements: {} as Record<string, unknown>,
+    currentPlan: "pro",
+    effectivePlan: "pro",
+    entitlements: {
+      tenant_id: "tenant-A",
+      current_plan: "pro",
+      effective_plan: "pro",
+      trial: {
+        status: "none",
+        available: false,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
+    },
     maxSources: null,
     maxHistoryHours: null,
     features: {
@@ -164,11 +179,25 @@ describe("incident bridge service", () => {
       trend_analysis: true
     }
   });
-  const freeAccessResolver = async () => ({
+  const freeAccessResolver = async (): Promise<ResolvedTenantAccess> => ({
     tenantId: "tenant-A",
-    currentPlan: "free" as const,
-    effectivePlan: "free" as const,
-    entitlements: {} as Record<string, unknown>,
+    currentPlan: "free",
+    effectivePlan: "free",
+    entitlements: {
+      tenant_id: "tenant-A",
+      current_plan: "free",
+      effective_plan: "free",
+      trial: {
+        status: "none",
+        available: true,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
+    },
     maxSources: 1,
     maxHistoryHours: 24,
     features: {

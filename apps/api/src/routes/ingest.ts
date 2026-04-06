@@ -96,7 +96,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       try {
         await assertOperationalSourceOwnership({
           tenantId: request.tenantId,
-          sourceValues: body.events.map((event) => String(event.source)),
+          sourceValues: body.events.map((event: { source: unknown }) => String(event.source)),
           owner: {
             kind: "api_key",
             apiKeyId: request.apiKeyId ?? null

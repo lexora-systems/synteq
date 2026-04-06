@@ -4,7 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const runSchedulerTaskMock = vi.fn();
 const processQueueMessageMock = vi.fn();
 const consumeRateLimitMock = vi.fn();
-const configMock = {
+const configMock: {
+  NODE_ENV: string;
+  PUBSUB_PUSH_SHARED_SECRET: string | undefined;
+  SCHEDULER_SHARED_SECRET: string | undefined;
+} = {
   NODE_ENV: "test",
   PUBSUB_PUSH_SHARED_SECRET: "pubsub-test-secret-with-32-characters",
   SCHEDULER_SHARED_SECRET: "scheduler-test-secret-with-32-characters"
