@@ -20,6 +20,11 @@ import {
   requireSourceCapacity,
   resolveTenantAccess
 } from "../services/entitlement-guard-service.js";
+import {
+  countCapacitySourcesForTenant,
+  listCanonicalSourcesForTenant,
+  summarizeCanonicalSources
+} from "../services/source-service.js";
 
 const idParamSchema = z.object({
   id: z.string().min(1)
@@ -448,24 +453,12 @@ const controlPlaneRoutes: FastifyPluginAsync = async (app) => {
         const access = await resolveTenantAccess({
           tenantId
         });
-        const [workflowSourceCount, githubSourceCount] = await Promise.all([
-          prisma.workflow.count({
-            where: {
-              tenant_id: tenantId,
-              is_active: true
-            }
-          }),
-          prisma.gitHubIntegration.count({
-            where: {
-              tenant_id: tenantId,
-              is_active: true
-            }
-          })
-        ]);
-
+        const currentActiveSources = await countCapacitySourcesForTenant({
+          tenantId
+        });
         requireSourceCapacity({
           access,
-          currentActiveSources: workflowSourceCount + githubSourceCount
+          currentActiveSources
         });
       } catch (error) {
         if (replyIfEntitlementError(reply, request.id, error)) {
@@ -1195,45 +1188,10 @@ const controlPlaneRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(401).send({ error: "Unauthorized" });
       }
 
-      const [workflows, githubIntegrations, activeApiKeys, enabledChannels] = await Promise.all([
-        prisma.workflow.findMany({
-          where: {
-            tenant_id: tenantId,
-            is_active: true
-          },
-          select: {
-            id: true,
-            display_name: true,
-            slug: true,
-            system: true,
-            environment: true,
-            created_at: true
-          },
-          orderBy: {
-            created_at: "desc"
-          }
-        }),
-        prisma.gitHubIntegration.findMany({
-          where: {
-            tenant_id: tenantId
-          },
-          select: {
-            id: true,
-            repository_full_name: true,
-            webhook_id: true,
-            is_active: true,
-            last_seen_at: true,
-            created_at: true
-          },
-          orderBy: {
-            created_at: "desc"
-          }
-        }),
-        prisma.apiKey.count({
-          where: {
-            tenant_id: tenantId,
-            revoked_at: null
-          }
+      const [canonicalSources, enabledChannels] = await Promise.all([
+        listCanonicalSourcesForTenant({
+          tenantId,
+          includeCustomIngestion: true
         }),
         prisma.alertChannel.count({
           where: {
@@ -1243,44 +1201,41 @@ const controlPlaneRoutes: FastifyPluginAsync = async (app) => {
         })
       ]);
 
+      const summary = summarizeCanonicalSources(canonicalSources);
+      const workflowSources = canonicalSources.filter((source) => source.kind === "workflow");
+      const githubSources = canonicalSources.filter((source) => source.kind === "github_integration");
+
       return {
         summary: {
-          workflow_sources: workflows.length,
-          github_sources: githubIntegrations.filter((item) => item.is_active).length,
-          ingestion_keys_active: activeApiKeys,
+          workflow_sources: summary.workflow_sources,
+          github_sources: summary.github_sources,
+          ingestion_keys_active: summary.ingestion_keys_active,
           alert_channels_ready: enabledChannels
         },
         sources: [
-          ...workflows.map((workflow) => ({
-            id: workflow.id,
+          ...workflowSources.map((source) => ({
+            id: source.id,
             type: "workflow",
-            name: workflow.display_name,
-            status: "active",
+            name: source.displayName,
+            status: source.status,
             powers: "Execution and heartbeat telemetry",
-            details: {
-              slug: workflow.slug,
-              system: workflow.system,
-              environment: workflow.environment
-            },
-            last_activity_at: null,
-            connected_at: workflow.created_at
+            details: source.details,
+            last_activity_at: source.lastActivityAt,
+            connected_at: source.connectedAt
           })),
-          ...githubIntegrations.map((integration) => ({
-            id: integration.id,
+          ...githubSources.map((source) => ({
+            id: source.id,
             type: "github_integration",
-            name: integration.repository_full_name ?? `hook:${integration.webhook_id}`,
-            status: integration.is_active ? "active" : "inactive",
+            name: source.displayName,
+            status: source.status,
             powers: "GitHub Actions operational events",
-            details: {
-              webhook_id: integration.webhook_id,
-              repository_full_name: integration.repository_full_name
-            },
-            last_activity_at: integration.last_seen_at,
-            connected_at: integration.created_at
+            details: source.details,
+            last_activity_at: source.lastActivityAt,
+            connected_at: source.connectedAt
           }))
         ],
         readiness: {
-          ingestion_api_keys_configured: activeApiKeys > 0,
+          ingestion_api_keys_configured: summary.ingestion_keys_active > 0,
           alert_dispatch_ready: enabledChannels > 0
         },
         request_id: request.id

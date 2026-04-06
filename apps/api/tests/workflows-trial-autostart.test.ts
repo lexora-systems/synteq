@@ -2,8 +2,10 @@ import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const workflowUpsertMock = vi.fn();
+const workflowFindManyMock = vi.fn();
 const workflowFindUniqueMock = vi.fn();
 const workflowCountMock = vi.fn();
+const githubIntegrationFindManyMock = vi.fn();
 const githubIntegrationCountMock = vi.fn();
 const workflowVersionFindFirstMock = vi.fn();
 const workflowVersionCreateMock = vi.fn();
@@ -14,11 +16,12 @@ vi.mock("../src/lib/prisma.js", () => ({
   prisma: {
     workflow: {
       upsert: workflowUpsertMock,
-      findMany: vi.fn(),
+      findMany: workflowFindManyMock,
       findUnique: workflowFindUniqueMock,
       count: workflowCountMock
     },
     gitHubIntegration: {
+      findMany: githubIntegrationFindManyMock,
       count: githubIntegrationCountMock
     },
     workflowVersion: {
@@ -38,8 +41,10 @@ describe("workflow register trial auto-start", () => {
 
   beforeEach(async () => {
     workflowUpsertMock.mockReset();
+    workflowFindManyMock.mockReset();
     workflowFindUniqueMock.mockReset();
     workflowCountMock.mockReset();
+    githubIntegrationFindManyMock.mockReset();
     githubIntegrationCountMock.mockReset();
     workflowVersionFindFirstMock.mockReset();
     workflowVersionCreateMock.mockReset();
@@ -58,6 +63,8 @@ describe("workflow register trial auto-start", () => {
     });
     workflowFindUniqueMock.mockResolvedValue(null);
     workflowCountMock.mockResolvedValue(0);
+    workflowFindManyMock.mockResolvedValue([]);
+    githubIntegrationFindManyMock.mockResolvedValue([]);
     githubIntegrationCountMock.mockResolvedValue(0);
     workflowVersionFindFirstMock.mockResolvedValue(null);
     workflowVersionCreateMock.mockResolvedValue({ id: "ver-1" });
@@ -128,7 +135,18 @@ describe("workflow register trial auto-start", () => {
 
   it("blocks free tenants from registering a second active source", async () => {
     workflowFindUniqueMock.mockResolvedValue(null);
-    workflowCountMock.mockResolvedValue(1);
+    workflowFindManyMock.mockResolvedValue([
+      {
+        id: "wf-existing",
+        tenant_id: "tenant-A",
+        display_name: "Existing Workflow",
+        slug: "existing-workflow",
+        system: "airflow",
+        environment: "prod",
+        is_active: true,
+        created_at: new Date("2026-03-10T00:00:00.000Z")
+      }
+    ]);
 
     const response = await app.inject({
       method: "POST",

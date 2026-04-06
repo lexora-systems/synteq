@@ -6,6 +6,7 @@ import { processQueueMessage } from "../services/pubsub-ingest-worker-service.js
 import { runtimeMetrics } from "../lib/runtime-metrics.js";
 import type { IngestQueueMessage } from "../services/ingest-queue-service.js";
 import { runSchedulerTask, type SchedulerTask } from "../services/scheduler-execution-service.js";
+import { consumeRateLimit } from "../services/rate-limit-service.js";
 
 const queueMessageSchema = z.object({
   type: z.enum(["execution", "heartbeat"]),
@@ -29,23 +30,111 @@ function schedulerHeaderValue(value: string | string[] | undefined) {
   return value;
 }
 
-function hasBearerAuthHeader(value: string | undefined) {
+const DEV_INTERNAL_SHARED_SECRET = "synteq-dev-internal-secret";
+const INTERNAL_SCHEDULER_RATE_LIMIT_PER_MIN = 120;
+const INTERNAL_PUBSUB_RATE_LIMIT_PER_MIN = 2000;
+
+function isDevelopmentMode() {
+  return config.NODE_ENV === "development";
+}
+
+function parseBearerToken(value: string | undefined): string | null {
   if (!value) {
-    return false;
+    return null;
   }
-  return /^Bearer\s+\S+/i.test(value.trim());
+
+  const match = /^Bearer\s+(\S+)$/i.exec(value.trim());
+  return match ? match[1] : null;
+}
+
+function routePath(request: FastifyRequest) {
+  return request.routeOptions.url ?? request.url;
+}
+
+function logInternalAuthFailure(
+  request: FastifyRequest,
+  reason: string,
+  extra?: Record<string, unknown>
+) {
+  request.log.warn(
+    {
+      request_id: request.id,
+      method: request.method,
+      route: routePath(request),
+      ip: request.ip,
+      forwarded_for: request.headers["x-forwarded-for"] ?? null,
+      user_agent: request.headers["user-agent"] ?? null,
+      reason,
+      ...(extra ?? {})
+    },
+    "internal.auth.failed"
+  );
+}
+
+async function enforceInternalRateLimit(input: {
+  request: FastifyRequest;
+  reply: FastifyReply;
+  scope: string;
+  maxPerMinute: number;
+}) {
+  const rate = await consumeRateLimit({
+    scope: input.scope,
+    key: `${input.request.ip}:${routePath(input.request)}`,
+    max: input.maxPerMinute,
+    windowSec: 60
+  });
+
+  if (rate.allowed) {
+    return true;
+  }
+
+  runtimeMetrics.increment("internal_rate_limited_total");
+  input.reply.header("Retry-After", String(rate.retryAfterSec));
+  input.request.log.warn(
+    {
+      request_id: input.request.id,
+      route: routePath(input.request),
+      ip: input.request.ip,
+      scope: input.scope,
+      current: rate.current
+    },
+    "internal.rate_limited"
+  );
+  input.reply.code(429).send({
+    error: "Rate limit exceeded",
+    code: "INTERNAL_RATE_LIMITED"
+  });
+  return false;
 }
 
 const internalRoutes: FastifyPluginAsync = async (app) => {
   app.post("/pubsub/ingest", async (request, reply) => {
-    const sharedSecret = config.PUBSUB_PUSH_SHARED_SECRET;
-    if (sharedSecret) {
-      const provided = request.headers["x-synteq-push-secret"];
-      const candidate = Array.isArray(provided) ? provided[0] : provided;
-      if (!candidate || candidate !== sharedSecret) {
-        runtimeMetrics.increment("pubsub_push_rejected_total");
-        return reply.code(401).send({ error: "Unauthorized push request" });
-      }
+    const allowed = await enforceInternalRateLimit({
+      request,
+      reply,
+      scope: "internal_pubsub_ingest",
+      maxPerMinute: INTERNAL_PUBSUB_RATE_LIMIT_PER_MIN
+    });
+    if (!allowed) {
+      return;
+    }
+
+    const sharedSecret = config.PUBSUB_PUSH_SHARED_SECRET ?? (isDevelopmentMode() ? DEV_INTERNAL_SHARED_SECRET : undefined);
+    if (!sharedSecret) {
+      runtimeMetrics.increment("pubsub_push_rejected_total");
+      logInternalAuthFailure(request, "pubsub_secret_not_configured");
+      return reply.code(503).send({
+        error: "Pub/Sub push endpoint is not configured",
+        code: "PUBSUB_PUSH_NOT_CONFIGURED"
+      });
+    }
+
+    const provided = request.headers["x-synteq-push-secret"];
+    const candidate = Array.isArray(provided) ? provided[0] : provided;
+    if (!candidate || candidate !== sharedSecret) {
+      runtimeMetrics.increment("pubsub_push_rejected_total");
+      logInternalAuthFailure(request, "pubsub_secret_mismatch");
+      return reply.code(401).send({ error: "Unauthorized push request" });
     }
 
     const envelope = pubSubPushEnvelopeSchema.safeParse(request.body);
@@ -89,8 +178,9 @@ const internalRoutes: FastifyPluginAsync = async (app) => {
   });
 
   const requireSchedulerTriggerAuth = async (request: FastifyRequest, reply: FastifyReply) => {
-    const sharedSecret = config.SCHEDULER_SHARED_SECRET;
+    const sharedSecret = config.SCHEDULER_SHARED_SECRET ?? (isDevelopmentMode() ? DEV_INTERNAL_SHARED_SECRET : undefined);
     if (!sharedSecret) {
+      logInternalAuthFailure(request, "scheduler_secret_not_configured");
       reply.code(503).send({
         error: "Scheduler trigger is not configured",
         code: "SCHEDULER_NOT_CONFIGURED"
@@ -100,6 +190,7 @@ const internalRoutes: FastifyPluginAsync = async (app) => {
 
     const providedSecret = schedulerHeaderValue(request.headers["x-synteq-scheduler-secret"]);
     if (!providedSecret || providedSecret !== sharedSecret) {
+      logInternalAuthFailure(request, "scheduler_header_secret_mismatch");
       reply.code(401).send({
         error: "Unauthorized scheduler request",
         code: "SCHEDULER_UNAUTHORIZED"
@@ -108,7 +199,9 @@ const internalRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const authorization = schedulerHeaderValue(request.headers.authorization);
-    if (!hasBearerAuthHeader(authorization)) {
+    const bearerToken = parseBearerToken(authorization);
+    if (!bearerToken) {
+      logInternalAuthFailure(request, "scheduler_bearer_missing");
       reply.code(401).send({
         error: "Missing bearer token",
         code: "SCHEDULER_BEARER_REQUIRED"
@@ -116,8 +209,20 @@ const internalRoutes: FastifyPluginAsync = async (app) => {
       return false;
     }
 
+    if (bearerToken !== sharedSecret) {
+      logInternalAuthFailure(request, "scheduler_bearer_mismatch");
+      reply.code(401).send({
+        error: "Unauthorized scheduler bearer token",
+        code: "SCHEDULER_BEARER_INVALID"
+      });
+      return false;
+    }
+
     const cloudSchedulerHeader = schedulerHeaderValue(request.headers["x-cloudscheduler"]);
     if (!cloudSchedulerHeader || cloudSchedulerHeader.toLowerCase() !== "true") {
+      logInternalAuthFailure(request, "scheduler_header_missing_or_invalid", {
+        x_cloudscheduler: cloudSchedulerHeader ?? null
+      });
       reply.code(403).send({
         error: "Cloud Scheduler header is required",
         code: "SCHEDULER_HEADER_REQUIRED"
@@ -130,6 +235,16 @@ const internalRoutes: FastifyPluginAsync = async (app) => {
 
   const registerSchedulerTaskRoute = (path: string, task: SchedulerTask) => {
     app.post(path, async (request, reply) => {
+      const allowed = await enforceInternalRateLimit({
+        request,
+        reply,
+        scope: "internal_scheduler",
+        maxPerMinute: INTERNAL_SCHEDULER_RATE_LIMIT_PER_MIN
+      });
+      if (!allowed) {
+        return;
+      }
+
       const authorized = await requireSchedulerTriggerAuth(request, reply);
       if (!authorized) {
         return;

@@ -1,12 +1,15 @@
-name = "synteq-web-staging"
+name = "synteq"
 main = ".open-next/worker.js"
 compatibility_date = "2026-03-27"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
-# Preparation-only defaults.
-# Set real environment values in Cloudflare environments/CI before staging deploy.
-[vars]
-SYNTEQ_WEB_API_BASE_URL = "https://api-staging.example.run.app"
-API_BASE_URL = "https://api-staging.example.run.app"
-NEXT_PUBLIC_API_BASE_URL = "https://api-staging.example.run.app"
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+# Required runtime variables must be set in the Cloudflare Worker environment
+# (Dashboard or CI-managed wrangler deploy), not via placeholder values here:
+# - SYNTEQ_WEB_API_BASE_URL=https://synteq-api-ztock2gtnq-as.a.run.app
+# - API_BASE_URL=https://synteq-api-ztock2gtnq-as.a.run.app
+# - NEXT_PUBLIC_API_BASE_URL=https://synteq-api-ztock2gtnq-as.a.run.app

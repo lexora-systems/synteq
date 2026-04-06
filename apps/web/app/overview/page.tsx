@@ -1,10 +1,8 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { TopNav } from "../../components/top-nav";
 import { MetricsChart } from "../../components/charts";
 import { ReliabilityTools } from "../../components/reliability-tools";
 import { fetchConnectedSources, fetchIncidents, fetchOverview, fetchTenantSettings, fetchWorkflows } from "../../lib/api";
-import { resolveActivationState } from "../../lib/activation";
 import { requireToken } from "../../lib/auth";
 
 function asNumber(value: unknown): number {
@@ -86,10 +84,6 @@ function deploymentStatus(score: number): "Stable" | "Needs Attention" | "Unstab
 
 export default async function OverviewPage() {
   const token = await requireToken();
-  const activation = await resolveActivationState(token);
-  if (!activation.activated && !activation.metricsUnavailable) {
-    redirect("/welcome");
-  }
 
   const [overviewResult, incidentsPayload, workflowsPayload, settingsResult, sourcesResult] = await Promise.all([
     fetchOverview(token, "1h")
@@ -221,10 +215,10 @@ export default async function OverviewPage() {
       <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pt-8">
         <div className="rounded-3xl bg-gradient-to-r from-ink to-ocean p-6 text-white shadow-panel">
           <p className="text-xs uppercase tracking-[0.2em] text-cyan-200">Decision Layer</p>
-          <h2 className="mt-1 text-3xl font-semibold">Risk intelligence dashboard</h2>
+          <h2 className="mt-1 text-3xl font-semibold">Always-on risk detection and prevention</h2>
           <p className="mt-2 text-sm text-cyan-100">
             {monitoringDataUnavailable
-              ? "Monitoring source temporarily unavailable"
+              ? "Detection telemetry temporarily unavailable"
               : `Last updated: ${new Date(overview.last_updated).toLocaleString()}`}
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
@@ -240,7 +234,7 @@ export default async function OverviewPage() {
         {sourceSetupPending ? (
           <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-panel">
             <p className="font-semibold text-ink">No sources connected yet</p>
-            <p className="mt-1">Connect a source to start live monitoring. Synteq is continuously monitoring once operational signals begin arriving.</p>
+            <p className="mt-1">Connect a source to start always-on detection. Synteq continuously watches operational signals once they begin arriving.</p>
             <p className="mt-1">You&apos;ll be alerted when failure spikes, retries, latency drift, or missing heartbeat risks are detected.</p>
             <Link href="/settings/control-plane" className="mt-2 inline-flex rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">
               Open control plane
@@ -249,7 +243,7 @@ export default async function OverviewPage() {
         ) : (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-panel">
             <p className="font-semibold">
-              Synteq is continuously monitoring {connectedSources.length} source{connectedSources.length === 1 ? "" : "s"}.
+              Synteq is continuously detecting across {connectedSources.length} source{connectedSources.length === 1 ? "" : "s"}.
             </p>
             <p className="mt-1">
               Watching {connectedSourcesSummary.workflow_sources} workflow signal source{connectedSourcesSummary.workflow_sources === 1 ? "" : "s"} and{" "}
@@ -341,15 +335,15 @@ export default async function OverviewPage() {
 
         {monitoringDataUnavailable ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-panel">
-            Monitoring data is temporarily unavailable. Check data source credentials and run `npm run check:pipeline:health`.
-            You can continue using simulation and incidents while monitoring data recovers.
+            Detection telemetry is temporarily unavailable. Check data source credentials and run `npm run check:pipeline:health`.
+            You can continue using simulation and incidents while telemetry recovers.
           </div>
         ) : null}
 
         {connectedButQuiet ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-panel">
             <p className="font-semibold text-ink">Source connected, waiting for first signal batch</p>
-            <p className="mt-1">Synteq is continuously monitoring now. As events arrive, risk scoring and incident detection will populate automatically.</p>
+            <p className="mt-1">Synteq is continuously detecting now. As events arrive, risk scoring and incident detection will populate automatically.</p>
             <p className="mt-1">You&apos;ll be alerted when monitored risk conditions are met.</p>
           </div>
         ) : null}
@@ -363,13 +357,13 @@ export default async function OverviewPage() {
 
         {telemetryPossiblyStale ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-panel">
-            Monitoring telemetry appears delayed (last metrics point about {Math.round(telemetryAgeMinutes ?? 0)} minutes ago).
+            Detection telemetry appears delayed (last metrics point about {Math.round(telemetryAgeMinutes ?? 0)} minutes ago).
             Verify scheduler cadence and run `npm run check:pipeline:freshness`.
           </div>
         ) : null}
 
         <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-slate-700 shadow-panel">
-          <p className="font-semibold text-ink">Real monitoring setup</p>
+          <p className="font-semibold text-ink">Always-on detection setup</p>
           <p className="mt-1">
             Simulations are for validation. For live risk intelligence, connect a real workflow and continuously ingest telemetry.
           </p>
@@ -406,7 +400,7 @@ export default async function OverviewPage() {
 
         <div className="space-y-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Monitoring Trends</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Detection Trends</p>
             <h3 className="mt-1 text-xl font-semibold text-ink">Real-time stability and performance signals</h3>
           </div>
 

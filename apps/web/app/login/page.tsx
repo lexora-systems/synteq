@@ -43,7 +43,7 @@ export default function LoginPage() {
     <main className="login-shell">
       <div className="login-card">
         <p className="eyebrow">Synteq by Lexora</p>
-        <h1 className="login-title">Sign in to monitoring dashboard</h1>
+        <h1 className="login-title">Sign in to Synteq risk detection</h1>
         <p className="login-subtitle">Use workspace tenant ID for shared-email accounts.</p>
         <form className="login-form" onSubmit={onSubmit}>
           <label>

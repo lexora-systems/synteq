@@ -3,12 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const runSchedulerTaskMock = vi.fn();
 const processQueueMessageMock = vi.fn();
+const consumeRateLimitMock = vi.fn();
+const configMock = {
+  NODE_ENV: "test",
+  PUBSUB_PUSH_SHARED_SECRET: "pubsub-test-secret-with-32-characters",
+  SCHEDULER_SHARED_SECRET: "scheduler-test-secret-with-32-characters"
+};
 
 vi.mock("../src/config.js", () => ({
-  config: {
-    PUBSUB_PUSH_SHARED_SECRET: undefined,
-    SCHEDULER_SHARED_SECRET: "scheduler-test-secret-with-32-characters"
-  }
+  config: configMock
 }));
 
 vi.mock("../src/services/scheduler-execution-service.js", () => ({
@@ -19,12 +22,25 @@ vi.mock("../src/services/pubsub-ingest-worker-service.js", () => ({
   processQueueMessage: processQueueMessageMock
 }));
 
+vi.mock("../src/services/rate-limit-service.js", () => ({
+  consumeRateLimit: consumeRateLimitMock
+}));
+
 describe("internal scheduler routes", () => {
   let app: ReturnType<typeof Fastify>;
 
   beforeEach(async () => {
     runSchedulerTaskMock.mockReset();
     processQueueMessageMock.mockReset();
+    consumeRateLimitMock.mockReset();
+    consumeRateLimitMock.mockResolvedValue({
+      allowed: true,
+      current: 1,
+      retryAfterSec: 60
+    });
+    configMock.NODE_ENV = "test";
+    configMock.PUBSUB_PUSH_SHARED_SECRET = "pubsub-test-secret-with-32-characters";
+    configMock.SCHEDULER_SHARED_SECRET = "scheduler-test-secret-with-32-characters";
 
     app = Fastify();
     const internalRoutes = (await import("../src/routes/internal.js")).default;
@@ -39,7 +55,7 @@ describe("internal scheduler routes", () => {
   function schedulerHeaders(overrides?: Record<string, string>) {
     return {
       "x-synteq-scheduler-secret": "scheduler-test-secret-with-32-characters",
-      authorization: "Bearer scheduler-oidc-token",
+      authorization: "Bearer scheduler-test-secret-with-32-characters",
       "x-cloudscheduler": "true",
       ...(overrides ?? {})
     };
@@ -50,7 +66,7 @@ describe("internal scheduler routes", () => {
       method: "POST",
       url: "/v1/internal/scheduler/aggregate",
       headers: {
-        authorization: "Bearer scheduler-oidc-token",
+        authorization: "Bearer scheduler-test-secret-with-32-characters",
         "x-cloudscheduler": "true"
       }
     });
@@ -58,6 +74,24 @@ describe("internal scheduler routes", () => {
     expect(response.statusCode).toBe(401);
     expect(response.json()).toMatchObject({
       code: "SCHEDULER_UNAUTHORIZED"
+    });
+    expect(runSchedulerTaskMock).not.toHaveBeenCalled();
+  });
+
+  it("fails fast when scheduler shared secret is missing outside development", async () => {
+    configMock.SCHEDULER_SHARED_SECRET = undefined;
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/internal/scheduler/aggregate",
+      headers: {
+        authorization: "Bearer scheduler-test-secret-with-32-characters",
+        "x-cloudscheduler": "true"
+      }
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      code: "SCHEDULER_NOT_CONFIGURED"
     });
     expect(runSchedulerTaskMock).not.toHaveBeenCalled();
   });
@@ -74,6 +108,22 @@ describe("internal scheduler routes", () => {
     expect(response.statusCode).toBe(401);
     expect(response.json()).toMatchObject({
       code: "SCHEDULER_BEARER_REQUIRED"
+    });
+    expect(runSchedulerTaskMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects requests with bearer token that does not match configured scheduler secret", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/internal/scheduler/anomaly",
+      headers: schedulerHeaders({
+        authorization: "Bearer scheduler-oidc-token"
+      })
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      code: "SCHEDULER_BEARER_INVALID"
     });
     expect(runSchedulerTaskMock).not.toHaveBeenCalled();
   });
@@ -107,6 +157,26 @@ describe("internal scheduler routes", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({
       code: "SCHEDULER_BAD_REQUEST"
+    });
+    expect(runSchedulerTaskMock).not.toHaveBeenCalled();
+  });
+
+  it("rate-limits scheduler internal endpoint requests", async () => {
+    consumeRateLimitMock.mockResolvedValueOnce({
+      allowed: false,
+      current: 121,
+      retryAfterSec: 30
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/internal/scheduler/aggregate",
+      headers: schedulerHeaders()
+    });
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json()).toMatchObject({
+      code: "INTERNAL_RATE_LIMITED"
     });
     expect(runSchedulerTaskMock).not.toHaveBeenCalled();
   });
@@ -160,6 +230,34 @@ describe("internal scheduler routes", () => {
       ok: true,
       skipped: true,
       reason: "lease_not_acquired"
+    });
+  });
+
+  it("rejects pubsub push requests without the configured push secret", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/internal/pubsub/ingest",
+      payload: {}
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(processQueueMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("fails fast when pubsub push secret is missing outside development", async () => {
+    configMock.PUBSUB_PUSH_SHARED_SECRET = undefined;
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/internal/pubsub/ingest",
+      headers: {
+        "x-synteq-push-secret": "any"
+      },
+      payload: {}
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      code: "PUBSUB_PUSH_NOT_CONFIGURED"
     });
   });
 });

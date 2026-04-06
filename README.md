@@ -263,6 +263,8 @@ Ingestion security:
 
 - `INGEST_HMAC_SECRET`
 - `INGEST_HMAC_REQUIRED` (`true|false`)
+- `STRICT_CORS` (`true|false`, production hardening flag)
+- `REQUIRE_WEB_BASE_URL` (`true|false`, production hardening flag)
 - `INGEST_SIGNATURE_MAX_SKEW_SEC`
 - `MAX_INGEST_BODY_BYTES`
 - `INGEST_RATE_LIMIT_PER_MIN`
@@ -271,6 +273,7 @@ Queueing:
 
 - `PUBSUB_PROJECT_ID`
 - `PUBSUB_TOPIC_INGEST`
+- `ENFORCE_PUBSUB_ONLY` (`true|false`, production hardening flag)
 - `PUBSUB_PUSH_SHARED_SECRET`
 - `SCHEDULER_SHARED_SECRET`
 
@@ -306,6 +309,54 @@ Ops/perf:
 Secret Manager:
 
 - Any secret value can be provided as `sm://projects/<project>/secrets/<name>/versions/latest`.
+
+Production preflight and staged hardening (Phase 3A + 3B):
+
+- API startup fails fast in `NODE_ENV=production` when critical values are missing/weak:
+  - `JWT_SECRET`
+  - `SYNTEQ_API_KEY_SALT`
+  - `SCHEDULER_SHARED_SECRET`
+  - `PUBSUB_PUSH_SHARED_SECRET`
+  - `DASHBOARD_ADMIN_PASSWORD`
+  - `BREVO_API_KEY` (when `EMAIL_DEV_MODE=false`)
+- API startup warns (but does not fail) for deferred hardening settings:
+  - `REDIS_REQUIRED=false` or missing `REDIS_URL`
+  - `INGEST_HMAC_REQUIRED=false` or missing `INGEST_HMAC_SECRET`
+  - missing `PUBSUB_PROJECT_ID` / `PUBSUB_TOPIC_INGEST` (direct BigQuery fallback path)
+  - permissive `CORS_ORIGIN` or missing `WEB_BASE_URL`
+- Phase 3B enforcement flags are non-breaking by default (`false`) and can be enabled gradually:
+  - `REDIS_REQUIRED=true`: enforce Redis dependency for distributed state.
+  - `INGEST_HMAC_REQUIRED=true`: enforce signed ingestion payloads.
+  - `STRICT_CORS=true`: fail startup when production CORS is wildcard/permissive.
+  - `REQUIRE_WEB_BASE_URL=true`: fail startup for missing/localhost `WEB_BASE_URL`.
+  - `ENFORCE_PUBSUB_ONLY=true`: require Pub/Sub config and disable direct BigQuery ingest fallback.
+- Startup logs include structured visibility for rollout:
+  - `hardening_deferred` when a hardening-capable flag is disabled.
+  - `hardening_enforced` when a hardening-capable flag is enabled.
+
+## Environment Variables (Web)
+
+Canonical web API origin:
+
+- `SYNTEQ_WEB_API_BASE_URL`
+
+Compatibility fallback vars (keep aligned with the canonical value):
+
+- `API_BASE_URL`
+- `NEXT_PUBLIC_API_BASE_URL`
+
+Web runtime resolution order:
+
+1. `SYNTEQ_WEB_API_BASE_URL`
+2. `API_BASE_URL`
+3. `NEXT_PUBLIC_API_BASE_URL`
+4. `http://localhost:8080` (local fallback)
+
+For Cloudflare-hosted frontend staging prep (frontend runtime only, API remains on Cloud Run), see:
+
+- `docs/cloudflare-web-staging-prep.md`
+- `npm run check:cloudflare-env --workspace web`
+- `npm run build:cloudflare --workspace web`
 
 ## Local Run
 

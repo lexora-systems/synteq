@@ -21,11 +21,49 @@ type EnqueueExecutionOptions = {
   fingerprintOverride?: string;
 };
 
+let loggedDeferredPubSubFallback = false;
+let loggedEnforcedPubSubOnly = false;
+
 function hasPubSubConfigured(): boolean {
   return Boolean(config.PUBSUB_TOPIC_INGEST);
 }
 
+function assertPubSubReadyForEnforcedMode() {
+  if (!config.ENFORCE_PUBSUB_ONLY) {
+    return;
+  }
+
+  if (!loggedEnforcedPubSubOnly) {
+    loggedEnforcedPubSubOnly = true;
+    console.info({
+      event: "hardening_enforced",
+      flag: "ENFORCE_PUBSUB_ONLY"
+    });
+  }
+
+  if (!config.PUBSUB_PROJECT_ID || !config.PUBSUB_TOPIC_INGEST) {
+    throw new Error(
+      "ENFORCE_PUBSUB_ONLY=true requires PUBSUB_PROJECT_ID and PUBSUB_TOPIC_INGEST for ingestion enqueue."
+    );
+  }
+}
+
+function maybeLogDeferredPubSubFallback() {
+  if (config.ENFORCE_PUBSUB_ONLY || loggedDeferredPubSubFallback) {
+    return;
+  }
+
+  loggedDeferredPubSubFallback = true;
+  console.warn({
+    event: "hardening_deferred",
+    flag: "ENFORCE_PUBSUB_ONLY",
+    reason: "pubsub_topic_missing_direct_bigquery_fallback_active"
+  });
+}
+
 export async function enqueueExecutionEvent(input: IngestExecutionInput, requestId: string, options?: EnqueueExecutionOptions) {
+  assertPubSubReadyForEnforcedMode();
+
   const record = buildExecutionRecord(input, {
     requestId,
     source: "api",
@@ -40,6 +78,7 @@ export async function enqueueExecutionEvent(input: IngestExecutionInput, request
   };
 
   if (!hasPubSubConfigured()) {
+    maybeLogDeferredPubSubFallback();
     await writeExecutionRecordToBigQuery(record);
     runtimeMetrics.increment("ingest_fallback_direct_total");
     return {
@@ -68,6 +107,8 @@ export async function enqueueExecutionEvent(input: IngestExecutionInput, request
 }
 
 export async function enqueueHeartbeatEvent(input: IngestHeartbeatInput, requestId: string) {
+  assertPubSubReadyForEnforcedMode();
+
   const record = buildHeartbeatRecord(input, { requestId, source: "api" });
   const message: IngestQueueMessage = {
     type: "heartbeat",
@@ -78,6 +119,7 @@ export async function enqueueHeartbeatEvent(input: IngestHeartbeatInput, request
   };
 
   if (!hasPubSubConfigured()) {
+    maybeLogDeferredPubSubFallback();
     await writeHeartbeatRecordToBigQuery(record);
     runtimeMetrics.increment("ingest_fallback_direct_total");
     return {

@@ -40,6 +40,19 @@ These are preparation scripts only. `deploy:cloudflare:dry-run` does not publish
 Current OpenNext config intentionally uses dummy cache/tag/queue overrides to avoid speculative platform bindings during prep.
 If stronger cache/queue behavior is required later, add concrete Cloudflare bindings as a separate rollout step.
 
+## Required Worker Static Assets Binding
+
+OpenNext-generated Workers expect an `ASSETS` binding at runtime.
+Without it, requests to `/_next/static/*` and emitted CSS/media assets return `404`.
+
+`apps/web/wrangler.toml` must include:
+
+```toml
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+```
+
 ## Canonical Web API Environment Model
 
 Canonical variable:
@@ -62,15 +75,18 @@ Current web runtime resolves in this order:
 
 Staging:
 
-- `SYNTEQ_WEB_API_BASE_URL=https://<staging-api-cloud-run-host>`
-- `API_BASE_URL=https://<staging-api-cloud-run-host>`
-- `NEXT_PUBLIC_API_BASE_URL=https://<staging-api-cloud-run-host>`
+- `SYNTEQ_WEB_API_BASE_URL=https://<real-staging-api-cloud-run-host>`
+- `API_BASE_URL=https://<real-staging-api-cloud-run-host>`
+- `NEXT_PUBLIC_API_BASE_URL=https://<real-staging-api-cloud-run-host>`
 
 Production (later cutover phase):
 
 - `SYNTEQ_WEB_API_BASE_URL=https://<prod-api-cloud-run-host>`
 - `API_BASE_URL=https://<prod-api-cloud-run-host>`
 - `NEXT_PUBLIC_API_BASE_URL=https://<prod-api-cloud-run-host>`
+
+Do not ship placeholder defaults in `wrangler.toml` for these values.
+Set them in the Cloudflare Worker environment (Dashboard or CI-managed Wrangler deploy) so runtime always targets the real Cloud Run API host.
 
 Run env validation before deployment:
 

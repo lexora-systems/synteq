@@ -6,6 +6,8 @@ const alertPolicyFindFirstMock = vi.fn();
 const alertPolicyCreateMock = vi.fn();
 const enqueueExecutionEventMock = vi.fn();
 const startTrialIfEligibleMock = vi.fn();
+const resolveTenantAccessMock = vi.fn();
+const hasFeatureMock = vi.fn();
 
 vi.mock("../src/lib/prisma.js", () => ({
   prisma: {
@@ -27,6 +29,11 @@ vi.mock("../src/services/tenant-trial-service.js", () => ({
   startTrialIfEligible: startTrialIfEligibleMock
 }));
 
+vi.mock("../src/services/entitlement-guard-service.js", () => ({
+  resolveTenantAccess: resolveTenantAccessMock,
+  hasFeature: hasFeatureMock
+}));
+
 describe("simulation routes", () => {
   let app: ReturnType<typeof Fastify>;
   let role: "owner" | "admin" | "engineer" | "viewer";
@@ -38,6 +45,8 @@ describe("simulation routes", () => {
     alertPolicyCreateMock.mockReset();
     enqueueExecutionEventMock.mockReset();
     startTrialIfEligibleMock.mockReset();
+    resolveTenantAccessMock.mockReset();
+    hasFeatureMock.mockReset();
 
     workflowFindFirstMock.mockResolvedValue({
       id: "wf-1",
@@ -50,6 +59,10 @@ describe("simulation routes", () => {
       queued: false,
       fingerprint: "fp"
     });
+    resolveTenantAccessMock.mockResolvedValue({
+      effectivePlan: "free"
+    });
+    hasFeatureMock.mockReturnValue(false);
 
     app = Fastify();
     app.decorate("requireDashboardAuth", async (request: any) => {
@@ -130,6 +143,13 @@ describe("simulation routes", () => {
       scenario: "duplicate-webhook"
     });
     expect(firstOptions.fingerprintOverride).toBeTruthy();
+    expect(resolveTenantAccessMock).toHaveBeenCalledWith({
+      tenantId: "tenant-A"
+    });
+    expect(hasFeatureMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      "premium_intelligence"
+    );
     expect(startTrialIfEligibleMock).not.toHaveBeenCalled();
   });
 });

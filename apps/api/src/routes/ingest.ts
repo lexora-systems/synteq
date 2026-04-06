@@ -7,6 +7,11 @@ import { runtimeMetrics } from "../lib/runtime-metrics.js";
 import { consumeRateLimit } from "../services/rate-limit-service.js";
 import { ingestOperationalEvents } from "../services/operational-event-ingestion-service.js";
 import { startTrialIfEligible } from "../services/tenant-trial-service.js";
+import {
+  assertOperationalSourceOwnership,
+  assertWorkflowSourceOwnership,
+  isIngestSourceOwnershipError
+} from "../services/ingest-source-ownership-service.js";
 
 function getIngestionRateLimitKey(request: { apiKeyId?: string; ip: string }) {
   return request.apiKeyId ? `api_key:${request.apiKeyId}` : `ip:${request.ip}`;
@@ -89,10 +94,23 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       const simulationOnlyPayload = isSimulationOperationalIngest(body as { events: Array<Record<string, unknown>> });
 
       try {
+        await assertOperationalSourceOwnership({
+          tenantId: request.tenantId,
+          sourceValues: body.events.map((event) => String(event.source)),
+          owner: {
+            kind: "api_key",
+            apiKeyId: request.apiKeyId ?? null
+          }
+        });
+
         const result = await ingestOperationalEvents(body, {
           tenantId: request.tenantId,
           apiKeyId: request.apiKeyId,
-          requestId: request.id
+          requestId: request.id,
+          sourceOwner: {
+            kind: "api_key",
+            apiKeyId: request.apiKeyId ?? null
+          }
         });
         if (result.accepted > 0 && !simulationOnlyPayload) {
           await tryAutoStartTrialFromIngest({
@@ -115,6 +133,24 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
           request_id: request.id
         });
       } catch (error) {
+        if (isIngestSourceOwnershipError(error)) {
+          runtimeMetrics.increment("ingest_rejected_unregistered_source_total");
+          request.log.warn(
+            {
+              request_id: request.id,
+              tenant_id: request.tenantId,
+              api_key_id: request.apiKeyId ?? null,
+              code: error.code,
+              details: error.details ?? null
+            },
+            "Ingestion rejected due to source ownership policy"
+          );
+          return reply.code(error.statusCode).send({
+            error: error.message,
+            code: error.code
+          });
+        }
+
         runtimeMetrics.increment("ingest_operational_failed_total");
         request.log.error({ err: error, request_id: request.id }, "Failed to ingest operational events");
         return reply.code(500).send({ error: "Failed to ingest events" });
@@ -163,6 +199,11 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       }
 
       try {
+        await assertWorkflowSourceOwnership({
+          tenantId,
+          workflowId: body.workflow_id
+        });
+
         const queued = await enqueueExecutionEvent(body, request.id);
         await tryAutoStartTrialFromIngest({
           tenantId,
@@ -176,6 +217,24 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
           request_id: request.id
         });
       } catch (error) {
+        if (isIngestSourceOwnershipError(error)) {
+          runtimeMetrics.increment("ingest_rejected_unregistered_source_total");
+          request.log.warn(
+            {
+              request_id: request.id,
+              tenant_id: tenantId,
+              api_key_id: request.apiKeyId ?? null,
+              code: error.code,
+              details: error.details ?? null
+            },
+            "Execution ingest rejected due to unregistered workflow source"
+          );
+          return reply.code(error.statusCode).send({
+            error: error.message,
+            code: error.code
+          });
+        }
+
         runtimeMetrics.increment("ingest_execution_failed_total");
         request.log.error({ err: error, request_id: request.id }, "Failed to enqueue execution event");
         return reply.code(500).send({ error: "Failed to enqueue event" });
@@ -224,6 +283,11 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       }
 
       try {
+        await assertWorkflowSourceOwnership({
+          tenantId,
+          workflowId: body.workflow_id
+        });
+
         const queued = await enqueueHeartbeatEvent(body, request.id);
         await tryAutoStartTrialFromIngest({
           tenantId,
@@ -237,6 +301,24 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
           request_id: request.id
         });
       } catch (error) {
+        if (isIngestSourceOwnershipError(error)) {
+          runtimeMetrics.increment("ingest_rejected_unregistered_source_total");
+          request.log.warn(
+            {
+              request_id: request.id,
+              tenant_id: tenantId,
+              api_key_id: request.apiKeyId ?? null,
+              code: error.code,
+              details: error.details ?? null
+            },
+            "Heartbeat ingest rejected due to unregistered workflow source"
+          );
+          return reply.code(error.statusCode).send({
+            error: error.message,
+            code: error.code
+          });
+        }
+
         runtimeMetrics.increment("ingest_heartbeat_failed_total");
         request.log.error({ err: error, request_id: request.id }, "Failed to enqueue heartbeat event");
         return reply.code(500).send({ error: "Failed to enqueue heartbeat" });

@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { Permission } from "../auth/permissions.js";
 import { startTrialIfEligible } from "../services/tenant-trial-service.js";
 import { replyIfEntitlementError, requireSourceCapacity, resolveTenantAccess } from "../services/entitlement-guard-service.js";
+import { countCapacitySourcesForTenant } from "../services/source-service.js";
 
 const workflowRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -70,23 +71,12 @@ const workflowRoutes: FastifyPluginAsync = async (app) => {
         });
 
         if (!existingWorkflow) {
-          const [activeWorkflows, activeGitHubIntegrations] = await Promise.all([
-            prisma.workflow.count({
-              where: {
-                tenant_id: tenantId,
-                is_active: true
-              }
-            }),
-            prisma.gitHubIntegration.count({
-              where: {
-                tenant_id: tenantId,
-                is_active: true
-              }
-            })
-          ]);
+          const currentActiveSources = await countCapacitySourcesForTenant({
+            tenantId
+          });
           requireSourceCapacity({
             access,
-            currentActiveSources: activeWorkflows + activeGitHubIntegrations
+            currentActiveSources
           });
         }
       } catch (error) {

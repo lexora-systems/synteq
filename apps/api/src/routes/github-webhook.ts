@@ -178,7 +178,11 @@ const githubWebhookRoutes: FastifyPluginAsync = async (app) => {
       const ingested = await ingestOperationalEvents(normalized, {
         tenantId: integration.tenant_id,
         requestId: request.id,
-        idempotencyHints
+        idempotencyHints,
+        sourceOwner: {
+          kind: "github_integration",
+          integrationId: integration.id
+        }
       });
       runtimeMetrics.increment("github_webhook_ingested_total", ingested.persisted);
 

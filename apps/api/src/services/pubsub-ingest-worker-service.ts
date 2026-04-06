@@ -10,6 +10,7 @@ import { parseWithSchema } from "../utils/validation.js";
 import { config } from "../config.js";
 import { runtimeMetrics } from "../lib/runtime-metrics.js";
 import { redisDelete, redisKey, redisSetNx } from "../lib/redis.js";
+import { assertWorkflowSourceOwnership, isIngestSourceOwnershipError } from "./ingest-source-ownership-service.js";
 
 type WorkerResult = {
   skipped: boolean;
@@ -29,6 +30,27 @@ export async function processQueueMessage(message: IngestQueueMessage): Promise<
 
   if (message.type === "execution") {
     const payload = parseWithSchema(ingestExecutionSchema, message.payload);
+    try {
+      await assertWorkflowSourceOwnership({
+        tenantId: payload.tenant_id,
+        workflowId: payload.workflow_id
+      });
+    } catch (error) {
+      if (isIngestSourceOwnershipError(error)) {
+        runtimeMetrics.increment("ingest_worker_unregistered_source_total");
+        console.warn("ingest-worker.rejected-unregistered-workflow-source", {
+          tenant_id: payload.tenant_id,
+          workflow_id: payload.workflow_id,
+          code: error.code
+        });
+        return {
+          skipped: true,
+          reason: "unregistered workflow source"
+        };
+      }
+      throw error;
+    }
+
     const record = buildExecutionRecord(payload, {
       source: "pubsub",
       requestId: message.request_id,
@@ -47,6 +69,27 @@ export async function processQueueMessage(message: IngestQueueMessage): Promise<
   }
 
   const payload = parseWithSchema(ingestHeartbeatSchema, message.payload);
+  try {
+    await assertWorkflowSourceOwnership({
+      tenantId: payload.tenant_id,
+      workflowId: payload.workflow_id
+    });
+  } catch (error) {
+    if (isIngestSourceOwnershipError(error)) {
+      runtimeMetrics.increment("ingest_worker_unregistered_source_total");
+      console.warn("ingest-worker.rejected-unregistered-workflow-source", {
+        tenant_id: payload.tenant_id,
+        workflow_id: payload.workflow_id,
+        code: error.code
+      });
+      return {
+        skipped: true,
+        reason: "unregistered workflow source"
+      };
+    }
+    throw error;
+  }
+
   const record = buildHeartbeatRecord(payload, {
     source: "pubsub",
     requestId: message.request_id,

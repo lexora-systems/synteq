@@ -167,6 +167,34 @@ describe("operational events analysis service", () => {
     warn: () => undefined,
     error: () => undefined
   };
+  const proAccessResolver = async () => ({
+    tenantId: "tenant-A",
+    currentPlan: "pro" as const,
+    effectivePlan: "pro" as const,
+    entitlements: {} as Record<string, unknown>,
+    maxSources: null,
+    maxHistoryHours: null,
+    features: {
+      alerts: true,
+      team_members: true,
+      premium_intelligence: true,
+      trend_analysis: true
+    }
+  });
+  const freeAccessResolver = async () => ({
+    tenantId: "tenant-A",
+    currentPlan: "free" as const,
+    effectivePlan: "free" as const,
+    entitlements: {} as Record<string, unknown>,
+    maxSources: 1,
+    maxHistoryHours: 24,
+    features: {
+      alerts: false,
+      team_members: false,
+      premium_intelligence: false,
+      trend_analysis: false
+    }
+  });
   let baseEvents: EventRow[];
 
   beforeEach(() => {
@@ -198,7 +226,12 @@ describe("operational events analysis service", () => {
     );
 
     const { client, state } = makeClient({ events: baseEvents });
-    const result = await runOperationalEventsAnalysisBatch({ client: client as any, now, logger });
+    const result = await runOperationalEventsAnalysisBatch({
+      client: client as any,
+      now,
+      logger,
+      resolveAccess: proAccessResolver
+    });
 
     expect(result.processed_events).toBe(2);
     expect(state.findings.some((finding) => finding.rule_key === "github.workflow_failed")).toBe(true);
@@ -239,7 +272,12 @@ describe("operational events analysis service", () => {
     );
 
     const { client, state } = makeClient({ events: baseEvents });
-    await runOperationalEventsAnalysisBatch({ client: client as any, now, logger });
+    await runOperationalEventsAnalysisBatch({
+      client: client as any,
+      now,
+      logger,
+      resolveAccess: proAccessResolver
+    });
 
     const burstFinding = state.findings.find((finding) => finding.rule_key === "github.job_failed_burst");
     expect(burstFinding).toBeTruthy();
@@ -259,8 +297,18 @@ describe("operational events analysis service", () => {
     });
 
     const { client, state } = makeClient({ events: baseEvents });
-    const first = await runOperationalEventsAnalysisBatch({ client: client as any, now, logger });
-    const second = await runOperationalEventsAnalysisBatch({ client: client as any, now, logger });
+    const first = await runOperationalEventsAnalysisBatch({
+      client: client as any,
+      now,
+      logger,
+      resolveAccess: proAccessResolver
+    });
+    const second = await runOperationalEventsAnalysisBatch({
+      client: client as any,
+      now,
+      logger,
+      resolveAccess: proAccessResolver
+    });
 
     expect(first.processed_events).toBe(1);
     expect(second.processed_events).toBe(0);
@@ -296,13 +344,15 @@ describe("operational events analysis service", () => {
       client: client as any,
       now,
       logger,
-      batchSize: 1
+      batchSize: 1,
+      resolveAccess: proAccessResolver
     });
     const second = await runOperationalEventsAnalysisBatch({
       client: client as any,
       now,
       logger,
-      batchSize: 1
+      batchSize: 1,
+      resolveAccess: proAccessResolver
     });
 
     expect(first.processed_events).toBe(1);
@@ -322,7 +372,12 @@ describe("operational events analysis service", () => {
     });
 
     const { client, state } = makeClient({ events: baseEvents });
-    await runOperationalEventsAnalysisBatch({ client: client as any, now, logger });
+    await runOperationalEventsAnalysisBatch({
+      client: client as any,
+      now,
+      logger,
+      resolveAccess: proAccessResolver
+    });
 
     expect(state.findings).toHaveLength(0);
   });
@@ -340,10 +395,38 @@ describe("operational events analysis service", () => {
     });
 
     const { client, state } = makeClient({ events: baseEvents });
-    await runOperationalEventsAnalysisBatch({ client: client as any, now, logger });
+    await runOperationalEventsAnalysisBatch({
+      client: client as any,
+      now,
+      logger,
+      resolveAccess: proAccessResolver
+    });
 
     const stuck = state.findings.find((finding) => finding.rule_key === "github.job_stuck");
     expect(stuck).toBeTruthy();
     expect(stuck?.status).toBe("open");
+  });
+
+  it("skips premium operational finding generation for non-entitled tenants", async () => {
+    baseEvents.push({
+      id: "evt-60",
+      tenant_id: "tenant-A",
+      source: "github_actions",
+      event_type: "workflow_failed",
+      system: "acme/payments",
+      correlation_key: "acme/payments:workflow_run:999",
+      event_ts: new Date("2026-03-17T12:10:00.000Z"),
+      created_at: new Date("2026-03-17T12:10:00.000Z")
+    });
+
+    const { client, state } = makeClient({ events: baseEvents });
+    await runOperationalEventsAnalysisBatch({
+      client: client as any,
+      now,
+      logger,
+      resolveAccess: freeAccessResolver
+    });
+
+    expect(state.findings).toHaveLength(0);
   });
 });
