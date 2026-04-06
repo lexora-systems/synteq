@@ -43,7 +43,7 @@ test("public landing page renders", async ({ page }) => {
   await page.goto("/");
   await expect(
     page.getByRole("heading", {
-      name: /risk/i,
+      name: /detect operational issues before they escalate/i,
       level: 1
     })
   ).toBeVisible();
