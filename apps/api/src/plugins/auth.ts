@@ -9,6 +9,9 @@ import { hasRequiredRole } from "../utils/rbac.js";
 import { hasRequiredPermissions, type Permission } from "../auth/permissions.js";
 import { redisSetNx, redisKey } from "../lib/redis.js";
 
+let loggedDeferredIngestionSignatureWarning = false;
+let loggedEnforcedIngestionSignature = false;
+
 export async function registerAuthAndSecurity(app: FastifyInstance) {
   await app.register(fastifyCors, {
     origin: config.CORS_ORIGIN === "*" ? true : config.CORS_ORIGIN.split(",")
@@ -129,19 +132,37 @@ export async function registerAuthAndSecurity(app: FastifyInstance) {
   });
 
   app.decorate("requireIngestionSignature", async (request, reply) => {
+    const signatureHeader = request.headers["x-synteq-signature"];
+    const timestampHeader = request.headers["x-synteq-timestamp"];
+    const signatureRaw = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
+    const timestampRaw = Array.isArray(timestampHeader) ? timestampHeader[0] : timestampHeader;
+
     if (!config.INGEST_HMAC_REQUIRED) {
+      if ((!signatureRaw || !timestampRaw) && !loggedDeferredIngestionSignatureWarning) {
+        loggedDeferredIngestionSignatureWarning = true;
+        request.log.warn({
+          event: "hardening_deferred",
+          flag: "INGEST_HMAC_REQUIRED",
+          path: request.url,
+          reason: "missing_ingest_signature_headers"
+        });
+      }
       return;
+    }
+
+    if (!loggedEnforcedIngestionSignature) {
+      loggedEnforcedIngestionSignature = true;
+      request.log.info({
+        event: "hardening_enforced",
+        flag: "INGEST_HMAC_REQUIRED",
+        path: request.url
+      });
     }
 
     if (!config.INGEST_HMAC_SECRET) {
       reply.code(500).send({ error: "INGEST_HMAC_SECRET is required when INGEST_HMAC_REQUIRED=true" });
       return;
     }
-
-    const signatureHeader = request.headers["x-synteq-signature"];
-    const timestampHeader = request.headers["x-synteq-timestamp"];
-    const signatureRaw = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
-    const timestampRaw = Array.isArray(timestampHeader) ? timestampHeader[0] : timestampHeader;
 
     if (!signatureRaw || !timestampRaw) {
       reply.code(401).send({ error: "Missing X-Synteq-Signature or X-Synteq-Timestamp header" });

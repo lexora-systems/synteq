@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ResolvedTenantAccess } from "../src/services/entitlement-guard-service.js";
 
 const openOrRefreshBridgeIncidentMock = vi.fn();
 const resolveBridgeIncidentMock = vi.fn();
@@ -150,6 +151,63 @@ function makeClient(seed: { findings: FindingRow[]; links?: LinkRow[] }) {
 }
 
 describe("incident bridge service", () => {
+  const proAccessResolver = async (): Promise<ResolvedTenantAccess> => ({
+    tenantId: "tenant-A",
+    currentPlan: "pro",
+    effectivePlan: "pro",
+    entitlements: {
+      tenant_id: "tenant-A",
+      current_plan: "pro",
+      effective_plan: "pro",
+      trial: {
+        status: "none",
+        available: false,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
+    },
+    maxSources: null,
+    maxHistoryHours: null,
+    features: {
+      alerts: true,
+      team_members: true,
+      premium_intelligence: true,
+      trend_analysis: true
+    }
+  });
+  const freeAccessResolver = async (): Promise<ResolvedTenantAccess> => ({
+    tenantId: "tenant-A",
+    currentPlan: "free",
+    effectivePlan: "free",
+    entitlements: {
+      tenant_id: "tenant-A",
+      current_plan: "free",
+      effective_plan: "free",
+      trial: {
+        status: "none",
+        available: true,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
+    },
+    maxSources: 1,
+    maxHistoryHours: 24,
+    features: {
+      alerts: false,
+      team_members: false,
+      premium_intelligence: false,
+      trend_analysis: false
+    }
+  });
+
   beforeEach(() => {
     vi.resetModules();
     openOrRefreshBridgeIncidentMock.mockReset();
@@ -182,7 +240,11 @@ describe("incident bridge service", () => {
     });
 
     const { runIncidentBridgeBatch } = await import("../src/services/incident-bridge-service.js");
-    const result = await runIncidentBridgeBatch({ client: client as any, logger: { info: () => undefined, warn: () => undefined, error: () => undefined } });
+    const result = await runIncidentBridgeBatch({
+      client: client as any,
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      resolveAccess: proAccessResolver
+    });
 
     expect(result.incidents_created).toBe(1);
     expect(openOrRefreshBridgeIncidentMock).toHaveBeenCalledWith(
@@ -224,8 +286,16 @@ describe("incident bridge service", () => {
     });
 
     const { runIncidentBridgeBatch } = await import("../src/services/incident-bridge-service.js");
-    const first = await runIncidentBridgeBatch({ client: client as any, logger: { info: () => undefined, warn: () => undefined, error: () => undefined } });
-    const second = await runIncidentBridgeBatch({ client: client as any, logger: { info: () => undefined, warn: () => undefined, error: () => undefined } });
+    const first = await runIncidentBridgeBatch({
+      client: client as any,
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      resolveAccess: proAccessResolver
+    });
+    const second = await runIncidentBridgeBatch({
+      client: client as any,
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      resolveAccess: proAccessResolver
+    });
 
     expect(first.processed_findings).toBe(1);
     expect(second.processed_findings).toBe(0);
@@ -270,7 +340,11 @@ describe("incident bridge service", () => {
     });
 
     const { runIncidentBridgeBatch } = await import("../src/services/incident-bridge-service.js");
-    const result = await runIncidentBridgeBatch({ client: client as any, logger: { info: () => undefined, warn: () => undefined, error: () => undefined } });
+    const result = await runIncidentBridgeBatch({
+      client: client as any,
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      resolveAccess: proAccessResolver
+    });
 
     expect(result.incidents_refreshed).toBe(1);
     expect(openOrRefreshBridgeIncidentMock).toHaveBeenCalledWith(
@@ -315,7 +389,11 @@ describe("incident bridge service", () => {
     resolveBridgeIncidentMock.mockResolvedValue({ resolved: true });
 
     const { runIncidentBridgeBatch } = await import("../src/services/incident-bridge-service.js");
-    const result = await runIncidentBridgeBatch({ client: client as any, logger: { info: () => undefined, warn: () => undefined, error: () => undefined } });
+    const result = await runIncidentBridgeBatch({
+      client: client as any,
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      resolveAccess: proAccessResolver
+    });
 
     expect(result.incidents_resolved).toBe(1);
     expect(resolveBridgeIncidentMock).toHaveBeenCalledWith(
@@ -346,9 +424,47 @@ describe("incident bridge service", () => {
 
     const { client } = makeClient({ findings: [finding] });
     const { runIncidentBridgeBatch } = await import("../src/services/incident-bridge-service.js");
-    const result = await runIncidentBridgeBatch({ client: client as any, logger: { info: () => undefined, warn: () => undefined, error: () => undefined } });
+    const result = await runIncidentBridgeBatch({
+      client: client as any,
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      resolveAccess: proAccessResolver
+    });
 
     expect(result.processed_findings).toBe(0);
+    expect(openOrRefreshBridgeIncidentMock).not.toHaveBeenCalled();
+    expect(resolveBridgeIncidentMock).not.toHaveBeenCalled();
+  });
+
+  it("skips incident bridge actions for non-entitled tenants", async () => {
+    const finding: FindingRow = {
+      id: "finding-6",
+      tenant_id: "tenant-A",
+      source: "github_actions",
+      rule_key: "github.workflow_failed",
+      severity: "high",
+      status: "open",
+      system: "acme/payments",
+      correlation_key: null,
+      fingerprint: "fp-6",
+      summary: "Workflow failed",
+      evidence_json: {},
+      first_seen_at: new Date("2026-03-17T10:00:00.000Z"),
+      last_seen_at: new Date("2026-03-17T10:05:00.000Z"),
+      updated_at: new Date("2026-03-17T10:06:00.000Z"),
+      event_count: 1
+    };
+
+    const { client } = makeClient({ findings: [finding] });
+    const { runIncidentBridgeBatch } = await import("../src/services/incident-bridge-service.js");
+    const result = await runIncidentBridgeBatch({
+      client: client as any,
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      resolveAccess: freeAccessResolver
+    });
+
+    expect(result.incidents_created).toBe(0);
+    expect(result.incidents_refreshed).toBe(0);
+    expect(result.incidents_resolved).toBe(0);
     expect(openOrRefreshBridgeIncidentMock).not.toHaveBeenCalled();
     expect(resolveBridgeIncidentMock).not.toHaveBeenCalled();
   });

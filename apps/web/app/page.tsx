@@ -5,26 +5,26 @@ import { resolveActivationState } from "../lib/activation";
 
 const capabilityItems = [
   {
-    title: "Monitors pipelines",
-    description: "Track execution health across CI/CD, workflow automation, and deployment stages in one operating view."
+    title: "Continuously analyzes your systems",
+    description: "Tracks execution signals across CI/CD, workflows, automations, and deployments to maintain a real-time view of system behavior."
   },
   {
-    title: "Detects anomalies",
-    description: "Identify drift in failures, latency, retries, and cost before instability becomes a customer-facing incident."
+    title: "Detects abnormal behavior early",
+    description: "Identifies drift in failures, latency, retries, and cost patterns before instability becomes a production issue."
   },
   {
-    title: "Simulates risk",
-    description: "Run controlled reliability scenarios to test response posture before production traffic forces a decision."
+    title: "Simulates risk before it happens",
+    description: "Run controlled scenarios to understand how your system behaves under stress and validate response readiness."
   },
   {
-    title: "Surfaces incidents early",
-    description: "Transform weak signals into actionable incident context with severity, guidance, and response direction."
+    title: "Surfaces incidents before escalation",
+    description: "Transforms weak signals into actionable incidents with clear severity, risk context, and response direction."
   }
 ];
 
 const benefitItems = [
   {
-    title: "Detect pipeline instability early",
+    title: "Detect instability early",
     description: "Catch rising failure and retry patterns while there is still time to prevent incident spread."
   },
   {
@@ -214,12 +214,12 @@ export default async function PublicLandingPage() {
 
         <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-4 pb-14 pt-8 sm:px-6 lg:grid-cols-12 lg:px-8 lg:pb-24 lg:pt-14">
           <div className="lg:col-span-10">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/90">Pipeline Intelligence Platform</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/90">DEVOPS RISK DETECTION</p>
             <h1 className="mt-4 max-w-[820px] text-4xl font-semibold leading-[1.06] text-slate-50 sm:text-6xl lg:text-7xl">
-              Understand Risk Across Your Entire DevOps Pipeline
+              Detect Operational Issues Before They Escalate
             </h1>
             <p className="mt-6 max-w-[680px] text-base leading-7 text-slate-200/90 sm:text-2xl sm:leading-9">
-              Synteq monitors your DevOps automation systems and detects operational risk before incidents occur.
+              Synteq continuously analyzes execution signals across your systems, detects abnormal behavior, and surfaces incidents before they impact production.
             </p>
             <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
@@ -236,7 +236,7 @@ export default async function PublicLandingPage() {
               </Link>
             </div>
             <ul className="mt-8 grid gap-3 text-sm text-cyan-50/95 sm:grid-cols-3">
-              <li className="rounded-xl border border-cyan-300/30 bg-slate-900/40 px-3 py-3 backdrop-blur">Detect pipeline instability early</li>
+              <li className="rounded-xl border border-cyan-300/30 bg-slate-900/40 px-3 py-3 backdrop-blur">Detect instability early</li>
               <li className="rounded-xl border border-cyan-300/30 bg-slate-900/40 px-3 py-3 backdrop-blur">Simulate operational risk</li>
               <li className="rounded-xl border border-cyan-300/30 bg-slate-900/40 px-3 py-3 backdrop-blur">Surface incidents before escalation</li>
             </ul>
@@ -287,7 +287,10 @@ export default async function PublicLandingPage() {
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">What Synteq Does</p>
-            <h2 className="mt-2 text-3xl font-semibold text-slate-50 sm:text-4xl">Risk intelligence built for DevOps execution</h2>
+            <h2 className="mt-2 text-3xl font-semibold text-slate-50 sm:text-4xl">Always-on detection and prevention for operational risk</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-300">
+              Synteq continuously analyzes execution signals across your systems, detects abnormal behavior in real time, and turns weak signals into actionable incidents.
+            </p>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-2">
             {capabilityItems.map((item) => (

@@ -7,6 +7,7 @@ const findFirstMock = vi.fn();
 const updateMock = vi.fn();
 const countMock = vi.fn();
 const workflowCountMock = vi.fn();
+const workflowFindManyMock = vi.fn();
 const resolveTenantAccessMock = vi.fn();
 
 vi.mock("../src/config.js", () => ({
@@ -52,6 +53,7 @@ vi.mock("../src/lib/prisma.js", () => ({
       count: countMock
     },
     workflow: {
+      findMany: workflowFindManyMock,
       count: workflowCountMock
     }
   }
@@ -69,6 +71,7 @@ describe("control plane github integrations routes", () => {
     updateMock.mockReset();
     countMock.mockReset();
     workflowCountMock.mockReset();
+    workflowFindManyMock.mockReset();
     resolveTenantAccessMock.mockReset();
 
     findManyMock.mockResolvedValue([
@@ -98,6 +101,7 @@ describe("control plane github integrations routes", () => {
     });
     countMock.mockResolvedValue(0);
     workflowCountMock.mockResolvedValue(0);
+    workflowFindManyMock.mockResolvedValue([]);
     updateMock.mockResolvedValue({
       id: "gh-1",
       webhook_id: "hook-1",
@@ -242,8 +246,19 @@ describe("control plane github integrations routes", () => {
         trend_analysis: false
       }
     });
-    workflowCountMock.mockResolvedValueOnce(1);
-    countMock.mockResolvedValueOnce(0);
+    workflowFindManyMock.mockResolvedValueOnce([
+      {
+        id: "wf-1",
+        tenant_id: "tenant-A",
+        display_name: "Payments Daily",
+        slug: "payments-daily",
+        system: "airflow",
+        environment: "prod",
+        is_active: true,
+        created_at: new Date("2026-03-30T00:00:00.000Z")
+      }
+    ]);
+    findManyMock.mockResolvedValueOnce([]);
 
     const response = await app.inject({
       method: "POST",

@@ -1,5 +1,6 @@
 import { sha256 } from "../utils/crypto.js";
 import { prisma } from "../lib/prisma.js";
+import { hasFeature, resolveTenantAccess, type ResolvedTenantAccess } from "./entitlement-guard-service.js";
 import {
   githubJobStartTypes,
   githubJobTerminalTypes,
@@ -55,6 +56,8 @@ type AnalysisClient = {
     update: (args: Record<string, unknown>) => Promise<unknown>;
   };
 };
+
+type TenantAccessResolver = (input: { tenantId: string; now: Date }) => Promise<ResolvedTenantAccess>;
 
 const defaultLogger: Logger = {
   info: (message, payload) => console.info(message, payload ?? {}),
@@ -202,11 +205,38 @@ export async function runOperationalEventsAnalysisBatch(input?: {
   now?: Date;
   logger?: Logger;
   batchSize?: number;
+  resolveAccess?: TenantAccessResolver;
 }): Promise<OperationalEventsAnalysisRunResult> {
   const client = input?.client ?? (prisma as unknown as AnalysisClient);
   const now = input?.now ?? new Date();
   const logger = input?.logger ?? defaultLogger;
   const batchSize = input?.batchSize ?? operationalEventsRules.batchSize;
+  const resolveAccess = input?.resolveAccess ?? resolveTenantAccess;
+  const tenantPremiumIntelligenceCache = new Map<string, boolean>();
+  const loggedEntitlementDenials = new Set<string>();
+
+  async function hasPremiumIntelligence(tenantId: string): Promise<boolean> {
+    const cached = tenantPremiumIntelligenceCache.get(tenantId);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const access = await resolveAccess({
+      tenantId,
+      now
+    });
+    const entitled = hasFeature(access, "premium_intelligence");
+    tenantPremiumIntelligenceCache.set(tenantId, entitled);
+    if (!entitled && !loggedEntitlementDenials.has(tenantId)) {
+      loggedEntitlementDenials.add(tenantId);
+      logger.info("operational-events-analysis.entitlement.skipped", {
+        tenant_id: tenantId,
+        feature: "premium_intelligence",
+        effective_plan: access.effectivePlan
+      });
+    }
+    return entitled;
+  }
 
   const cursor = await client.operationalEventAnalysisCursor.findUnique({
     where: {
@@ -271,6 +301,9 @@ export async function runOperationalEventsAnalysisBatch(input?: {
 
   for (const event of events) {
     if (event.source !== "github_actions") {
+      continue;
+    }
+    if (!(await hasPremiumIntelligence(event.tenant_id))) {
       continue;
     }
 

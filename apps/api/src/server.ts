@@ -10,7 +10,8 @@ await resolveEnvironmentSecrets([
   "BREVO_API_KEY",
   "DASHBOARD_ADMIN_PASSWORD",
   "INGEST_HMAC_SECRET",
-  "PUBSUB_PUSH_SHARED_SECRET"
+  "PUBSUB_PUSH_SHARED_SECRET",
+  "SCHEDULER_SHARED_SECRET"
 ]);
 
 const [{ buildApp }, { config }, { prisma }] = await Promise.all([

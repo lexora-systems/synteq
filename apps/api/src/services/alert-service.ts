@@ -226,6 +226,7 @@ export async function dispatchPendingAlertEvents(limit = 100) {
     take: limit
   });
   const tenantAccessCache = new Map<string, ResolvedTenantAccess>();
+  const loggedEntitlementDenials = new Set<string>();
 
   async function accessForTenant(tenantId: string): Promise<ResolvedTenantAccess> {
     const cached = tenantAccessCache.get(tenantId);
@@ -244,6 +245,14 @@ export async function dispatchPendingAlertEvents(limit = 100) {
     const incident = event.incident;
     const access = await accessForTenant(incident.tenant_id);
     if (!hasFeature(access, "alerts")) {
+      if (!loggedEntitlementDenials.has(incident.tenant_id)) {
+        loggedEntitlementDenials.add(incident.tenant_id);
+        console.info("alerts.entitlement.skipped", {
+          tenant_id: incident.tenant_id,
+          feature: "alerts",
+          effective_plan: access.effectivePlan
+        });
+      }
       await skipPendingAlertForPlan({
         eventId: event.id,
         incidentId: incident.id,

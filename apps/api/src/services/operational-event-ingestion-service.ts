@@ -14,6 +14,10 @@ import {
   type OperationalEventAnalysisHandoff,
   type OperationalEventForAnalysis
 } from "./operational-event-analysis-hook-service.js";
+import {
+  assertOperationalSourceOwnership,
+  type OperationalSourceOwner
+} from "./ingest-source-ownership-service.js";
 
 type OperationalEventSeverity = "warn" | "low" | "medium" | "high" | "critical";
 
@@ -86,11 +90,25 @@ function buildAnalysisPayload(events: NormalizedOperationalEvent[]): Operational
 
 export async function ingestOperationalEvents(
   request: IngestOperationalEventsRequest,
-  context: { tenantId: string; apiKeyId?: string; requestId: string; idempotencyHints?: Array<IdempotencyHint | undefined> }
+  context: {
+    tenantId: string;
+    apiKeyId?: string;
+    requestId: string;
+    idempotencyHints?: Array<IdempotencyHint | undefined>;
+    sourceOwner?: OperationalSourceOwner;
+  }
 ): Promise<IngestOperationalEventsResult> {
   const normalizedEvents = request.events.map((event) => normalizeOperationalEvent(event));
   if (normalizedEvents.length === 0) {
     throw new Error("No events supplied");
+  }
+
+  if (context.sourceOwner) {
+    await assertOperationalSourceOwnership({
+      tenantId: context.tenantId,
+      sourceValues: normalizedEvents.map((event) => event.source),
+      owner: context.sourceOwner
+    });
   }
 
   let ingested = 0;

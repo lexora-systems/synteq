@@ -43,7 +43,7 @@ test("public landing page renders", async ({ page }) => {
   await page.goto("/");
   await expect(
     page.getByRole("heading", {
-      name: /risk/i,
+      name: /detect operational issues before they escalate/i,
       level: 1
     })
   ).toBeVisible();
@@ -51,7 +51,7 @@ test("public landing page renders", async ({ page }) => {
 
 test("/login renders and invalid login is handled", async ({ page }) => {
   await page.goto("/login");
-  await expect(page.getByRole("heading", { name: "Sign in to monitoring dashboard" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sign in to Synteq risk detection" })).toBeVisible();
 
   await page.getByLabel("Email").fill("activated@synteq.local");
   await page.getByLabel("Password").fill("WrongPassword123!");
@@ -66,10 +66,11 @@ test("successful login routes to /welcome", async ({ page }) => {
   await expect(page).toHaveURL(/\/welcome$/);
 });
 
-test("non-activated user visiting /overview is redirected to /welcome", async ({ page }) => {
+test("non-activated user can access /overview", async ({ page }) => {
   await setSession(page, "nonactivated");
   await page.goto("/overview");
-  await expect(page).toHaveURL(/\/welcome$/);
+  await expect(page).toHaveURL(/\/overview$/);
+  await expect(page.getByRole("heading", { name: /always-on risk detection and prevention/i, level: 2 })).toBeVisible();
 });
 
 test("activated user can access /overview", async ({ page }) => {

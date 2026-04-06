@@ -764,6 +764,7 @@ export async function runAnomalyDetectionJob(now = new Date()) {
     }
   });
   const tenantAccessCache = new Map<string, ResolvedTenantAccess>();
+  const loggedEntitlementDenials = new Set<string>();
 
   async function accessForTenant(tenantId: string): Promise<ResolvedTenantAccess> {
     const cached = tenantAccessCache.get(tenantId);
@@ -782,6 +783,14 @@ export async function runAnomalyDetectionJob(now = new Date()) {
   for (const policy of policies) {
     const access = await accessForTenant(policy.tenant_id);
     if (!hasFeature(access, "premium_intelligence")) {
+      if (!loggedEntitlementDenials.has(policy.tenant_id)) {
+        loggedEntitlementDenials.add(policy.tenant_id);
+        console.info("anomaly-detection.entitlement.skipped", {
+          tenant_id: policy.tenant_id,
+          feature: "premium_intelligence",
+          effective_plan: access.effectivePlan
+        });
+      }
       continue;
     }
 

@@ -200,6 +200,9 @@ describe("github webhook api", () => {
       expect.any(Object),
       expect.objectContaining({
         tenantId: "tenant-A",
+        sourceOwner: expect.objectContaining({
+          kind: "github_integration"
+        }),
         idempotencyHints: [expect.objectContaining({ namespace: "github_delivery" })]
       })
     );

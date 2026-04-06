@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { sha256 } from "../utils/crypto.js";
+import { hasFeature, resolveTenantAccess, type ResolvedTenantAccess } from "./entitlement-guard-service.js";
 import {
   incidentSummaryFromFinding,
   incidentTitleForRule,
@@ -61,6 +62,8 @@ type BridgeClient = {
     update: (args: Record<string, unknown>) => Promise<unknown>;
   };
 };
+
+type TenantAccessResolver = (input: { tenantId: string; now: Date }) => Promise<ResolvedTenantAccess>;
 
 const defaultLogger: Logger = {
   info: (message, payload) => console.info(message, payload ?? {}),
@@ -130,12 +133,39 @@ export async function runIncidentBridgeBatch(input?: {
   client?: BridgeClient;
   logger?: Logger;
   batchSize?: number;
+  resolveAccess?: TenantAccessResolver;
 }): Promise<IncidentBridgeRunResult> {
   const client = input?.client ?? (prisma as unknown as BridgeClient);
   const logger = input?.logger ?? defaultLogger;
   const batchSize = input?.batchSize ?? incidentBridgeRules.batchSize;
   const workerKey = incidentBridgeRules.workerKey;
   const now = new Date();
+  const resolveAccess = input?.resolveAccess ?? resolveTenantAccess;
+  const tenantPremiumIntelligenceCache = new Map<string, boolean>();
+  const loggedEntitlementDenials = new Set<string>();
+
+  async function hasPremiumIntelligence(tenantId: string): Promise<boolean> {
+    const cached = tenantPremiumIntelligenceCache.get(tenantId);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const access = await resolveAccess({
+      tenantId,
+      now
+    });
+    const entitled = hasFeature(access, "premium_intelligence");
+    tenantPremiumIntelligenceCache.set(tenantId, entitled);
+    if (!entitled && !loggedEntitlementDenials.has(tenantId)) {
+      loggedEntitlementDenials.add(tenantId);
+      logger.info("incident-bridge.entitlement.skipped", {
+        tenant_id: tenantId,
+        feature: "premium_intelligence",
+        effective_plan: access.effectivePlan
+      });
+    }
+    return entitled;
+  }
 
   const cursor = await client.incidentBridgeCursor.findUnique({
     where: {
@@ -213,6 +243,10 @@ export async function runIncidentBridgeBatch(input?: {
   let incidentsResolved = 0;
 
   for (const finding of findings) {
+    if (!(await hasPremiumIntelligence(finding.tenant_id))) {
+      continue;
+    }
+
     if (!isEligibleFinding({ source: finding.source, ruleKey: finding.rule_key, status: finding.status })) {
       continue;
     }
@@ -255,8 +289,20 @@ export async function runIncidentBridgeBatch(input?: {
 
       if (result.action === "created") {
         incidentsCreated += 1;
+        logger.info("incident-bridge.finding.linked", {
+          tenant_id: finding.tenant_id,
+          finding_id: finding.id,
+          incident_id: result.incident.id,
+          action: "created"
+        });
       } else {
         incidentsRefreshed += 1;
+        logger.info("incident-bridge.finding.linked", {
+          tenant_id: finding.tenant_id,
+          finding_id: finding.id,
+          incident_id: result.incident.id,
+          action: "updated"
+        });
       }
       continue;
     }
@@ -281,6 +327,11 @@ export async function runIncidentBridgeBatch(input?: {
     });
     if (resolution.resolved) {
       incidentsResolved += 1;
+      logger.info("incident-bridge.finding.resolved", {
+        tenant_id: finding.tenant_id,
+        finding_id: finding.id,
+        incident_id: existingLink.incident_id
+      });
     }
   }
 

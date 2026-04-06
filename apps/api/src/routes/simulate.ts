@@ -3,6 +3,7 @@ import { simulationRequestSchema, simulationScenarioSchema, type SimulationScena
 import { Permission, hasRequiredPermissions } from "../auth/permissions.js";
 import { parseWithSchema } from "../utils/validation.js";
 import { runSimulationScenario } from "../services/simulation-service.js";
+import { hasFeature, resolveTenantAccess } from "../services/entitlement-guard-service.js";
 
 function canRunSimulation(role: "owner" | "admin" | "engineer" | "viewer") {
   return (
@@ -27,6 +28,20 @@ function registerScenarioRoute(app: FastifyInstance, scenario: SimulationScenari
 
       const body = parseWithSchema(simulationRequestSchema, request.body);
       const parsedScenario = parseWithSchema(simulationScenarioSchema, scenario);
+      const access = await resolveTenantAccess({
+        tenantId: request.authUser.tenant_id
+      });
+      const premiumIntelligence = hasFeature(access, "premium_intelligence");
+      request.log.info(
+        {
+          request_id: request.id,
+          tenant_id: request.authUser.tenant_id,
+          feature: "premium_intelligence",
+          entitled: premiumIntelligence,
+          outcome: "simulation_allowed"
+        },
+        "simulation.entitlement.decision"
+      );
 
       try {
         const result = await runSimulationScenario({
