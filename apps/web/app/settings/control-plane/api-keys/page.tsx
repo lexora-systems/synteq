@@ -123,15 +123,15 @@ export default async function ApiKeysControlPlanePage() {
           <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 md:grid-cols-3">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What Synteq receives</p>
-              <p className="mt-1">Event payloads and operational signals from your pipeline tooling.</p>
+              <p className="mt-1">Operational signal metadata such as status, timing, retries, and workflow identifiers.</p>
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What Synteq does NOT receive</p>
-              <p className="mt-1">Interactive system access, shell access, or full repository permissions.</p>
+              <p className="mt-1">Interactive system access, source code, full logs, artifact contents, or customer secrets by default.</p>
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Access model</p>
-              <p className="mt-1">Event-based, signal-level access. Revoke keys anytime.</p>
+              <p className="mt-1">API key authentication for event ingestion. Keys authenticate senders and are not used as analysis data.</p>
             </div>
           </div>
           <div className="mt-3">

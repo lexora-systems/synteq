@@ -61,15 +61,15 @@ export default async function ConnectedSourcesPage() {
           <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 md:grid-cols-3">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What Synteq receives</p>
-              <p className="mt-1">Operational signals, event metadata, and source heartbeat activity.</p>
+              <p className="mt-1">Operational signal metadata, source ownership context, and heartbeat activity used for risk detection.</p>
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What Synteq does NOT receive</p>
-              <p className="mt-1">Full system access, direct execution control, or broad repository permissions.</p>
+              <p className="mt-1">Source code, full execution logs, artifact contents, or customer secrets by default.</p>
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Control</p>
-              <p className="mt-1">Disconnect integrations, revoke keys, and disable alerts anytime.</p>
+              <p className="mt-1">Disconnect integrations, rotate/revoke credentials, and disable alerts anytime.</p>
             </div>
           </div>
         </div>

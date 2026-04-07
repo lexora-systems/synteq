@@ -2,6 +2,9 @@ import type { FastifyReply } from "fastify";
 import { getTenantEntitlements, type BillingPlan, type TenantEntitlements } from "./tenant-trial-service.js";
 
 export type EntitlementFeature = "alerts" | "team_members" | "premium_intelligence" | "trend_analysis";
+export type DetectionLevel = "basic" | "full";
+export type AlertMode = "basic_email" | "full";
+export type IncidentMode = "basic" | "full";
 
 export type ResolvedTenantAccess = {
   tenantId: string;
@@ -11,6 +14,10 @@ export type ResolvedTenantAccess = {
   maxSources: number | null;
   maxHistoryHours: number | null;
   features: Record<EntitlementFeature, boolean>;
+  detectionLevel: DetectionLevel;
+  alertMode: AlertMode;
+  incidentMode: IncidentMode;
+  simulationAllowed: boolean;
 };
 
 const PLAN_RANK: Record<BillingPlan, number> = {
@@ -111,15 +118,20 @@ export function replyIfEntitlementError(reply: FastifyReply, requestId: string, 
 
 export function resolveTenantAccessFromEntitlements(entitlements: TenantEntitlements): ResolvedTenantAccess {
   const effectivePlan = entitlements.effective_plan;
+  const isFreeEffectivePlan = effectivePlan === "free";
 
   return {
     tenantId: entitlements.tenant_id,
     currentPlan: entitlements.current_plan,
     effectivePlan,
     entitlements,
-    maxSources: effectivePlan === "free" ? 1 : null,
-    maxHistoryHours: effectivePlan === "free" ? 24 : null,
-    features: FEATURE_MATRIX[effectivePlan]
+    maxSources: isFreeEffectivePlan ? 1 : null,
+    maxHistoryHours: isFreeEffectivePlan ? 24 : null,
+    features: FEATURE_MATRIX[effectivePlan],
+    detectionLevel: isFreeEffectivePlan ? "basic" : "full",
+    alertMode: isFreeEffectivePlan ? "basic_email" : "full",
+    incidentMode: isFreeEffectivePlan ? "basic" : "full",
+    simulationAllowed: true
   };
 }
 

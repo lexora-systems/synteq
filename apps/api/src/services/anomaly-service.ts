@@ -13,7 +13,17 @@ import {
 } from "../utils/anomaly-math.js";
 import { buildIncidentFingerprint } from "../utils/crypto.js";
 import { markBreachedSla } from "./incidents-service.js";
-import { hasFeature, resolveTenantAccess, type ResolvedTenantAccess } from "./entitlement-guard-service.js";
+import { resolveTenantAccess, type DetectionLevel, type ResolvedTenantAccess } from "./entitlement-guard-service.js";
+
+const BASIC_DETECTION_METRICS = new Set(["failure_rate", "retry_rate", "duplicate_rate", "latency_p95", "missing_heartbeat"]);
+
+export function isMetricSupportedAtDetectionLevel(metric: string, detectionLevel: DetectionLevel): boolean {
+  if (detectionLevel === "full") {
+    return true;
+  }
+
+  return BASIC_DETECTION_METRICS.has(metric);
+}
 
 type WindowSummary = {
   total: number;
@@ -764,7 +774,7 @@ export async function runAnomalyDetectionJob(now = new Date()) {
     }
   });
   const tenantAccessCache = new Map<string, ResolvedTenantAccess>();
-  const loggedEntitlementDenials = new Set<string>();
+  const loggedMetricDepthSkips = new Set<string>();
 
   async function accessForTenant(tenantId: string): Promise<ResolvedTenantAccess> {
     const cached = tenantAccessCache.get(tenantId);
@@ -782,12 +792,15 @@ export async function runAnomalyDetectionJob(now = new Date()) {
 
   for (const policy of policies) {
     const access = await accessForTenant(policy.tenant_id);
-    if (!hasFeature(access, "premium_intelligence")) {
-      if (!loggedEntitlementDenials.has(policy.tenant_id)) {
-        loggedEntitlementDenials.add(policy.tenant_id);
-        console.info("anomaly-detection.entitlement.skipped", {
+
+    if (!isMetricSupportedAtDetectionLevel(policy.metric, access.detectionLevel)) {
+      const skipKey = `${policy.tenant_id}:${policy.metric}:${access.detectionLevel}`;
+      if (!loggedMetricDepthSkips.has(skipKey)) {
+        loggedMetricDepthSkips.add(skipKey);
+        console.info("anomaly-detection.metric-depth.skipped", {
           tenant_id: policy.tenant_id,
-          feature: "premium_intelligence",
+          metric: policy.metric,
+          detection_level: access.detectionLevel,
           effective_plan: access.effectivePlan
         });
       }

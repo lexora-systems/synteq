@@ -5,6 +5,8 @@ export const incidentBridgeRules = {
   eligibleRuleKeys: [
     "github.workflow_failed",
     "github.job_failed_burst",
+    "github.retry_spike",
+    "github.duration_drift",
     "github.workflow_stuck",
     "github.job_stuck"
   ] as const
@@ -30,6 +32,12 @@ export function incidentTitleForRule(input: { ruleKey: string; system: string })
   }
   if (input.ruleKey === "github.job_failed_burst") {
     return `GitHub job failure burst detected in ${input.system}`;
+  }
+  if (input.ruleKey === "github.retry_spike") {
+    return `GitHub retry spike detected in ${input.system}`;
+  }
+  if (input.ruleKey === "github.duration_drift") {
+    return `GitHub duration drift detected in ${input.system}`;
   }
   if (input.ruleKey === "github.workflow_stuck") {
     return `GitHub workflow appears stuck in ${input.system}`;

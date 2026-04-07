@@ -4,7 +4,9 @@ const findManyMock = vi.fn();
 const updateManyMock = vi.fn();
 const updateMock = vi.fn();
 const createMock = vi.fn();
+const userFindManyMock = vi.fn();
 const getTenantEntitlementsMock = vi.fn();
+const sendIncidentAlertMock = vi.fn();
 
 vi.mock("../src/lib/prisma.js", () => ({
   prisma: {
@@ -13,12 +15,15 @@ vi.mock("../src/lib/prisma.js", () => ({
       updateMany: updateManyMock,
       update: updateMock,
       create: createMock
+    },
+    user: {
+      findMany: userFindManyMock
     }
   }
 }));
 
 vi.mock("../src/services/email-service.js", () => ({
-  sendIncidentAlert: vi.fn()
+  sendIncidentAlert: sendIncidentAlertMock
 }));
 
 vi.mock("../src/services/tenant-trial-service.js", () => ({
@@ -39,7 +44,9 @@ describe("alert dispatch idempotency", () => {
     updateManyMock.mockReset();
     updateMock.mockReset();
     createMock.mockReset();
+    userFindManyMock.mockReset();
     getTenantEntitlementsMock.mockReset();
+    sendIncidentAlertMock.mockReset();
     getTenantEntitlementsMock.mockResolvedValue({
       tenant_id: "tenant-A",
       current_plan: "pro",
@@ -55,6 +62,11 @@ describe("alert dispatch idempotency", () => {
         days_remaining: 0
       }
     });
+    userFindManyMock.mockResolvedValue([
+      {
+        email: "owner@synteq.local"
+      }
+    ]);
     vi.resetModules();
   });
 
@@ -123,7 +135,7 @@ describe("alert dispatch idempotency", () => {
     expect(updateMock).toHaveBeenCalledTimes(1);
   });
 
-  it("skips alert dispatch for free tenants", async () => {
+  it("sends basic email alerts for free tenants", async () => {
     getTenantEntitlementsMock.mockResolvedValueOnce({
       tenant_id: "tenant-A",
       current_plan: "free",
@@ -187,14 +199,81 @@ describe("alert dispatch idempotency", () => {
     await dispatchPendingAlertEvents(10);
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(updateManyMock).toHaveBeenCalledWith(
+    expect(sendIncidentAlertMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: {
-          id: 301,
-          event_type: "ALERT_PENDING"
-        },
+        email: "owner@synteq.local",
+        incidentId: "inc-free-1"
+      })
+    );
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 301 },
         data: expect.objectContaining({
-          event_type: "ALERT_SKIPPED"
+          event_type: "ALERT_SENT"
+        })
+      })
+    );
+  });
+
+  it("processes bridge ALERT_PENDING events for free tenants without policy linkage", async () => {
+    getTenantEntitlementsMock.mockResolvedValueOnce({
+      tenant_id: "tenant-A",
+      current_plan: "free",
+      effective_plan: "free",
+      trial: {
+        status: "none",
+        available: false,
+        active: false,
+        consumed: false,
+        started_at: null,
+        ends_at: null,
+        source: null,
+        days_remaining: 0
+      }
+    });
+
+    const pendingEvent = {
+      id: 401,
+      event_type: "ALERT_PENDING",
+      payload_json: {
+        source: "operational_finding_bridge",
+        reason: "bridge_opened"
+      },
+      incident: {
+        id: "inc-bridge-1",
+        tenant_id: "tenant-A",
+        severity: "high",
+        summary: "GitHub workflow failures burst",
+        workflow_id: null,
+        environment: null,
+        status: "open",
+        details_json: {
+          source: "operational_finding_bridge"
+        },
+        sla_due_at: new Date(Date.now() + 300000),
+        sla_breached_at: null,
+        policy: null
+      }
+    };
+
+    findManyMock.mockResolvedValue([pendingEvent]);
+    updateManyMock.mockResolvedValue({ count: 1 });
+    createMock.mockResolvedValue({});
+
+    const { dispatchPendingAlertEvents } = await import("../src/services/alert-service.js");
+    await dispatchPendingAlertEvents(10);
+
+    expect(sendIncidentAlertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: "owner@synteq.local",
+        incidentId: "inc-bridge-1"
+      })
+    );
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 401 },
+        data: expect.objectContaining({
+          event_type: "ALERT_SENT"
         })
       })
     );

@@ -60,7 +60,7 @@ export function GitHubIntegrationsManager({
         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Manual setup</p>
         <h3 className="mt-1 text-lg font-semibold text-ink">GitHub webhook endpoint</h3>
         <p className="mt-2 text-sm text-slate-600">
-          Minimal access required: Synteq consumes webhook events only. No OAuth repository permissions in this flow.
+          Minimal access required: Synteq consumes webhook event metadata only. No OAuth repository permissions or source-code access in this flow.
         </p>
         <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700">
           {state.webhook_url}
@@ -72,7 +72,7 @@ export function GitHubIntegrationsManager({
           <li>Enable event types used by Synteq today: workflow job and workflow run events.</li>
         </ol>
         <p className="mt-2 text-xs text-slate-500">
-          This MVP is a manual webhook lifecycle. OAuth connect is not yet enabled.
+          This MVP is a manual webhook lifecycle. The webhook secret is only used to verify GitHub signatures.
         </p>
       </div>
 

@@ -26,6 +26,7 @@ type OperationalEventRow = {
   correlation_key: string | null;
   event_ts: Date;
   created_at: Date;
+  metadata_json?: unknown;
 };
 
 type CursorRow = {
@@ -76,6 +77,127 @@ export type OperationalEventsAnalysisRunResult = {
 
 function subtractMinutes(from: Date, minutes: number) {
   return new Date(from.getTime() - minutes * 60_000);
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+function asPositiveNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+  return null;
+}
+
+function median(values: number[]) {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) {
+    return sorted[middle];
+  }
+  return (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+type DurationFamily = "workflow" | "job";
+
+function durationFamilyForEventType(eventType: string): DurationFamily | null {
+  if (eventType.startsWith("workflow_")) {
+    return "workflow";
+  }
+  if (eventType.startsWith("job_")) {
+    return "job";
+  }
+  return null;
+}
+
+function terminalTypesForDurationFamily(family: DurationFamily) {
+  return family === "workflow" ? [...githubWorkflowTerminalTypes()] : [...githubJobTerminalTypes()];
+}
+
+function startTypesForDurationFamily(family: DurationFamily) {
+  return family === "workflow" ? [...githubWorkflowStartTypes()] : [...githubJobStartTypes()];
+}
+
+function eventComesAfter(a: OperationalEventRow, b: OperationalEventRow) {
+  if (a.event_ts.getTime() !== b.event_ts.getTime()) {
+    return a.event_ts.getTime() > b.event_ts.getTime();
+  }
+  return a.id > b.id;
+}
+
+function runAttemptForEvent(event: OperationalEventRow): number | null {
+  const metadata = asObject(event.metadata_json);
+  const runAttempt = asPositiveNumber(metadata.run_attempt);
+  if (runAttempt !== null) {
+    return runAttempt;
+  }
+
+  const workflowRun = asObject(metadata.workflow_run);
+  const workflowJob = asObject(metadata.workflow_job);
+  return asPositiveNumber(workflowRun.run_attempt) ?? asPositiveNumber(workflowJob.run_attempt);
+}
+
+async function durationMsForTerminalEvent(input: {
+  client: AnalysisClient;
+  tenantId: string;
+  correlationKey: string | null;
+  family: DurationFamily;
+  terminalEventTs: Date;
+}): Promise<number | null> {
+  if (!input.correlationKey) {
+    return null;
+  }
+
+  const startEvent = await input.client.operationalEvent.findMany({
+    where: {
+      tenant_id: input.tenantId,
+      source: "github_actions",
+      correlation_key: input.correlationKey,
+      event_type: {
+        in: startTypesForDurationFamily(input.family)
+      },
+      event_ts: {
+        lte: input.terminalEventTs
+      }
+    },
+    orderBy: [{ event_ts: "desc" }, { id: "desc" }],
+    take: 1,
+    select: {
+      id: true,
+      tenant_id: true,
+      source: true,
+      event_type: true,
+      system: true,
+      correlation_key: true,
+      event_ts: true,
+      created_at: true,
+      metadata_json: true
+    }
+  });
+
+  if (startEvent.length === 0) {
+    return null;
+  }
+
+  const durationMs = input.terminalEventTs.getTime() - startEvent[0].event_ts.getTime();
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    return null;
+  }
+
+  return durationMs;
 }
 
 async function openOrRefreshFinding(input: {
@@ -200,6 +322,19 @@ function parseCorrelationKey(value: string): { tenantId: string; system: string;
   };
 }
 
+function parseDurationKey(value: string): { tenantId: string; system: string; family: DurationFamily } {
+  const firstDelimiter = value.indexOf("|");
+  const lastDelimiter = value.lastIndexOf("|");
+  const tenantId = value.slice(0, firstDelimiter);
+  const system = value.slice(firstDelimiter + 1, lastDelimiter);
+  const family = value.slice(lastDelimiter + 1) as DurationFamily;
+  return {
+    tenantId,
+    system,
+    family
+  };
+}
+
 export async function runOperationalEventsAnalysisBatch(input?: {
   client?: AnalysisClient;
   now?: Date;
@@ -278,7 +413,8 @@ export async function runOperationalEventsAnalysisBatch(input?: {
       system: true,
       correlation_key: true,
       event_ts: true,
-      created_at: true
+      created_at: true,
+      metadata_json: true
     }
   });
 
@@ -296,6 +432,7 @@ export async function runOperationalEventsAnalysisBatch(input?: {
 
   const affectedSystems = new Set<string>();
   const affectedCorrelations = new Set<string>();
+  const affectedDurationTerminals = new Map<string, OperationalEventRow>();
   let findingsOpened = 0;
   let findingsResolved = 0;
 
@@ -311,36 +448,91 @@ export async function runOperationalEventsAnalysisBatch(input?: {
     if (event.correlation_key) {
       affectedCorrelations.add(`${event.tenant_id}|${event.system}|${event.correlation_key}`);
     }
-
-    if (event.event_type === "workflow_failed") {
-      const fingerprint = sha256(`github.workflow_failed|${event.tenant_id}|${event.correlation_key ?? event.id}`);
-      const state = await openOrRefreshFinding({
-        client,
-        tenantId: event.tenant_id,
-        source: "github_actions",
-        ruleKey: "github.workflow_failed",
-        severity: "high",
-        system: event.system,
-        correlationKey: event.correlation_key,
-        fingerprint,
-        summary: `GitHub workflow failed for ${event.system}`,
-        evidence: {
-          triggering_event_id: event.id,
-          event_type: event.event_type,
-          event_ts: event.event_ts.toISOString(),
-          correlation_key: event.correlation_key
-        },
-        seenAt: event.event_ts
-      });
-
-      if (state === "created" || state === "reopened") {
-        findingsOpened += 1;
+    const durationFamily = durationFamilyForEventType(event.event_type);
+    const isTerminalDurationEvent =
+      durationFamily !== null && terminalTypesForDurationFamily(durationFamily).includes(event.event_type as never);
+    if (isTerminalDurationEvent && event.correlation_key) {
+      const terminalKey = `${event.tenant_id}|${event.system}|${durationFamily}`;
+      const existing = affectedDurationTerminals.get(terminalKey);
+      if (!existing || eventComesAfter(event, existing)) {
+        affectedDurationTerminals.set(terminalKey, event);
       }
     }
   }
 
   for (const systemKey of affectedSystems) {
     const { tenantId, system } = parseSystemKey(systemKey);
+
+    const workflowFailureWindowStart = subtractMinutes(now, operationalEventsRules.workflowFailedBurstWindowMinutes);
+    const workflowFailedCount = await client.operationalEvent.count({
+      where: {
+        tenant_id: tenantId,
+        source: "github_actions",
+        system,
+        event_type: "workflow_failed",
+        event_ts: {
+          gte: workflowFailureWindowStart
+        }
+      }
+    });
+    const workflowFailureFingerprint = sha256(`github.workflow_failed|${tenantId}|${system}`);
+    if (workflowFailedCount >= operationalEventsRules.workflowFailedBurstThreshold) {
+      const evidenceEvents = await client.operationalEvent.findMany({
+        where: {
+          tenant_id: tenantId,
+          source: "github_actions",
+          system,
+          event_type: "workflow_failed",
+          event_ts: {
+            gte: workflowFailureWindowStart
+          }
+        },
+        orderBy: [{ event_ts: "desc" }, { id: "desc" }],
+        take: operationalEventsRules.maxEvidenceEventIds,
+        select: {
+          id: true,
+          event_ts: true,
+          event_type: true,
+          source: true,
+          system: true,
+          tenant_id: true,
+          created_at: true,
+          correlation_key: true,
+          metadata_json: true
+        }
+      });
+      const state = await openOrRefreshFinding({
+        client,
+        tenantId,
+        source: "github_actions",
+        ruleKey: "github.workflow_failed",
+        severity: "high",
+        system,
+        fingerprint: workflowFailureFingerprint,
+        summary: `GitHub workflow failures repeatedly occurred for ${system}`,
+        evidence: {
+          window_minutes: operationalEventsRules.workflowFailedBurstWindowMinutes,
+          threshold: operationalEventsRules.workflowFailedBurstThreshold,
+          observed_failures: workflowFailedCount,
+          event_ids: evidenceEvents.map((item) => item.id)
+        },
+        seenAt: now
+      });
+      if (state === "created" || state === "reopened") {
+        findingsOpened += 1;
+      }
+    } else {
+      const state = await resolveFinding({
+        client,
+        tenantId,
+        fingerprint: workflowFailureFingerprint,
+        resolvedAt: now
+      });
+      if (state === "resolved") {
+        findingsResolved += 1;
+      }
+    }
+
     const burstWindowStart = subtractMinutes(now, operationalEventsRules.jobFailedBurstWindowMinutes);
     const failedCount = await client.operationalEvent.count({
       where: {
@@ -373,12 +565,13 @@ export async function runOperationalEventsAnalysisBatch(input?: {
           event_ts: true,
           event_type: true,
           source: true,
-          system: true,
-          tenant_id: true,
-          created_at: true,
-          correlation_key: true
-        }
-      });
+            system: true,
+            tenant_id: true,
+            created_at: true,
+            correlation_key: true,
+            metadata_json: true
+          }
+        });
 
       const state = await openOrRefreshFinding({
         client,
@@ -406,6 +599,184 @@ export async function runOperationalEventsAnalysisBatch(input?: {
         client,
         tenantId,
         fingerprint,
+        resolvedAt: now
+      });
+      if (state === "resolved") {
+        findingsResolved += 1;
+      }
+    }
+
+    const retryWindowStart = subtractMinutes(now, operationalEventsRules.retrySpikeWindowMinutes);
+    const retryCandidateEvents = await client.operationalEvent.findMany({
+      where: {
+        tenant_id: tenantId,
+        source: "github_actions",
+        system,
+        event_type: {
+          in: [...githubWorkflowTerminalTypes(), ...githubJobTerminalTypes()]
+        },
+        event_ts: {
+          gte: retryWindowStart
+        }
+      },
+      orderBy: [{ event_ts: "desc" }, { id: "desc" }],
+      take: operationalEventsRules.retrySpikeMaxEvents,
+      select: {
+        id: true,
+        event_ts: true,
+        event_type: true,
+        source: true,
+        system: true,
+        tenant_id: true,
+        created_at: true,
+        correlation_key: true,
+        metadata_json: true
+      }
+    });
+
+    const retriedEvents = retryCandidateEvents.filter((event) => {
+      const attempt = runAttemptForEvent(event);
+      return attempt !== null && attempt > 1;
+    });
+    const retryRatio = retryCandidateEvents.length > 0 ? retriedEvents.length / retryCandidateEvents.length : 0;
+    const retrySpikeFingerprint = sha256(`github.retry_spike|${tenantId}|${system}`);
+    if (
+      retriedEvents.length >= operationalEventsRules.retrySpikeThreshold &&
+      retryRatio >= operationalEventsRules.retrySpikeRatioThreshold
+    ) {
+      const state = await openOrRefreshFinding({
+        client,
+        tenantId,
+        source: "github_actions",
+        ruleKey: "github.retry_spike",
+        severity: "high",
+        system,
+        fingerprint: retrySpikeFingerprint,
+        summary: `GitHub retry spike detected for ${system}`,
+        evidence: {
+          window_minutes: operationalEventsRules.retrySpikeWindowMinutes,
+          retried_events: retriedEvents.length,
+          total_terminal_events: retryCandidateEvents.length,
+          retry_ratio: Number(retryRatio.toFixed(4)),
+          ratio_threshold: operationalEventsRules.retrySpikeRatioThreshold,
+          event_ids: retriedEvents.slice(0, operationalEventsRules.maxEvidenceEventIds).map((item) => item.id)
+        },
+        seenAt: now
+      });
+      if (state === "created" || state === "reopened") {
+        findingsOpened += 1;
+      }
+    } else {
+      const state = await resolveFinding({
+        client,
+        tenantId,
+        fingerprint: retrySpikeFingerprint,
+        resolvedAt: now
+      });
+      if (state === "resolved") {
+        findingsResolved += 1;
+      }
+    }
+  }
+
+  for (const [durationKey, terminalEvent] of affectedDurationTerminals.entries()) {
+    const { tenantId, system, family } = parseDurationKey(durationKey);
+    const currentDurationMs = await durationMsForTerminalEvent({
+      client,
+      tenantId,
+      correlationKey: terminalEvent.correlation_key,
+      family,
+      terminalEventTs: terminalEvent.event_ts
+    });
+
+    const durationFingerprint = sha256(`github.duration_drift|${tenantId}|${system}|${family}`);
+    if (currentDurationMs === null) {
+      continue;
+    }
+
+    const baselineWindowStart = subtractMinutes(terminalEvent.event_ts, operationalEventsRules.durationDriftLookbackMinutes);
+    const baselineTerminalEvents = await client.operationalEvent.findMany({
+      where: {
+        tenant_id: tenantId,
+        source: "github_actions",
+        system,
+        event_type: {
+          in: terminalTypesForDurationFamily(family)
+        },
+        event_ts: {
+          gte: baselineWindowStart,
+          lt: terminalEvent.event_ts
+        }
+      },
+      orderBy: [{ event_ts: "desc" }, { id: "desc" }],
+      take: operationalEventsRules.durationDriftBaselineMaxSamples,
+      select: {
+        id: true,
+        event_ts: true,
+        event_type: true,
+        source: true,
+        system: true,
+        tenant_id: true,
+        created_at: true,
+        correlation_key: true,
+        metadata_json: true
+      }
+    });
+
+    const baselineDurations: number[] = [];
+    for (const baselineEvent of baselineTerminalEvents) {
+      const duration = await durationMsForTerminalEvent({
+        client,
+        tenantId,
+        correlationKey: baselineEvent.correlation_key,
+        family,
+        terminalEventTs: baselineEvent.event_ts
+      });
+      if (duration !== null) {
+        baselineDurations.push(duration);
+      }
+    }
+
+    if (baselineDurations.length < operationalEventsRules.durationDriftBaselineMinSamples) {
+      continue;
+    }
+
+    const baselineMs = median(baselineDurations);
+    const ratio = baselineMs > 0 ? currentDurationMs / baselineMs : 0;
+    const deltaMs = currentDurationMs - baselineMs;
+    if (
+      ratio >= operationalEventsRules.durationDriftRatioThreshold &&
+      deltaMs >= operationalEventsRules.durationDriftAbsoluteDeltaMs
+    ) {
+      const state = await openOrRefreshFinding({
+        client,
+        tenantId,
+        source: "github_actions",
+        ruleKey: "github.duration_drift",
+        severity: "medium",
+        system,
+        correlationKey: terminalEvent.correlation_key,
+        fingerprint: durationFingerprint,
+        summary: `GitHub ${family} duration drift detected for ${system}`,
+        evidence: {
+          family,
+          triggering_event_id: terminalEvent.id,
+          current_duration_ms: Math.round(currentDurationMs),
+          baseline_duration_ms: Math.round(baselineMs),
+          duration_ratio: Number(ratio.toFixed(3)),
+          delta_ms: Math.round(deltaMs),
+          baseline_samples: baselineDurations.length
+        },
+        seenAt: terminalEvent.event_ts
+      });
+      if (state === "created" || state === "reopened") {
+        findingsOpened += 1;
+      }
+    } else {
+      const state = await resolveFinding({
+        client,
+        tenantId,
+        fingerprint: durationFingerprint,
         resolvedAt: now
       });
       if (state === "resolved") {

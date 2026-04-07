@@ -15,6 +15,13 @@ import { parseWithSchema } from "../utils/validation.js";
 
 const GITHUB_DELIVERY_DEDUPE_TTL_SEC = 24 * 60 * 60;
 
+type GitHubIntegrationLookup = {
+  id: string;
+  tenant_id: string;
+  webhook_secret: string;
+  repository_full_name: string | null;
+};
+
 function readHeader(headers: Record<string, unknown>, key: string): string | undefined {
   const value = headers[key.toLowerCase()];
   if (typeof value === "string") {
@@ -50,6 +57,96 @@ function verifyGitHubSignature(input: {
   return secureCompareHex(expected, actual);
 }
 
+function repositoryMatchesScope(input: {
+  integrationRepositoryFullName: string | null;
+  payloadRepositoryFullName: string | null;
+}) {
+  if (!input.integrationRepositoryFullName || !input.payloadRepositoryFullName) {
+    return true;
+  }
+
+  return input.integrationRepositoryFullName.toLowerCase() === input.payloadRepositoryFullName.toLowerCase();
+}
+
+async function resolveGitHubIntegrationForWebhook(input: {
+  hookId: string;
+  signatureHeader: string;
+  rawBody: string;
+  payloadRepositoryFullName: string | null;
+}): Promise<{ integration: GitHubIntegrationLookup | null; reason: "resolved" | "bad_signature" | "ambiguous" | "not_found" }> {
+  const directMatches = await prisma.gitHubIntegration.findMany({
+    where: {
+      webhook_id: input.hookId,
+      is_active: true
+    },
+    select: {
+      id: true,
+      tenant_id: true,
+      webhook_secret: true,
+      repository_full_name: true
+    }
+  });
+
+  if (directMatches.length > 0) {
+    const verifiedDirect = directMatches.find((candidate) =>
+      verifyGitHubSignature({
+        signatureHeader: input.signatureHeader,
+        secret: candidate.webhook_secret,
+        rawBody: input.rawBody
+      })
+    );
+
+    return {
+      integration: verifiedDirect ?? null,
+      reason: verifiedDirect ? "resolved" : "bad_signature"
+    };
+  }
+
+  const activeIntegrations = await prisma.gitHubIntegration.findMany({
+    where: {
+      is_active: true
+    },
+    select: {
+      id: true,
+      tenant_id: true,
+      webhook_secret: true,
+      repository_full_name: true
+    }
+  });
+
+  const verifiedMatches = activeIntegrations.filter(
+    (candidate) =>
+      verifyGitHubSignature({
+        signatureHeader: input.signatureHeader,
+        secret: candidate.webhook_secret,
+        rawBody: input.rawBody
+      }) &&
+      repositoryMatchesScope({
+        integrationRepositoryFullName: candidate.repository_full_name,
+        payloadRepositoryFullName: input.payloadRepositoryFullName
+      })
+  );
+
+  if (verifiedMatches.length === 1) {
+    return {
+      integration: verifiedMatches[0],
+      reason: "resolved"
+    };
+  }
+
+  if (verifiedMatches.length > 1) {
+    return {
+      integration: null,
+      reason: "ambiguous"
+    };
+  }
+
+  return {
+    integration: null,
+    reason: "not_found"
+  };
+}
+
 const githubWebhookRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/integrations/github/webhook",
@@ -70,6 +167,7 @@ const githubWebhookRoutes: FastifyPluginAsync = async (app) => {
       const eventType = readHeader(request.headers as Record<string, unknown>, "x-github-event");
       const deliveryId = readHeader(request.headers as Record<string, unknown>, "x-github-delivery");
       const signature = readHeader(request.headers as Record<string, unknown>, "x-hub-signature-256");
+      const repositoryFullName = extractGitHubRepositoryFullName(request.body);
       if (!hookId || !eventType || !signature) {
         runtimeMetrics.increment("github_webhook_rejected_missing_headers_total");
         return reply.code(401).send({ error: "Missing required GitHub webhook headers" });
@@ -90,31 +188,24 @@ const githubWebhookRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const integration = await prisma.gitHubIntegration.findFirst({
-        where: {
-          webhook_id: hookId,
-          is_active: true
-        },
-        select: {
-          id: true,
-          tenant_id: true,
-          webhook_secret: true,
-          repository_full_name: true
-        }
+      const integrationResolution = await resolveGitHubIntegrationForWebhook({
+        hookId,
+        signatureHeader: signature,
+        rawBody,
+        payloadRepositoryFullName: repositoryFullName
       });
+      const integration = integrationResolution.integration;
       if (!integration) {
+        if (integrationResolution.reason === "bad_signature") {
+          runtimeMetrics.increment("github_webhook_rejected_bad_signature_total");
+          return reply.code(401).send({ error: "Invalid GitHub webhook signature" });
+        }
+        if (integrationResolution.reason === "ambiguous") {
+          runtimeMetrics.increment("github_webhook_rejected_ambiguous_identity_total");
+          return reply.code(401).send({ error: "Invalid GitHub webhook integration" });
+        }
         runtimeMetrics.increment("github_webhook_rejected_unknown_hook_total");
         return reply.code(401).send({ error: "Invalid GitHub webhook integration" });
-      }
-
-      const verified = verifyGitHubSignature({
-        signatureHeader: signature,
-        secret: integration.webhook_secret,
-        rawBody
-      });
-      if (!verified) {
-        runtimeMetrics.increment("github_webhook_rejected_bad_signature_total");
-        return reply.code(401).send({ error: "Invalid GitHub webhook signature" });
       }
 
       if (deliveryId) {
@@ -131,7 +222,6 @@ const githubWebhookRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      const repositoryFullName = extractGitHubRepositoryFullName(request.body);
       if (integration.repository_full_name && !repositoryFullName) {
         runtimeMetrics.increment("github_webhook_rejected_repository_missing_total");
         return reply.code(400).send({ error: "Repository context missing from webhook payload" });

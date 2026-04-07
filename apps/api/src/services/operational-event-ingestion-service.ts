@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import type { IngestOperationalEventInput, IngestOperationalEventsRequest } from "@synteq/shared";
 import { prisma } from "../lib/prisma.js";
 import { runtimeMetrics } from "../lib/runtime-metrics.js";
-import { sanitizeText } from "../utils/sanitize.js";
+import { sanitizeOperationalMetadata, sanitizeText } from "../utils/sanitize.js";
 import {
   buildOperationalEventIdempotencyKey,
   markEventIdempotencyFailed,
@@ -46,10 +46,10 @@ export type IngestOperationalEventsResult = {
 function normalizeMetadata(event: IngestOperationalEventInput): Prisma.InputJsonValue {
   const metadata = event.metadata ?? {};
   const attributes = event.attributes ?? {};
-  const merged = {
+  const merged = sanitizeOperationalMetadata({
     ...metadata,
     ...attributes
-  };
+  });
   return merged as Prisma.InputJsonValue;
 }
 

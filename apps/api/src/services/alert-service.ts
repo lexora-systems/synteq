@@ -19,6 +19,7 @@ type PendingPayload = {
 };
 
 const dispatchWorkerId = `${process.env.HOSTNAME ?? "local"}:${process.pid}`;
+const FREE_BASIC_EMAIL_MAX_EVENTS_PER_BATCH = 10;
 
 function asObject(value: unknown): Record<string, unknown> {
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -160,7 +161,9 @@ async function skipPendingAlertForPlan(input: {
   incidentId: string;
   payload: unknown;
   access: ResolvedTenantAccess;
+  reason?: "alerts_not_entitled" | "basic_email_not_configured" | "basic_email_rate_limited";
 }): Promise<boolean> {
+  const reason = input.reason ?? "alerts_not_entitled";
   const skippedAt = new Date().toISOString();
   const marked = await prisma.incidentEvent.updateMany({
     where: {
@@ -172,7 +175,7 @@ async function skipPendingAlertForPlan(input: {
       payload_json: {
         original_payload: asObject(input.payload),
         skipped_at: skippedAt,
-        reason: "alerts_not_entitled",
+        reason,
         effective_plan: input.access.effectivePlan
       } as Prisma.InputJsonValue
     }
@@ -191,7 +194,7 @@ async function skipPendingAlertForPlan(input: {
         all_ok: false,
         skipped: true,
         skipped_at: skippedAt,
-        reason: "alerts_not_entitled",
+        reason,
         effective_plan: input.access.effectivePlan
       }
     }
@@ -226,6 +229,8 @@ export async function dispatchPendingAlertEvents(limit = 100) {
     take: limit
   });
   const tenantAccessCache = new Map<string, ResolvedTenantAccess>();
+  const tenantBasicRecipientsCache = new Map<string, string[]>();
+  const basicDispatchCountByTenant = new Map<string, number>();
   const loggedEntitlementDenials = new Set<string>();
 
   async function accessForTenant(tenantId: string): Promise<ResolvedTenantAccess> {
@@ -241,10 +246,36 @@ export async function dispatchPendingAlertEvents(limit = 100) {
     return resolved;
   }
 
+  async function basicRecipientsForTenant(tenantId: string): Promise<string[]> {
+    const cached = tenantBasicRecipientsCache.get(tenantId);
+    if (cached) {
+      return cached;
+    }
+
+    const users = await prisma.user.findMany({
+      where: {
+        tenant_id: tenantId,
+        disabled_at: null,
+        role: {
+          in: ["owner", "admin"]
+        }
+      },
+      select: {
+        email: true
+      }
+    });
+    const recipients = [...new Set(users.map((user) => user.email.toLowerCase().trim()).filter((email) => email.length > 0))];
+    tenantBasicRecipientsCache.set(tenantId, recipients);
+    return recipients;
+  }
+
   for (const event of pendingEvents) {
     const incident = event.incident;
     const access = await accessForTenant(incident.tenant_id);
-    if (!hasFeature(access, "alerts")) {
+    const isFullAlertMode = access.alertMode === "full";
+    let basicRecipients: string[] = [];
+
+    if (isFullAlertMode && !hasFeature(access, "alerts")) {
       if (!loggedEntitlementDenials.has(incident.tenant_id)) {
         loggedEntitlementDenials.add(incident.tenant_id);
         console.info("alerts.entitlement.skipped", {
@@ -261,6 +292,31 @@ export async function dispatchPendingAlertEvents(limit = 100) {
       });
       continue;
     }
+    if (!isFullAlertMode) {
+      basicRecipients = await basicRecipientsForTenant(incident.tenant_id);
+      if (basicRecipients.length === 0) {
+        await skipPendingAlertForPlan({
+          eventId: event.id,
+          incidentId: incident.id,
+          payload: event.payload_json,
+          access,
+          reason: "basic_email_not_configured"
+        });
+        continue;
+      }
+
+      const currentDispatchCount = basicDispatchCountByTenant.get(incident.tenant_id) ?? 0;
+      if (currentDispatchCount >= FREE_BASIC_EMAIL_MAX_EVENTS_PER_BATCH) {
+        await skipPendingAlertForPlan({
+          eventId: event.id,
+          incidentId: incident.id,
+          payload: event.payload_json,
+          access,
+          reason: "basic_email_rate_limited"
+        });
+        continue;
+      }
+    }
 
     const pendingPayload = parsePendingPayload(event.payload_json);
     const notBefore = retryNotBefore(pendingPayload);
@@ -272,11 +328,15 @@ export async function dispatchPendingAlertEvents(limit = 100) {
     if (!claim.claimed) {
       continue;
     }
+    if (!isFullAlertMode) {
+      basicDispatchCountByTenant.set(incident.tenant_id, (basicDispatchCountByTenant.get(incident.tenant_id) ?? 0) + 1);
+    }
 
-    const policyChannels =
-      incident.policy?.channels
-        .map((row) => row.channel)
-        .filter((channel) => channel.is_enabled) ?? [];
+    const policyChannels = isFullAlertMode
+      ? (incident.policy?.channels
+          .map((row) => row.channel)
+          .filter((channel) => channel.is_enabled) ?? [])
+      : [];
 
     const message = formatIncidentMessage({
       incidentId: incident.id,
@@ -378,7 +438,32 @@ export async function dispatchPendingAlertEvents(limit = 100) {
       }
     }
 
-    if (policyChannels.length === 0 && config.SLACK_DEFAULT_WEBHOOK_URL) {
+    if (!isFullAlertMode) {
+      for (const email of basicRecipients) {
+        try {
+          await sendIncidentAlert({
+            email,
+            incidentId: incident.id,
+            severity: incident.severity,
+            summary: incident.summary
+          });
+          results.push({
+            channel_id: `basic_email:${email}`,
+            type: "email",
+            ok: true
+          });
+        } catch (error) {
+          results.push({
+            channel_id: `basic_email:${email}`,
+            type: "email",
+            ok: false,
+            error: error instanceof Error ? error.message : "Unknown error"
+          });
+        }
+      }
+    }
+
+    if (isFullAlertMode && policyChannels.length === 0 && config.SLACK_DEFAULT_WEBHOOK_URL) {
       try {
         const fallbackResult = await sendSlack(config.SLACK_DEFAULT_WEBHOOK_URL, message);
         results.push({

@@ -12,6 +12,7 @@ type EventRow = {
   correlation_key: string | null;
   event_ts: Date;
   created_at: Date;
+  metadata_json?: Record<string, unknown>;
 };
 
 type FindingRow = {
@@ -69,9 +70,13 @@ function makeClient(seed: { events: EventRow[] }) {
       if (where.tenant_id && event.tenant_id !== where.tenant_id) return false;
       if (where.source && event.source !== where.source) return false;
       if (where.system && event.system !== where.system) return false;
-      if (where.event_type && event.event_type !== where.event_type) return false;
+      if (typeof where.event_type === "string" && event.event_type !== where.event_type) return false;
+      if (where.event_type?.in && !where.event_type.in.includes(event.event_type)) return false;
       if (where.correlation_key && event.correlation_key !== where.correlation_key) return false;
       if (where.event_ts?.gte && event.event_ts < where.event_ts.gte) return false;
+      if (where.event_ts?.gt && event.event_ts <= where.event_ts.gt) return false;
+      if (where.event_ts?.lte && event.event_ts > where.event_ts.lte) return false;
+      if (where.event_ts?.lt && event.event_ts >= where.event_ts.lt) return false;
       return true;
     });
 
@@ -189,6 +194,10 @@ describe("operational events analysis service", () => {
     },
     maxSources: null,
     maxHistoryHours: null,
+    detectionLevel: "full",
+    alertMode: "full",
+    incidentMode: "full",
+    simulationAllowed: true,
     features: {
       alerts: true,
       team_members: true,
@@ -217,6 +226,10 @@ describe("operational events analysis service", () => {
     },
     maxSources: 1,
     maxHistoryHours: 24,
+    detectionLevel: "basic",
+    alertMode: "basic_email",
+    incidentMode: "basic",
+    simulationAllowed: true,
     features: {
       alerts: false,
       team_members: false,
@@ -230,7 +243,7 @@ describe("operational events analysis service", () => {
     baseEvents = [];
   });
 
-  it("processes new events and emits workflow_failed findings", async () => {
+  it("creates workflow failure finding only when failures recur in the configured window", async () => {
     baseEvents.push(
       {
         id: "evt-1",
@@ -245,12 +258,22 @@ describe("operational events analysis service", () => {
       {
         id: "evt-2",
         tenant_id: "tenant-A",
-        source: "ci",
-        event_type: "deployment_started",
+        source: "github_actions",
+        event_type: "workflow_failed",
         system: "acme/payments",
-        correlation_key: null,
+        correlation_key: "acme/payments:workflow_run:102",
         event_ts: new Date("2026-03-17T12:11:00.000Z"),
         created_at: new Date("2026-03-17T12:11:00.000Z")
+      },
+      {
+        id: "evt-3",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_failed",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:103",
+        event_ts: new Date("2026-03-17T12:12:00.000Z"),
+        created_at: new Date("2026-03-17T12:12:00.000Z")
       }
     );
 
@@ -262,8 +285,31 @@ describe("operational events analysis service", () => {
       resolveAccess: proAccessResolver
     });
 
-    expect(result.processed_events).toBe(2);
+    expect(result.processed_events).toBe(3);
     expect(state.findings.some((finding) => finding.rule_key === "github.workflow_failed")).toBe(true);
+  });
+
+  it("does not create workflow failure finding for a single isolated failure", async () => {
+    baseEvents.push({
+      id: "evt-single-workflow-failure",
+      tenant_id: "tenant-A",
+      source: "github_actions",
+      event_type: "workflow_failed",
+      system: "acme/payments",
+      correlation_key: "acme/payments:workflow_run:single",
+      event_ts: new Date("2026-03-17T12:10:00.000Z"),
+      created_at: new Date("2026-03-17T12:10:00.000Z")
+    });
+
+    const { client, state } = makeClient({ events: baseEvents });
+    await runOperationalEventsAnalysisBatch({
+      client: client as any,
+      now,
+      logger,
+      resolveAccess: proAccessResolver
+    });
+
+    expect(state.findings.some((finding) => finding.rule_key === "github.workflow_failed")).toBe(false);
   });
 
   it("creates github.job_failed_burst when threshold is met", async () => {
@@ -313,17 +359,197 @@ describe("operational events analysis service", () => {
     expect(burstFinding?.status).toBe("open");
   });
 
-  it("does not create duplicate findings on repeated runs", async () => {
-    baseEvents.push({
-      id: "evt-20",
-      tenant_id: "tenant-A",
-      source: "github_actions",
-      event_type: "workflow_failed",
-      system: "acme/payments",
-      correlation_key: "acme/payments:workflow_run:400",
-      event_ts: new Date("2026-03-17T12:05:00.000Z"),
-      created_at: new Date("2026-03-17T12:05:00.000Z")
+  it("creates github.retry_spike when retried terminal runs exceed threshold and ratio", async () => {
+    baseEvents.push(
+      {
+        id: "evt-r1",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_completed",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:501",
+        event_ts: new Date("2026-03-17T12:05:00.000Z"),
+        created_at: new Date("2026-03-17T12:05:00.000Z"),
+        metadata_json: { run_attempt: 2 }
+      },
+      {
+        id: "evt-r2",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_failed",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:502",
+        event_ts: new Date("2026-03-17T12:08:00.000Z"),
+        created_at: new Date("2026-03-17T12:08:00.000Z"),
+        metadata_json: { run_attempt: 3 }
+      },
+      {
+        id: "evt-r3",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "job_completed",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_job:701",
+        event_ts: new Date("2026-03-17T12:12:00.000Z"),
+        created_at: new Date("2026-03-17T12:12:00.000Z"),
+        metadata_json: { run_attempt: 2 }
+      },
+      {
+        id: "evt-r4",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_completed",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:503",
+        event_ts: new Date("2026-03-17T12:15:00.000Z"),
+        created_at: new Date("2026-03-17T12:15:00.000Z"),
+        metadata_json: { run_attempt: 1 }
+      }
+    );
+
+    const { client, state } = makeClient({ events: baseEvents });
+    await runOperationalEventsAnalysisBatch({
+      client: client as any,
+      now,
+      logger,
+      resolveAccess: proAccessResolver
     });
+
+    const retryFinding = state.findings.find((finding) => finding.rule_key === "github.retry_spike");
+    expect(retryFinding).toBeTruthy();
+    expect(retryFinding?.status).toBe("open");
+  });
+
+  it("creates github.duration_drift when current run duration materially exceeds recent baseline", async () => {
+    baseEvents.push(
+      {
+        id: "evt-d1-start",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_started",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:601",
+        event_ts: new Date("2026-03-17T11:30:00.000Z"),
+        created_at: new Date("2026-03-17T11:30:00.000Z")
+      },
+      {
+        id: "evt-d1-end",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_completed",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:601",
+        event_ts: new Date("2026-03-17T11:32:00.000Z"),
+        created_at: new Date("2026-03-17T11:32:00.000Z")
+      },
+      {
+        id: "evt-d2-start",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_started",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:602",
+        event_ts: new Date("2026-03-17T11:40:00.000Z"),
+        created_at: new Date("2026-03-17T11:40:00.000Z")
+      },
+      {
+        id: "evt-d2-end",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_completed",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:602",
+        event_ts: new Date("2026-03-17T11:42:00.000Z"),
+        created_at: new Date("2026-03-17T11:42:00.000Z")
+      },
+      {
+        id: "evt-d3-start",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_started",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:603",
+        event_ts: new Date("2026-03-17T11:50:00.000Z"),
+        created_at: new Date("2026-03-17T11:50:00.000Z")
+      },
+      {
+        id: "evt-d3-end",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_completed",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:603",
+        event_ts: new Date("2026-03-17T11:52:00.000Z"),
+        created_at: new Date("2026-03-17T11:52:00.000Z")
+      },
+      {
+        id: "evt-d4-start",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_started",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:604",
+        event_ts: new Date("2026-03-17T12:09:00.000Z"),
+        created_at: new Date("2026-03-17T12:09:00.000Z")
+      },
+      {
+        id: "evt-d4-end",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_completed",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:604",
+        event_ts: new Date("2026-03-17T12:29:00.000Z"),
+        created_at: new Date("2026-03-17T12:29:00.000Z")
+      }
+    );
+
+    const { client, state } = makeClient({ events: baseEvents });
+    await runOperationalEventsAnalysisBatch({
+      client: client as any,
+      now,
+      logger,
+      resolveAccess: proAccessResolver
+    });
+
+    const durationFinding = state.findings.find((finding) => finding.rule_key === "github.duration_drift");
+    expect(durationFinding).toBeTruthy();
+    expect(durationFinding?.status).toBe("open");
+  });
+
+  it("does not create duplicate findings on repeated runs", async () => {
+    baseEvents.push(
+      {
+        id: "evt-20",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_failed",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:400",
+        event_ts: new Date("2026-03-17T12:20:00.000Z"),
+        created_at: new Date("2026-03-17T12:20:00.000Z")
+      },
+      {
+        id: "evt-21",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_failed",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:401",
+        event_ts: new Date("2026-03-17T12:21:00.000Z"),
+        created_at: new Date("2026-03-17T12:21:00.000Z")
+      },
+      {
+        id: "evt-22",
+        tenant_id: "tenant-A",
+        source: "github_actions",
+        event_type: "workflow_failed",
+        system: "acme/payments",
+        correlation_key: "acme/payments:workflow_run:402",
+        event_ts: new Date("2026-03-17T12:22:00.000Z"),
+        created_at: new Date("2026-03-17T12:22:00.000Z")
+      }
+    );
 
     const { client, state } = makeClient({ events: baseEvents });
     const first = await runOperationalEventsAnalysisBatch({
@@ -339,7 +565,7 @@ describe("operational events analysis service", () => {
       resolveAccess: proAccessResolver
     });
 
-    expect(first.processed_events).toBe(1);
+    expect(first.processed_events).toBe(3);
     expect(second.processed_events).toBe(0);
     expect(state.findings.filter((finding) => finding.rule_key === "github.workflow_failed")).toHaveLength(1);
   });

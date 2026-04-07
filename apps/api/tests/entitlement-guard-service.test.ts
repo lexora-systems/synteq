@@ -25,6 +25,10 @@ describe("entitlement guard service", () => {
 
     expect(() => requirePlanAtLeast(access, "pro")).not.toThrow();
     expect(() => requireFeature(access, "alerts")).not.toThrow();
+    expect(access.detectionLevel).toBe("full");
+    expect(access.alertMode).toBe("full");
+    expect(access.incidentMode).toBe("full");
+    expect(access.simulationAllowed).toBe(true);
     expect(() =>
       requireSourceCapacity({
         access,
@@ -48,11 +52,39 @@ describe("entitlement guard service", () => {
     const access = resolveTenantAccessFromEntitlements(entitlements);
 
     expect(() => requireFeature(access, "alerts")).toThrow(EntitlementError);
+    expect(access.detectionLevel).toBe("basic");
+    expect(access.alertMode).toBe("basic_email");
+    expect(access.incidentMode).toBe("basic");
+    expect(access.features.team_members).toBe(false);
+    expect(access.maxSources).toBe(1);
+    expect(access.maxHistoryHours).toBe(24);
     expect(() =>
       requireSourceCapacity({
         access,
         currentActiveSources: 1
       })
     ).toThrow(EntitlementError);
+  });
+
+  it("maps paid plans to full entitlement modes", () => {
+    const entitlements = resolveTenantEntitlementsFromRow(
+      {
+        id: "tenant-pro",
+        plan: "pro",
+        trial_status: "none",
+        trial_started_at: null,
+        trial_ends_at: null,
+        trial_source: null
+      },
+      new Date("2026-03-20T00:00:00.000Z")
+    );
+    const access = resolveTenantAccessFromEntitlements(entitlements);
+
+    expect(access.detectionLevel).toBe("full");
+    expect(access.alertMode).toBe("full");
+    expect(access.incidentMode).toBe("full");
+    expect(access.maxSources).toBeNull();
+    expect(access.maxHistoryHours).toBeNull();
+    expect(access.features.team_members).toBe(true);
   });
 });

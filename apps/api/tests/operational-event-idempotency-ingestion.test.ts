@@ -404,6 +404,37 @@ describe("operational event idempotency ledger integration", () => {
     expect(harness.state.ledger.size).toBe(2);
   });
 
+  it("sanitizes operational metadata to avoid secret and raw-log style fields", async () => {
+    const harness = await setupHarness();
+
+    const normalized = harness.normalizeOperationalEvent({
+      ...baseEvent,
+      metadata: {
+        repository: "acme/payments",
+        run_attempt: 2,
+        webhook_secret: "do-not-store",
+        auth_token: "do-not-store",
+        raw_payload: "{\"logs\":\"very long raw dump\"}",
+        logs: "very long raw log"
+      },
+      attributes: {
+        branch: "main",
+        stacktrace: "exception details"
+      }
+    } as any);
+
+    expect(normalized.metadata_json).toMatchObject({
+      repository: "acme/payments",
+      run_attempt: 2,
+      branch: "main"
+    });
+    expect(normalized.metadata_json).not.toHaveProperty("webhook_secret");
+    expect(normalized.metadata_json).not.toHaveProperty("auth_token");
+    expect(normalized.metadata_json).not.toHaveProperty("raw_payload");
+    expect(normalized.metadata_json).not.toHaveProperty("logs");
+    expect(normalized.metadata_json).not.toHaveProperty("stacktrace");
+  });
+
   it("keeps uniqueness constraint in schema and migration for tenant+source+idempotency key", () => {
     const schema = fs.readFileSync(path.resolve(process.cwd(), "prisma/schema.prisma"), "utf8");
     const migration = fs.readFileSync(
