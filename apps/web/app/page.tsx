@@ -305,53 +305,48 @@ export default async function PublicLandingPage() {
           </div>
         </div>
       </section>
+      <CircuitDivider reverse />
 
-      <section className="w-full py-20">
-        <div className="max-w-6xl mx-auto px-6">
-          
-          <div className="mb-10">
-            <p className="text-sm uppercase tracking-widest text-white/60 mb-3">
-              BUILT FOR TRUST
-            </p>
-            <h2 className="text-3xl md:text-4xl font-semibold text-white">
-              Designed to monitor systems — not access them
+      <section
+        className="relative overflow-hidden bg-[radial-gradient(circle_at_18%_22%,rgba(56,189,248,0.12),transparent_34%),radial-gradient(circle_at_84%_78%,rgba(45,212,191,0.12),transparent_38%),linear-gradient(180deg,#071327_0%,#0a1a33_100%)]"
+      >
+        <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="max-w-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">Built for Trust</p>
+            <h2 className="mt-2 text-3xl font-semibold text-slate-50 sm:text-4xl">
+              Designed to monitor systems - not access them
             </h2>
-            <p className="mt-4 text-white/70 max-w-2xl">
-              Synteq analyzes execution signals across your systems to detect instability early.
-              We do not access your source code, secrets, or full logs by default. Only the minimum
-              operational metadata required for detection is processed.
+            <p className="mt-3 text-sm leading-6 text-slate-300">
+              Synteq analyzes execution signals across your systems to detect instability early. We do not access your
+              source code, secrets, or full logs by default. Only the minimum operational metadata required for
+              detection is processed.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            
-            <div className="rounded-2xl border border-white/10 p-6 bg-white/5">
-              <h3 className="text-white font-medium mb-4">What we receive</h3>
-              <ul className="space-y-2 text-white/70">
-                <li>• Workflow and job execution signals</li>
-                <li>• Timing, retries, and outcomes</li>
-                <li>• Operational metadata required for detection</li>
+          <div className="mt-8 grid gap-4 md:grid-cols-2">
+            <article className="rounded-2xl border border-cyan-300/20 bg-[linear-gradient(145deg,rgba(2,8,24,0.82)_0%,rgba(9,23,44,0.74)_100%)] p-6 shadow-[0_20px_52px_rgba(1,6,19,0.42)]">
+              <h3 className="text-lg font-semibold text-cyan-50">What we receive</h3>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
+                <li>Workflow and job execution signals</li>
+                <li>Timing, retries, and outcomes</li>
+                <li>Operational metadata required for detection</li>
               </ul>
-            </div>
+            </article>
 
-            <div className="rounded-2xl border border-white/10 p-6 bg-white/5">
-              <h3 className="text-white font-medium mb-4">
-                What we do not receive by default
-              </h3>
-              <ul className="space-y-2 text-white/70">
-                <li>• Source code</li>
-                <li>• Secrets</li>
-                <li>• Full logs</li>
-                <li>• Artifact contents</li>
+            <article className="rounded-2xl border border-cyan-300/20 bg-[linear-gradient(145deg,rgba(2,8,24,0.82)_0%,rgba(9,23,44,0.74)_100%)] p-6 shadow-[0_20px_52px_rgba(1,6,19,0.42)]">
+              <h3 className="text-lg font-semibold text-cyan-50">What we do not receive by default</h3>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
+                <li>Source code</li>
+                <li>Secrets</li>
+                <li>Full logs</li>
+                <li>Artifact contents</li>
               </ul>
-            </div>
-
+            </article>
           </div>
 
-          <p className="mt-6 text-sm text-white/50 max-w-xl">
+          <p className="mt-6 text-sm text-slate-400">
             Webhook secrets and API keys are used for authentication and verification, not as analysis inputs.
           </p>
-
         </div>
       </section>
 
