@@ -172,6 +172,10 @@ describe("incident bridge service", () => {
     },
     maxSources: null,
     maxHistoryHours: null,
+    detectionLevel: "full",
+    alertMode: "full",
+    incidentMode: "full",
+    simulationAllowed: true,
     features: {
       alerts: true,
       team_members: true,
@@ -200,6 +204,10 @@ describe("incident bridge service", () => {
     },
     maxSources: 1,
     maxHistoryHours: 24,
+    detectionLevel: "basic",
+    alertMode: "basic_email",
+    incidentMode: "basic",
+    simulationAllowed: true,
     features: {
       alerts: false,
       team_members: false,
@@ -258,6 +266,47 @@ describe("incident bridge service", () => {
       finding_id: "finding-1",
       incident_id: "incident-1"
     });
+  });
+
+  it("bridges new retry spike findings into incidents", async () => {
+    const finding: FindingRow = {
+      id: "finding-retry-1",
+      tenant_id: "tenant-A",
+      source: "github_actions",
+      rule_key: "github.retry_spike",
+      severity: "high",
+      status: "open",
+      system: "acme/payments",
+      correlation_key: null,
+      fingerprint: "fp-retry-1",
+      summary: "Retry spike",
+      evidence_json: { retried_events: 4 },
+      first_seen_at: new Date("2026-03-17T10:00:00.000Z"),
+      last_seen_at: new Date("2026-03-17T10:05:00.000Z"),
+      updated_at: new Date("2026-03-17T10:06:00.000Z"),
+      event_count: 1
+    };
+
+    const { client, state } = makeClient({ findings: [finding] });
+    openOrRefreshBridgeIncidentMock.mockResolvedValue({
+      action: "created",
+      incident: { id: "incident-retry-1" }
+    });
+
+    const { runIncidentBridgeBatch } = await import("../src/services/incident-bridge-service.js");
+    const result = await runIncidentBridgeBatch({
+      client: client as any,
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      resolveAccess: proAccessResolver
+    });
+
+    expect(result.incidents_created).toBe(1);
+    expect(openOrRefreshBridgeIncidentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        summary: expect.stringContaining("GitHub retry spike detected in acme/payments")
+      })
+    );
+    expect(state.links).toHaveLength(1);
   });
 
   it("does not duplicate incidents on repeated runs with no new findings", async () => {

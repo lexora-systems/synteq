@@ -24,15 +24,15 @@ export default async function ControlPlaneIndexPage() {
           <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 md:grid-cols-3">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What Synteq receives</p>
-              <p className="mt-1">Workflow events, webhook events, and alert routing metadata.</p>
+              <p className="mt-1">Operational signal metadata: status, timing, retries, run/job identifiers, and source health context.</p>
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What Synteq does NOT receive</p>
-              <p className="mt-1">Full repository access, direct infrastructure control, or broad credentials.</p>
+              <p className="mt-1">Source code, repository contents, artifact contents, full execution logs, or customer secrets by default.</p>
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Access model</p>
-              <p className="mt-1">Webhook-based, event-based, read-only, signal-level access.</p>
+              <p className="mt-1">Webhook/API-key authentication for event-level signals. Credentials are used for verification, not analysis input.</p>
             </div>
           </div>
           {!canManage ? (

@@ -306,6 +306,55 @@ export default async function PublicLandingPage() {
         </div>
       </section>
 
+      <section className="w-full py-20">
+        <div className="max-w-6xl mx-auto px-6">
+          
+          <div className="mb-10">
+            <p className="text-sm uppercase tracking-widest text-white/60 mb-3">
+              BUILT FOR TRUST
+            </p>
+            <h2 className="text-3xl md:text-4xl font-semibold text-white">
+              Designed to monitor systems — not access them
+            </h2>
+            <p className="mt-4 text-white/70 max-w-2xl">
+              Synteq analyzes execution signals across your systems to detect instability early.
+              We do not access your source code, secrets, or full logs by default. Only the minimum
+              operational metadata required for detection is processed.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            
+            <div className="rounded-2xl border border-white/10 p-6 bg-white/5">
+              <h3 className="text-white font-medium mb-4">What we receive</h3>
+              <ul className="space-y-2 text-white/70">
+                <li>• Workflow and job execution signals</li>
+                <li>• Timing, retries, and outcomes</li>
+                <li>• Operational metadata required for detection</li>
+              </ul>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 p-6 bg-white/5">
+              <h3 className="text-white font-medium mb-4">
+                What we do not receive by default
+              </h3>
+              <ul className="space-y-2 text-white/70">
+                <li>• Source code</li>
+                <li>• Secrets</li>
+                <li>• Full logs</li>
+                <li>• Artifact contents</li>
+              </ul>
+            </div>
+
+          </div>
+
+          <p className="mt-6 text-sm text-white/50 max-w-xl">
+            Webhook secrets and API keys are used for authentication and verification, not as analysis inputs.
+          </p>
+
+        </div>
+      </section>
+
       <CircuitDivider />
 
       <section

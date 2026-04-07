@@ -31,11 +31,20 @@ function registerScenarioRoute(app: FastifyInstance, scenario: SimulationScenari
       const access = await resolveTenantAccess({
         tenantId: request.authUser.tenant_id
       });
+      const simulationAllowed = access.simulationAllowed !== false;
+      if (!simulationAllowed) {
+        return reply.code(403).send({
+          error: "Upgrade required",
+          code: "UPGRADE_REQUIRED",
+          feature: "simulation"
+        });
+      }
       const premiumIntelligence = hasFeature(access, "premium_intelligence");
       request.log.info(
         {
           request_id: request.id,
           tenant_id: request.authUser.tenant_id,
+          simulation_allowed: simulationAllowed,
           feature: "premium_intelligence",
           entitled: premiumIntelligence,
           outcome: "simulation_allowed"

@@ -13,6 +13,7 @@ import { parseWithSchema } from "../utils/validation.js";
 import { prisma } from "../lib/prisma.js";
 import { hashApiKey, randomApiKey, randomOpaqueToken } from "../utils/crypto.js";
 import { config } from "../config.js";
+import { synteqDataContract } from "../lib/data-contract.js";
 import { Permission } from "../auth/permissions.js";
 import {
   replyIfEntitlementError,
@@ -1206,6 +1207,7 @@ const controlPlaneRoutes: FastifyPluginAsync = async (app) => {
       const githubSources = canonicalSources.filter((source) => source.kind === "github_integration");
 
       return {
+        data_contract: synteqDataContract,
         summary: {
           workflow_sources: summary.workflow_sources,
           github_sources: summary.github_sources,

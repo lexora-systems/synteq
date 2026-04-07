@@ -2,6 +2,15 @@
 
 This runbook defines the minimum operational contract for safe production execution before Step 7 rollout.
 
+## 0) Default Data Contract (Trust Layer)
+
+Synteq default ingestion contract is signal-level and metadata-first:
+
+1. Synteq collects operational signal metadata required for detection and alerting (status, timing, retries, workflow/job/run identifiers, source status).
+2. Synteq does **not** collect source code, repository contents, artifact contents, full logs, or customer secrets by default.
+3. GitHub webhook secrets and API keys are credentials used for authentication/signature verification, not analysis payload inputs.
+4. Operational payload snapshots are minimized by default to avoid raw payload dumping.
+
 ## 1) Secrets Handling Policy
 
 - Keep local key files only under `secrets/` (local machine only).

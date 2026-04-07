@@ -98,4 +98,49 @@ describe("github actions adapter service", () => {
     expect(result.events).toHaveLength(0);
     expect(result.reason).toContain("unsupported github event type");
   });
+
+  it("allowlists github metadata and does not forward raw log or secret-like fields", () => {
+    const result = mapGitHubWebhookToOperationalEvents({
+      eventType: "workflow_run",
+      payload: {
+        action: "completed",
+        repository: {
+          full_name: "acme/payments",
+          name: "payments"
+        },
+        sender: {
+          login: "octocat"
+        },
+        workflow_run: {
+          id: 888,
+          run_attempt: 2,
+          status: "completed",
+          conclusion: "failure",
+          created_at: "2026-03-17T10:00:00Z",
+          run_started_at: "2026-03-17T10:01:00Z",
+          updated_at: "2026-03-17T10:02:00Z",
+          logs: "should-not-be-forwarded",
+          token: "should-not-be-forwarded",
+          artifact_contents: "should-not-be-forwarded"
+        },
+        raw_payload: {
+          logs: "should-not-be-forwarded",
+          source_code: "should-not-be-forwarded"
+        }
+      }
+    });
+
+    expect(result.supported).toBe(true);
+    expect(result.events).toHaveLength(1);
+    const metadata = result.events[0]?.metadata as Record<string, unknown>;
+    expect(metadata).toMatchObject({
+      github_event: "workflow_run",
+      run_id: 888,
+      run_attempt: 2
+    });
+    expect(metadata).not.toHaveProperty("logs");
+    expect(metadata).not.toHaveProperty("token");
+    expect(metadata).not.toHaveProperty("artifact_contents");
+    expect(metadata).not.toHaveProperty("raw_payload");
+  });
 });

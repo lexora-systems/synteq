@@ -6,8 +6,10 @@ const createMock = vi.fn();
 const findFirstMock = vi.fn();
 const updateMock = vi.fn();
 const countMock = vi.fn();
+const alertChannelCountMock = vi.fn();
 const workflowCountMock = vi.fn();
 const workflowFindManyMock = vi.fn();
+const apiKeyFindManyMock = vi.fn();
 const resolveTenantAccessMock = vi.fn();
 
 vi.mock("../src/config.js", () => ({
@@ -52,9 +54,15 @@ vi.mock("../src/lib/prisma.js", () => ({
       update: updateMock,
       count: countMock
     },
+    alertChannel: {
+      count: alertChannelCountMock
+    },
     workflow: {
       findMany: workflowFindManyMock,
       count: workflowCountMock
+    },
+    apiKey: {
+      findMany: apiKeyFindManyMock
     }
   }
 }));
@@ -70,8 +78,10 @@ describe("control plane github integrations routes", () => {
     findFirstMock.mockReset();
     updateMock.mockReset();
     countMock.mockReset();
+    alertChannelCountMock.mockReset();
     workflowCountMock.mockReset();
     workflowFindManyMock.mockReset();
+    apiKeyFindManyMock.mockReset();
     resolveTenantAccessMock.mockReset();
 
     findManyMock.mockResolvedValue([
@@ -100,8 +110,10 @@ describe("control plane github integrations routes", () => {
       id: "gh-1"
     });
     countMock.mockResolvedValue(0);
+    alertChannelCountMock.mockResolvedValue(0);
     workflowCountMock.mockResolvedValue(0);
     workflowFindManyMock.mockResolvedValue([]);
+    apiKeyFindManyMock.mockResolvedValue([]);
     updateMock.mockResolvedValue({
       id: "gh-1",
       webhook_id: "hook-1",
@@ -274,5 +286,20 @@ describe("control plane github integrations routes", () => {
       feature: "source_capacity"
     });
     expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("exposes control-plane data contract on sources response", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/control-plane/sources"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data_contract: {
+        purpose: "Operational risk intelligence from event-level signals",
+        doesNotCollectByDefault: expect.arrayContaining(["source code contents", "full execution logs"])
+      }
+    });
   });
 });

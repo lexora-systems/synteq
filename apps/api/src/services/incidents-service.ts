@@ -237,15 +237,26 @@ export async function openOrRefreshBridgeIncident(input: {
       }
     });
 
-    await prisma.incidentEvent.create({
-      data: {
-        incident_id: created.id,
-        event_type: "BRIDGE_OPENED",
-        payload_json: {
-          source: "operational_finding_bridge",
-          at: now.toISOString()
+    await prisma.incidentEvent.createMany({
+      data: [
+        {
+          incident_id: created.id,
+          event_type: "BRIDGE_OPENED",
+          payload_json: {
+            source: "operational_finding_bridge",
+            at: now.toISOString()
+          }
+        },
+        {
+          incident_id: created.id,
+          event_type: "ALERT_PENDING",
+          payload_json: {
+            source: "operational_finding_bridge",
+            reason: "bridge_opened",
+            at: now.toISOString()
+          }
         }
-      }
+      ]
     });
 
     return {
@@ -271,16 +282,40 @@ export async function openOrRefreshBridgeIncident(input: {
     }
   });
 
-  await prisma.incidentEvent.create({
-    data: {
-      incident_id: existing.id,
-      event_type: reopened ? "BRIDGE_REOPENED" : "BRIDGE_REFRESHED",
-      payload_json: {
-        source: "operational_finding_bridge",
-        at: now.toISOString()
+  if (reopened) {
+    await prisma.incidentEvent.createMany({
+      data: [
+        {
+          incident_id: existing.id,
+          event_type: "BRIDGE_REOPENED",
+          payload_json: {
+            source: "operational_finding_bridge",
+            at: now.toISOString()
+          }
+        },
+        {
+          incident_id: existing.id,
+          event_type: "ALERT_PENDING",
+          payload_json: {
+            source: "operational_finding_bridge",
+            reason: "bridge_reopened",
+            at: now.toISOString()
+          }
+        }
+      ]
+    });
+  } else {
+    await prisma.incidentEvent.create({
+      data: {
+        incident_id: existing.id,
+        event_type: "BRIDGE_REFRESHED",
+        payload_json: {
+          source: "operational_finding_bridge",
+          at: now.toISOString()
+        }
       }
-    }
-  });
+    });
+  }
 
   return {
     incident: updated,

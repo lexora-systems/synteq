@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hmacSha256 } from "../src/utils/crypto.js";
 
 const consumeRateLimitMock = vi.fn();
-const githubIntegrationFindFirstMock = vi.fn();
+const githubIntegrationFindManyMock = vi.fn();
 const githubIntegrationUpdateMock = vi.fn();
 const ingestOperationalEventsMock = vi.fn();
 const redisSetNxMock = vi.fn();
@@ -31,7 +31,7 @@ vi.mock("../src/services/operational-event-ingestion-service.js", () => ({
 vi.mock("../src/lib/prisma.js", () => ({
   prisma: {
     gitHubIntegration: {
-      findFirst: githubIntegrationFindFirstMock,
+      findMany: githubIntegrationFindManyMock,
       update: githubIntegrationUpdateMock
     }
   }
@@ -53,7 +53,7 @@ describe("github webhook api", () => {
 
   beforeEach(async () => {
     consumeRateLimitMock.mockReset();
-    githubIntegrationFindFirstMock.mockReset();
+    githubIntegrationFindManyMock.mockReset();
     githubIntegrationUpdateMock.mockReset();
     ingestOperationalEventsMock.mockReset();
     redisSetNxMock.mockReset();
@@ -63,7 +63,18 @@ describe("github webhook api", () => {
       current: 1,
       retryAfterSec: 60
     });
-    githubIntegrationFindFirstMock.mockResolvedValue(integration);
+    githubIntegrationFindManyMock.mockImplementation(
+      async (query: { where?: { webhook_id?: string; is_active?: boolean } } | undefined) => {
+        const where = query?.where;
+        if (where?.webhook_id) {
+          return where.webhook_id === "hook-1" && where.is_active ? [integration] : [];
+        }
+        if (where?.is_active) {
+          return [integration];
+        }
+        return [];
+      }
+    );
     githubIntegrationUpdateMock.mockResolvedValue(undefined);
     redisSetNxMock.mockResolvedValue(true);
     ingestOperationalEventsMock.mockResolvedValue({
@@ -141,6 +152,38 @@ describe("github webhook api", () => {
     expect(ingestOperationalEventsMock).toHaveBeenCalled();
   });
 
+  it("accepts webhook when provider hook id differs but signature matches integration secret", async () => {
+    const payload = {
+      action: "completed",
+      repository: {
+        full_name: "acme/payments",
+        name: "payments"
+      },
+      workflow_run: {
+        id: 110,
+        status: "completed",
+        conclusion: "success",
+        created_at: "2026-03-17T10:00:00Z",
+        run_started_at: "2026-03-17T10:01:00Z",
+        updated_at: "2026-03-17T10:02:00Z"
+      }
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/integrations/github/webhook",
+      headers: {
+        "x-github-hook-id": "provider-hook-9999",
+        "x-github-event": "workflow_run",
+        "x-hub-signature-256": sign(integration.webhook_secret, payload)
+      },
+      payload
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(ingestOperationalEventsMock).toHaveBeenCalled();
+  });
+
   it("rejects invalid github webhook signature", async () => {
     const response = await app.inject({
       method: "POST",
@@ -159,6 +202,80 @@ describe("github webhook api", () => {
           id: 1
         }
       }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects unknown webhook identity when signature does not match any integration", async () => {
+    const payload = {
+      action: "requested",
+      repository: {
+        full_name: "acme/payments"
+      },
+      workflow_run: {
+        id: 2
+      }
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/integrations/github/webhook",
+      headers: {
+        "x-github-hook-id": "provider-hook-unknown",
+        "x-github-event": "workflow_run",
+        "x-hub-signature-256": sign("not-the-integration-secret", payload)
+      },
+      payload
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects cross-tenant spoof when hook id maps to one integration but signature belongs to another", async () => {
+    const integrationB = {
+      id: "gh-int-2",
+      tenant_id: "tenant-B",
+      webhook_secret: "github-secret-tenant-b",
+      repository_full_name: "beta/payments"
+    };
+    githubIntegrationFindManyMock.mockImplementationOnce(
+      async (query: { where?: { webhook_id?: string; is_active?: boolean } } | undefined) => {
+        const where = query?.where;
+        if (where?.webhook_id === "hook-2" && where.is_active) {
+          return [integrationB];
+        }
+        return [];
+      }
+    );
+
+    const payload = {
+      action: "completed",
+      repository: {
+        full_name: "beta/payments",
+        name: "payments"
+      },
+      workflow_run: {
+        id: 320,
+        status: "completed",
+        conclusion: "failure",
+        created_at: "2026-03-17T10:00:00Z",
+        run_started_at: "2026-03-17T10:01:00Z",
+        updated_at: "2026-03-17T10:02:00Z"
+      }
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/integrations/github/webhook",
+      headers: {
+        "x-github-hook-id": "hook-2",
+        "x-github-event": "workflow_run",
+        "x-hub-signature-256": sign(integration.webhook_secret, payload)
+      },
+      payload
     });
 
     expect(response.statusCode).toBe(401);
@@ -338,6 +455,72 @@ describe("github webhook api", () => {
       processed: false,
       duplicate: true
     });
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps repository scope enforcement for github integration", async () => {
+    const payload = {
+      action: "completed",
+      repository: {
+        full_name: "acme/other-repo",
+        name: "other-repo"
+      },
+      workflow_run: {
+        id: 520,
+        status: "completed",
+        conclusion: "failure",
+        created_at: "2026-03-17T10:01:00Z",
+        run_started_at: "2026-03-17T10:02:00Z",
+        updated_at: "2026-03-17T10:03:00Z"
+      }
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/integrations/github/webhook",
+      headers: {
+        "x-github-hook-id": "hook-1",
+        "x-github-event": "workflow_run",
+        "x-hub-signature-256": sign(integration.webhook_secret, payload)
+      },
+      payload
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps github webhook rate limiting behavior", async () => {
+    consumeRateLimitMock.mockResolvedValueOnce({
+      allowed: false,
+      current: 601,
+      retryAfterSec: 55
+    });
+
+    const payload = {
+      action: "requested",
+      repository: {
+        full_name: "acme/payments",
+        name: "payments"
+      },
+      workflow_run: {
+        id: 601
+      }
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/integrations/github/webhook",
+      headers: {
+        "x-github-hook-id": "hook-1",
+        "x-github-event": "workflow_run",
+        "x-hub-signature-256": sign(integration.webhook_secret, payload)
+      },
+      payload
+    });
+
+    expect(response.statusCode).toBe(429);
+    expect(githubIntegrationFindManyMock).not.toHaveBeenCalled();
     expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
   });
 });
