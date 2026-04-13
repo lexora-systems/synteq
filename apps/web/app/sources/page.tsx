@@ -42,8 +42,55 @@ export default async function ConnectedSourcesPage() {
   const token = await requireToken();
   const payload = await fetchConnectedSources(token);
   const hasSources = payload.sources.length > 0;
-  const workflowCount = payload.sources.filter((source) => source.type === "workflow").length;
-  const githubCount = payload.sources.filter((source) => source.type === "github_integration").length;
+  const activeSources = payload.sources.filter((source) => source.status === "active");
+  const hasActiveSources = activeSources.length > 0;
+  const workflowCount = activeSources.filter((source) => source.type === "workflow").length;
+  const githubCount = activeSources.filter((source) => source.type === "github_integration").length;
+  const hasInactiveGitHubSources = payload.sources.some(
+    (source) => source.type === "github_integration" && source.status !== "active"
+  );
+  const activeGitHubSources = activeSources.filter((source) => source.type === "github_integration");
+  const verifiedGitHubSources = activeGitHubSources.filter((source) => Boolean(source.last_activity_at));
+  const latestSourceSignalAt = activeSources.reduce<string | null>((latest, source) => {
+    if (!source.last_activity_at) {
+      return latest;
+    }
+    if (!latest) {
+      return source.last_activity_at;
+    }
+    return new Date(source.last_activity_at).getTime() > new Date(latest).getTime() ? source.last_activity_at : latest;
+  }, null);
+  const latestGitHubSignalAt = activeGitHubSources.reduce<string | null>((latest, source) => {
+    if (!source.last_activity_at) {
+      return latest;
+    }
+    if (!latest) {
+      return source.last_activity_at;
+    }
+    return new Date(source.last_activity_at).getTime() > new Date(latest).getTime() ? source.last_activity_at : latest;
+  }, null);
+
+  const sourceOperationalStatus =
+    !hasSources
+      ? "Waiting for first source connection"
+      : !hasActiveSources
+        ? "Sources configured but inactive"
+      : activeGitHubSources.length > 0 && verifiedGitHubSources.length === 0
+        ? "Waiting for webhook delivery"
+        : latestSourceSignalAt
+          ? "Connected and monitoring"
+          : "Connected, waiting for first signal";
+
+  const sourceOperationalMessage =
+    !hasSources
+      ? "Connect GitHub or another source to begin activation."
+      : !hasActiveSources
+        ? "Sources are configured but currently inactive. Synteq monitoring resumes when at least one source is active."
+      : activeGitHubSources.length > 0 && verifiedGitHubSources.length === 0
+        ? "GitHub integration is active, but no verified webhook delivery has been received yet."
+        : latestSourceSignalAt
+          ? "Synteq is ingesting signals. If incidents are empty, the environment may currently be quiet."
+          : "Source is connected but no signal has been received yet. Trigger one run/event to validate ingestion.";
 
   return (
     <main className="min-h-screen syn-app-shell pb-12">
@@ -74,11 +121,15 @@ export default async function ConnectedSourcesPage() {
           </div>
         </div>
 
-        {!hasSources ? (
+        {!hasActiveSources ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-panel">
-            <p className="font-semibold text-ink">No connected sources yet</p>
-            <p className="mt-1">Connect your first source to start live monitoring.</p>
-            <p className="mt-1">Synteq is continuously monitoring once signals arrive, and you&apos;ll be alerted when risk patterns are detected.</p>
+            <p className="font-semibold text-ink">{hasSources ? "Sources configured but inactive" : "No active source connected yet"}</p>
+            <p className="mt-1">
+              {hasSources
+                ? "Configured sources are currently inactive, so Synteq is not monitoring live signals right now."
+                : "Connect and activate your first source to start live monitoring."}
+            </p>
+            <p className="mt-1">Synteq is continuously monitoring once active signal flow begins, and you&apos;ll be alerted when risk patterns are detected.</p>
             <div className="mt-3">
               <Link href="/settings/control-plane" className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">
                 Open control plane
@@ -96,6 +147,32 @@ export default async function ConnectedSourcesPage() {
             </p>
           </div>
         )}
+
+        <div className="mt-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-5 text-sm text-slate-700 shadow-panel" data-testid="sources-operational-state">
+          <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Source operational state</p>
+          <h3 className="mt-1 text-lg font-semibold text-ink">{sourceOperationalStatus}</h3>
+          <p className="mt-1">{sourceOperationalMessage}</p>
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
+            <p>
+              Integration status: <strong>{activeSources.length > 0 ? "Active source present" : "No active source"}</strong>
+            </p>
+            <p>
+              Webhook verification: <strong>{verifiedGitHubSources.length > 0 ? "Verified" : githubCount > 0 ? "Pending" : hasInactiveGitHubSources ? "Inactive" : "Not configured"}</strong>
+            </p>
+            <p>
+              Last source signal: <strong>{formatTimestamp(latestSourceSignalAt)}</strong>
+            </p>
+            <p>
+              Last GitHub delivery: <strong>{formatTimestamp(latestGitHubSignalAt)}</strong>
+            </p>
+            <p>
+              Repo scope: <strong>{githubCount > 0 ? "Configured" : hasInactiveGitHubSources ? "Configured (inactive)" : "Not configured"}</strong>
+            </p>
+            <p>
+              Monitoring status: <strong>{latestSourceSignalAt ? "Live" : "Waiting for signal"}</strong>
+            </p>
+          </div>
+        </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-4">
           <div className="rounded-2xl bg-white p-4 shadow-panel">

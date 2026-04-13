@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { TopNav } from "../../components/top-nav";
 import { fetchMe, fetchTenantSettings, fetchWorkflows, registerWorkflow, startTenantTrial } from "../../lib/api";
-import { resolveActivationState } from "../../lib/activation";
+import { resolveActivationJourney, resolveActivationState, type ActivationMilestoneState } from "../../lib/activation";
 import { requireToken } from "../../lib/auth";
 
 function toSlug(value: string): string {
@@ -13,6 +13,32 @@ function toSlug(value: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 64);
+}
+
+function milestoneStateLabel(state: ActivationMilestoneState): string {
+  if (state === "complete") {
+    return "Complete";
+  }
+  if (state === "current") {
+    return "Current";
+  }
+  if (state === "blocked") {
+    return "Blocked";
+  }
+  return "Waiting";
+}
+
+function milestoneStateClasses(state: ActivationMilestoneState): string {
+  if (state === "complete") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  if (state === "current") {
+    return "border-cyan-200 bg-cyan-50 text-cyan-800";
+  }
+  if (state === "blocked") {
+    return "border-rose-200 bg-rose-50 text-rose-700";
+  }
+  return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
 async function startTrialAction() {
@@ -71,7 +97,8 @@ export default async function WelcomePage({
     redirect("/overview");
   }
 
-  const [settingsResult, meResult, workflowsResult] = await Promise.all([
+  const [activationJourney, settingsResult, meResult, workflowsResult] = await Promise.all([
+    resolveActivationJourney(token),
     fetchTenantSettings(token)
       .then((payload) => ({ ok: true as const, payload }))
       .catch(() => ({ ok: false as const })),
@@ -111,7 +138,10 @@ export default async function WelcomePage({
   const showTrialActive = trial.active;
   const showTrialEnded = !trial.active && trial.consumed && tenantSettings.current_plan === "free";
   const connectedWorkflows = workflowsResult.ok ? workflowsResult.payload.workflows : [];
-  const hasConnectedWorkflow = connectedWorkflows.length > 0;
+  const activeWorkflowSources = connectedWorkflows.length;
+  const activeGitHubSources = activationJourney.github.activeIntegrationCount;
+  const activeSourceCount = activeWorkflowSources + activeGitHubSources;
+  const hasConfiguredSources = activeWorkflowSources > 0 || activationJourney.github.integrationCount > 0;
   const trialStatusLabel = showTrialActive
     ? `${trial.days_remaining}d left`
     : showTrialEnded
@@ -120,6 +150,7 @@ export default async function WelcomePage({
         ? "Available"
         : "Unavailable";
   const planLabel = tenantSettings.effective_plan.toUpperCase();
+  const incompleteMilestones = activationJourney.milestones.filter((milestone) => milestone.state !== "complete").length;
 
   return (
     <main className="min-h-screen syn-app-shell pb-12">
@@ -156,11 +187,11 @@ export default async function WelcomePage({
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <a
-                href="#connect-workflow"
-                className="syn-cta-lift syn-btn-primary w-full text-sm sm:w-auto"
+                href="#activation-flow"
+                className="syn-cta-lift syn-btn-secondary syn-btn-secondary-soft w-full text-sm sm:w-auto"
                 data-testid="welcome-connect-workflow-cta"
               >
-                Connect your first workflow
+                Review activation checklist
               </a>
               <Link
                 href="/settings/control-plane"
@@ -178,7 +209,7 @@ export default async function WelcomePage({
             </div>
 
             <p className="mt-4 text-sm text-cyan-100/70">
-              You can start trial now or let it activate automatically when live monitoring begins.
+              Follow the activation flow below to connect a source, verify delivery, and confirm monitoring.
             </p>
           </div>
         </section>
@@ -204,25 +235,73 @@ export default async function WelcomePage({
           </div>
         </section>
 
-        <section className="mt-5">
-          <div className="syn-app-panel rounded-3xl p-5 sm:p-6">
-            <h2 className="syn-app-title text-xl font-semibold">Activation checklist</h2>
-            <p className="syn-app-copy mt-1 text-sm">A clear 3-step flow for first-time setup.</p>
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <div className="syn-app-panel-muted rounded-2xl px-4 py-3">
-                <p className="syn-app-muted text-xs uppercase tracking-[0.2em]">Step 1</p>
-                <p className="syn-app-title mt-1 font-medium">Connect at least one workflow</p>
+        <section id="activation-flow" className="mt-5">
+          <div className="syn-app-panel rounded-3xl p-5 sm:p-6" data-testid="welcome-activation-panel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="syn-app-kicker text-xs uppercase tracking-[0.22em]">Activation</p>
+                <h2 className="syn-app-title mt-1 text-xl font-semibold">Get Synteq live</h2>
+                <p className="syn-app-copy mt-1 text-sm">
+                  Connect a source, verify delivery, and confirm first signal flow so monitoring can run with confidence.
+                </p>
               </div>
-              <div className="syn-app-panel-muted rounded-2xl px-4 py-3">
-                <p className="syn-app-muted text-xs uppercase tracking-[0.2em]">Step 2</p>
-                <p className="syn-app-title mt-1 font-medium">Configure ingestion keys/integrations</p>
-              </div>
-              <div className="syn-app-panel-muted rounded-2xl px-4 py-3">
-                <p className="syn-app-muted text-xs uppercase tracking-[0.2em]">Step 3</p>
-                <p className="syn-app-title mt-1 font-medium">Review risk insights in Overview</p>
+              <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm">
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Progress</p>
+                <p className="mt-1 font-semibold text-ink">
+                  {activationJourney.progress.completed}/{activationJourney.progress.total} complete
+                </p>
               </div>
             </div>
-            <p className="syn-app-muted mt-4 text-sm">Use simulation while your live setup is still in progress.</p>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-[1.35fr_1fr]">
+              <div className="space-y-2">
+                {activationJourney.milestones.map((milestone) => (
+                  <div key={milestone.key} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium text-ink">{milestone.title}</p>
+                      <span
+                        className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${milestoneStateClasses(
+                          milestone.state
+                        )}`}
+                      >
+                        {milestoneStateLabel(milestone.state)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-600">{milestone.description}</p>
+                  </div>
+                ))}
+              </div>
+
+              <aside className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Next required action</p>
+                <h3 className="mt-1 text-lg font-semibold text-ink">{activationJourney.primaryAction.label}</h3>
+                <p className="mt-2 text-sm text-slate-700">{activationJourney.primaryAction.helper}</p>
+                <a
+                  href={activationJourney.primaryAction.href}
+                  className="mt-3 inline-flex rounded-lg bg-ocean px-3 py-2 text-sm font-semibold text-white"
+                  data-testid="welcome-primary-next-action"
+                >
+                  {activationJourney.primaryAction.label}
+                </a>
+                <p className="mt-3 text-xs text-slate-600">
+                  {incompleteMilestones > 0
+                    ? `${incompleteMilestones} milestone${incompleteMilestones === 1 ? "" : "s"} still in progress.`
+                    : "All activation milestones are complete."}
+                </p>
+              </aside>
+            </div>
+
+            {activationJourney.quietMonitoring ? (
+              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                Synteq is connected and monitoring. No incidents are open right now, which indicates a quiet state rather than a setup issue.
+              </div>
+            ) : null}
+
+            {activationJourney.metricsUnavailable ? (
+              <p className="mt-3 text-sm text-amber-800">
+                Metrics aggregation is temporarily unavailable. Activation state is derived from source and webhook status until telemetry is restored.
+              </p>
+            ) : null}
           </div>
         </section>
 
@@ -263,13 +342,13 @@ export default async function WelcomePage({
           ) : null}
         </div>
 
-        {hasConnectedWorkflow ? (
+        {activationJourney.hasActiveSources ? (
           <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-panel">
             <p className="font-semibold">
-              Synteq is now watching {connectedWorkflows.length} workflow source{connectedWorkflows.length === 1 ? "" : "s"}.
+              Synteq is now watching {activeSourceCount} active source{activeSourceCount === 1 ? "" : "s"}.
             </p>
             <p className="mt-1">
-              Signals watched: execution outcomes, retry behavior, latency trends, and heartbeat continuity.
+              Active coverage: {activeWorkflowSources} workflow source{activeWorkflowSources === 1 ? "" : "s"}, {activeGitHubSources} GitHub integration{activeGitHubSources === 1 ? "" : "s"}.
             </p>
             <p className="mt-1">
               You&apos;ll be alerted when failure spikes, retry storms, missing heartbeats, or latency-related risks are detected.
@@ -277,15 +356,19 @@ export default async function WelcomePage({
           </div>
         ) : (
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-panel">
-            <p className="font-semibold text-ink">No connected source yet</p>
-            <p className="mt-1">Connect one source to start live monitoring. Synteq is continuously monitoring once signals begin arriving.</p>
+            <p className="font-semibold text-ink">{hasConfiguredSources ? "Sources configured but inactive" : "No active source connected yet"}</p>
+            <p className="mt-1">
+              {hasConfiguredSources
+                ? "Configured sources are currently inactive, so Synteq is not monitoring live signals yet."
+                : "Connect and activate one source to start live monitoring. Synteq begins monitoring once signals arrive."}
+            </p>
           </div>
         )}
 
         <section className="mt-6 space-y-4">
           <div>
             <p className="syn-app-kicker text-xs font-medium uppercase tracking-[0.22em]">Activation Paths</p>
-            <h2 className="syn-app-title mt-1 text-2xl font-semibold">Choose your next step</h2>
+            <h2 className="syn-app-title mt-1 text-2xl font-semibold">Secondary actions</h2>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -298,7 +381,7 @@ export default async function WelcomePage({
               <div className="mt-4">
                 {showTrialStartCta && canManuallyStartTrial ? (
                   <form action={startTrialAction}>
-                    <button className="syn-cta-lift syn-btn-primary text-sm">Start trial</button>
+                    <button className="syn-cta-lift syn-btn-secondary syn-btn-secondary-soft text-sm">Start trial</button>
                   </form>
                 ) : showTrialActive ? (
                   <p className="text-sm font-medium text-emerald-700">Active: {trial.days_remaining} days left</p>
@@ -398,4 +481,3 @@ export default async function WelcomePage({
     </main>
   );
 }
-

@@ -23,6 +23,14 @@ function formatTimestamp(value: string | null): string {
   return new Date(value).toLocaleString();
 }
 
+function toTimestampMs(value: string | null): number {
+  if (!value) {
+    return Number.NaN;
+  }
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
 export function GitHubIntegrationsManager({
   initialWebhookUrl,
   initialIntegrations,
@@ -42,6 +50,45 @@ export function GitHubIntegrationsManager({
     latest_secret: null
   });
   const [copied, setCopied] = useState(false);
+  const activeIntegrations = state.integrations.filter((integration) => integration.is_active);
+  const verifiedIntegrations = activeIntegrations.filter(
+    (integration) => Boolean(integration.last_seen_at || integration.last_delivery_id)
+  );
+
+  let latestDeliveryAt: string | null = null;
+  let latestDeliveryAtMs = Number.NaN;
+  let latestDeliveryId: string | null = null;
+
+  for (const integration of activeIntegrations) {
+    const seenAtMs = toTimestampMs(integration.last_seen_at);
+    if (!Number.isNaN(seenAtMs) && (Number.isNaN(latestDeliveryAtMs) || seenAtMs > latestDeliveryAtMs)) {
+      latestDeliveryAtMs = seenAtMs;
+      latestDeliveryAt = integration.last_seen_at;
+      latestDeliveryId = integration.last_delivery_id;
+    }
+  }
+
+  if (!latestDeliveryId) {
+    latestDeliveryId = activeIntegrations.find((integration) => Boolean(integration.last_delivery_id))?.last_delivery_id ?? null;
+  }
+
+  const operationalStatus =
+    state.integrations.length === 0
+      ? "No integration configured"
+      : activeIntegrations.length === 0
+        ? "Integration inactive"
+        : verifiedIntegrations.length === 0
+          ? "Waiting for webhook delivery"
+          : "Connected and monitoring";
+
+  const operationalMessage =
+    state.integrations.length === 0
+      ? "Create a GitHub integration to start webhook verification."
+      : activeIntegrations.length === 0
+        ? "Reactivate or create an integration so Synteq can receive deliveries."
+        : verifiedIntegrations.length === 0
+          ? "Webhook is configured, but Synteq has not received a verified delivery yet."
+          : "Synteq is receiving verified webhook deliveries. If incidents are empty, the system may be quiet by design.";
 
   return (
     <div className="grid gap-4">
@@ -55,6 +102,32 @@ export function GitHubIntegrationsManager({
           {state.message}
         </div>
       ) : null}
+
+      <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 shadow-panel" data-testid="github-operational-state">
+        <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Operational connection state</p>
+        <h3 className="mt-1 text-lg font-semibold text-ink">{operationalStatus}</h3>
+        <p className="mt-1 text-sm text-slate-700">{operationalMessage}</p>
+        <div className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-3">
+          <p>
+            Active integrations: <strong>{activeIntegrations.length}</strong>
+          </p>
+          <p>
+            Webhook verified: <strong>{verifiedIntegrations.length > 0 ? "Yes" : "No"}</strong>
+          </p>
+          <p>
+            Last delivery: <strong>{formatTimestamp(latestDeliveryAt)}</strong>
+          </p>
+          <p>
+            Last delivery id: <strong>{latestDeliveryId ?? "-"}</strong>
+          </p>
+          <p>
+            Repo scope: <strong>{activeIntegrations.length > 0 ? "Configured" : "Not configured"}</strong>
+          </p>
+          <p>
+            Monitoring status: <strong>{verifiedIntegrations.length > 0 ? "Live" : "Pending verification"}</strong>
+          </p>
+        </div>
+      </div>
 
       <div className="rounded-2xl bg-white p-5 shadow-panel">
         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Manual setup</p>
@@ -137,12 +210,13 @@ export function GitHubIntegrationsManager({
         <h3 className="text-lg font-semibold text-ink">Integrations</h3>
         <p className="mt-1 text-sm text-slate-600">Rotate secrets or deactivate anytime using the right-side actions.</p>
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[900px] border-collapse text-sm">
+          <table className="w-full min-w-[980px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-left text-slate-500">
                 <th className="py-2">Repository scope</th>
                 <th className="py-2">Webhook id</th>
                 <th className="py-2">Status</th>
+                <th className="py-2">Last delivery id</th>
                 <th className="py-2">Last seen</th>
                 <th className="py-2">Created</th>
                 <th className="py-2">Actions</th>
@@ -154,6 +228,7 @@ export function GitHubIntegrationsManager({
                   <td className="py-3 pr-2 text-ink">{integration.repository_full_name ?? "Any repository"}</td>
                   <td className="py-3 pr-2 font-mono">{integration.webhook_id}</td>
                   <td className="py-3 pr-2">{integration.is_active ? "active" : "inactive"}</td>
+                  <td className="py-3 pr-2 font-mono text-xs text-slate-600">{integration.last_delivery_id ?? "-"}</td>
                   <td className="py-3 pr-2">{formatTimestamp(integration.last_seen_at)}</td>
                   <td className="py-3 pr-2">{formatTimestamp(integration.created_at)}</td>
                   <td className="py-3 pr-2">

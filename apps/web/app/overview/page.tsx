@@ -2,7 +2,8 @@ import Link from "next/link";
 import { TopNav } from "../../components/top-nav";
 import { MetricsChart } from "../../components/charts";
 import { ReliabilityTools } from "../../components/reliability-tools";
-import { fetchConnectedSources, fetchIncidents, fetchOverview, fetchTenantSettings, fetchWorkflows } from "../../lib/api";
+import { fetchConnectedSources, fetchGitHubIntegrations, fetchIncidents, fetchOverview, fetchTenantSettings, fetchWorkflows } from "../../lib/api";
+import { deriveActivationJourney } from "../../lib/activation";
 import { requireToken } from "../../lib/auth";
 
 function asNumber(value: unknown): number {
@@ -85,7 +86,7 @@ function deploymentStatus(score: number): "Stable" | "Needs Attention" | "Unstab
 export default async function OverviewPage() {
   const token = await requireToken();
 
-  const [overviewResult, incidentsPayload, workflowsPayload, settingsResult, sourcesResult] = await Promise.all([
+  const [overviewResult, incidentsPayload, workflowsPayload, settingsResult, sourcesResult, githubIntegrationsResult] = await Promise.all([
     fetchOverview(token, "1h")
       .then((payload) => ({ ok: true as const, payload }))
       .catch(() => ({ ok: false as const })),
@@ -110,6 +111,15 @@ export default async function OverviewPage() {
             ingestion_api_keys_configured: false,
             alert_dispatch_ready: false
           }
+        }
+      })),
+    fetchGitHubIntegrations(token)
+      .then((payload) => ({ ok: true as const, payload }))
+      .catch(() => ({
+        ok: false as const,
+        payload: {
+          webhook_url: "",
+          integrations: []
         }
       }))
   ]);
@@ -150,15 +160,23 @@ export default async function OverviewPage() {
   });
   const stabilityLabel = deploymentStatus(stabilityScore);
   const estimatedExposure = totalCost > 0 ? totalCost : avgCost * total;
-  const hasLimitedData = total < 5 && openIncidents === 0;
   const connectedSourcesSummary = sourcesResult.payload.summary;
   const connectedSources = sourcesResult.payload.sources;
-  const hasConnectedSources = connectedSources.length > 0;
-  const hasTelemetrySignals = total > 0;
+  const hasConfiguredSources = connectedSources.length > 0;
   const noIncidentsYet = openIncidents === 0;
-  const sourceSetupPending = !hasConnectedSources;
-  const connectedButQuiet = hasConnectedSources && noIncidentsYet && !hasTelemetrySignals;
-  const connectedAndStable = hasConnectedSources && noIncidentsYet && hasTelemetrySignals;
+  const activationJourney = deriveActivationJourney({
+    connectedSources,
+    githubIntegrations: githubIntegrationsResult.payload.integrations,
+    totalSignals: total,
+    openIncidents,
+    metricsUnavailable: monitoringDataUnavailable
+  });
+  const sourceSetupPending = !activationJourney.hasActiveSources;
+  const activeConnectedSourceCount = connectedSources.filter(
+    (source) => source.status === "active" && (source.type === "workflow" || source.type === "github_integration")
+  ).length;
+  const connectedButQuiet = activationJourney.hasActiveSources && noIncidentsYet && !activationJourney.firstSignalReceived;
+  const activationIncomplete = !activationJourney.monitoringActive;
   const window5m = overview.windows?.["5m"] as Record<string, unknown> | undefined;
   const window15m = overview.windows?.["15m"] as Record<string, unknown> | undefined;
 
@@ -231,10 +249,24 @@ export default async function OverviewPage() {
           </div>
         </div>
 
+        {activationIncomplete ? (
+          <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-slate-700 shadow-panel" data-testid="overview-activation-banner">
+            <p className="font-semibold text-ink">Activation still in progress</p>
+            <p className="mt-1">{activationJourney.primaryAction.helper}</p>
+            <a href={activationJourney.primaryAction.href} className="mt-2 inline-flex rounded-lg border border-cyan-300 px-3 py-1.5 text-xs font-semibold text-cyan-800">
+              {activationJourney.primaryAction.label}
+            </a>
+          </div>
+        ) : null}
+
         {sourceSetupPending ? (
           <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-panel">
-            <p className="font-semibold text-ink">No sources connected yet</p>
-            <p className="mt-1">Connect a source to start always-on detection. Synteq continuously watches operational signals once they begin arriving.</p>
+            <p className="font-semibold text-ink">{hasConfiguredSources ? "Sources configured but inactive" : "No active source connected yet"}</p>
+            <p className="mt-1">
+              {hasConfiguredSources
+                ? "Synteq is not monitoring yet because configured sources are inactive. Activate one source to resume live detection."
+                : "Connect and activate a source to start always-on detection. Synteq begins monitoring as soon as operational signals arrive."}
+            </p>
             <p className="mt-1">You&apos;ll be alerted when failure spikes, retries, latency drift, or missing heartbeat risks are detected.</p>
             <Link href="/settings/control-plane" className="mt-2 inline-flex rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">
               Open control plane
@@ -243,7 +275,7 @@ export default async function OverviewPage() {
         ) : (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-panel">
             <p className="font-semibold">
-              Synteq is continuously detecting across {connectedSources.length} source{connectedSources.length === 1 ? "" : "s"}.
+              Synteq is continuously detecting across {activeConnectedSourceCount} active source{activeConnectedSourceCount === 1 ? "" : "s"}.
             </p>
             <p className="mt-1">
               Watching {connectedSourcesSummary.workflow_sources} workflow signal source{connectedSourcesSummary.workflow_sources === 1 ? "" : "s"} and{" "}
@@ -348,10 +380,10 @@ export default async function OverviewPage() {
           </div>
         ) : null}
 
-        {connectedAndStable && hasLimitedData ? (
+        {activationJourney.quietMonitoring && !connectedButQuiet ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 shadow-panel">
             <p className="font-semibold">Connected and monitoring</p>
-            <p className="mt-1">No active incidents right now. Synteq is watching incoming signals and will alert when risk patterns appear.</p>
+            <p className="mt-1">No active incidents right now. Synteq is connected and continuously monitoring incoming operational signals.</p>
           </div>
         ) : null}
 
@@ -442,4 +474,3 @@ export default async function OverviewPage() {
     </main>
   );
 }
-
