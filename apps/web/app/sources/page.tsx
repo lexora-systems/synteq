@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { TopNav } from "../../components/top-nav";
 import { fetchConnectedSources } from "../../lib/api";
+import { resolveActivationJourney } from "../../lib/activation";
 import { requireToken } from "../../lib/auth";
 
 function formatTimestamp(value: string | null): string {
@@ -8,6 +9,40 @@ function formatTimestamp(value: string | null): string {
     return "-";
   }
   return new Date(value).toLocaleString();
+}
+
+type FreshnessState = "Fresh" | "Stale" | "Unknown";
+
+const STALE_THRESHOLD_MINUTES = 15;
+
+function classifyFreshness(value: string | null, thresholdMinutes = STALE_THRESHOLD_MINUTES): FreshnessState {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const timestampMs = new Date(value).getTime();
+  if (!Number.isFinite(timestampMs)) {
+    return "Unknown";
+  }
+
+  const ageMs = Date.now() - timestampMs;
+  if (ageMs < 0) {
+    return "Unknown";
+  }
+
+  return ageMs <= thresholdMinutes * 60_000 ? "Fresh" : "Stale";
+}
+
+function freshnessClasses(state: FreshnessState): string {
+  if (state === "Fresh") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+
+  if (state === "Stale") {
+    return "border-amber-200 bg-amber-50 text-amber-800";
+  }
+
+  return "border-slate-200 bg-slate-100 text-slate-600";
 }
 
 function toLabel(type: "workflow" | "github_integration"): string {
@@ -40,7 +75,7 @@ function riskSummary(type: "workflow" | "github_integration"): string {
 
 export default async function ConnectedSourcesPage() {
   const token = await requireToken();
-  const payload = await fetchConnectedSources(token);
+  const [payload, activationJourney] = await Promise.all([fetchConnectedSources(token), resolveActivationJourney(token)]);
   const hasSources = payload.sources.length > 0;
   const activeSources = payload.sources.filter((source) => source.status === "active");
   const hasActiveSources = activeSources.length > 0;
@@ -69,28 +104,34 @@ export default async function ConnectedSourcesPage() {
     }
     return new Date(source.last_activity_at).getTime() > new Date(latest).getTime() ? source.last_activity_at : latest;
   }, null);
+  const latestSourceSignalFreshness = classifyFreshness(latestSourceSignalAt);
+  const latestGitHubDeliveryFreshness = classifyFreshness(latestGitHubSignalAt);
 
   const sourceOperationalStatus =
     !hasSources
       ? "Waiting for first source connection"
       : !hasActiveSources
         ? "Sources configured but inactive"
-      : activeGitHubSources.length > 0 && verifiedGitHubSources.length === 0
+      : activeGitHubSources.length > 0 && !activationJourney.webhookVerified
         ? "Waiting for webhook delivery"
-        : latestSourceSignalAt
+        : activationJourney.monitoringActive
           ? "Connected and monitoring"
-          : "Connected, waiting for first signal";
+          : activationJourney.firstSignalReceived
+            ? "Connected and analyzing"
+            : "Connected, waiting for first signal";
 
   const sourceOperationalMessage =
     !hasSources
       ? "Connect GitHub or another source to begin activation."
       : !hasActiveSources
         ? "Sources are configured but currently inactive. Synteq monitoring resumes when at least one source is active."
-      : activeGitHubSources.length > 0 && verifiedGitHubSources.length === 0
+      : activeGitHubSources.length > 0 && !activationJourney.webhookVerified
         ? "GitHub integration is active, but no verified webhook delivery has been received yet."
-        : latestSourceSignalAt
-          ? "Synteq is ingesting signals. If incidents are empty, the environment may currently be quiet."
-          : "Source is connected but no signal has been received yet. Trigger one run/event to validate ingestion.";
+        : activationJourney.monitoringActive
+          ? "Synteq is ingesting and monitoring signals. If incidents are empty, the environment may currently be quiet."
+          : activationJourney.firstSignalReceived
+            ? "Synteq has begun receiving signals and is continuing to build confidence from recent activity."
+            : "Source is connected but no signal has been received yet. Trigger one run/event to validate ingestion.";
 
   return (
     <main className="min-h-screen syn-app-shell pb-12">
@@ -161,17 +202,27 @@ export default async function ConnectedSourcesPage() {
             </p>
             <p>
               Last source signal: <strong>{formatTimestamp(latestSourceSignalAt)}</strong>
+              <span className={`ml-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${freshnessClasses(latestSourceSignalFreshness)}`}>
+                {latestSourceSignalFreshness}
+              </span>
             </p>
             <p>
               Last GitHub delivery: <strong>{formatTimestamp(latestGitHubSignalAt)}</strong>
+              <span className={`ml-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${freshnessClasses(latestGitHubDeliveryFreshness)}`}>
+                {latestGitHubDeliveryFreshness}
+              </span>
             </p>
             <p>
               Repo scope: <strong>{githubCount > 0 ? "Configured" : hasInactiveGitHubSources ? "Configured (inactive)" : "Not configured"}</strong>
             </p>
             <p>
-              Monitoring status: <strong>{latestSourceSignalAt ? "Live" : "Waiting for signal"}</strong>
+              Monitoring status: <strong>{activationJourney.monitoringActive ? "Live" : hasActiveSources ? "Waiting for signal" : "Inactive"}</strong>
             </p>
           </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Fresh/Stale labels use a {STALE_THRESHOLD_MINUTES}-minute recency threshold where timestamp data is available.
+            Unknown means freshness is not yet available from current source telemetry.
+          </p>
         </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-4">
