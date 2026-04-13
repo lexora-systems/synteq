@@ -536,6 +536,93 @@ a[class*="inline-flex"]:active {
   background: rgba(20, 38, 66, 0.74) !important;
 }
 
+[data-syn-theme="dark"] .syn-app-shell [class*="bg-cyan-50"] {
+  background: rgba(18, 74, 99, 0.34) !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell [class*="bg-emerald-50"] {
+  background: rgba(15, 74, 58, 0.34) !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell [class*="bg-amber-50"] {
+  background: rgba(92, 55, 18, 0.34) !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell [class*="bg-rose-50"] {
+  background: rgba(94, 31, 52, 0.34) !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell [class*="bg-cyan-100"] {
+  background: rgba(17, 102, 133, 0.34) !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell [class*="bg-emerald-100"] {
+  background: rgba(17, 107, 79, 0.34) !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell [class*="bg-amber-100"] {
+  background: rgba(120, 71, 25, 0.34) !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell [class*="bg-rose-100"] {
+  background: rgba(118, 35, 64, 0.34) !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell [class*="border-cyan-"] {
+  border-color: rgba(103, 232, 249, 0.44) !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell [class*="border-emerald-"] {
+  border-color: rgba(110, 231, 183, 0.4) !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell [class*="border-amber-"] {
+  border-color: rgba(251, 191, 36, 0.42) !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell [class*="border-rose-"] {
+  border-color: rgba(251, 113, 133, 0.42) !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell .text-cyan-800,
+[data-syn-theme="dark"] .syn-app-shell .text-cyan-700 {
+  color: #7ddff2 !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell .text-emerald-900,
+[data-syn-theme="dark"] .syn-app-shell .text-emerald-800,
+[data-syn-theme="dark"] .syn-app-shell .text-emerald-700 {
+  color: #9ff8c9 !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell .text-amber-900,
+[data-syn-theme="dark"] .syn-app-shell .text-amber-800,
+[data-syn-theme="dark"] .syn-app-shell .text-amber-700 {
+  color: #fbd38d !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell .text-rose-700 {
+  color: #f9a8d4 !important;
+}
+
+[data-syn-theme="dark"] .syn-app-shell .metric-card {
+  border-color: var(--syn-card-border);
+  background: var(--syn-card-bg);
+  box-shadow: var(--syn-card-shadow);
+}
+
+[data-syn-theme="dark"] .syn-app-shell .metric-card p {
+  color: #9fb8d8;
+}
+
+[data-syn-theme="dark"] .syn-app-shell .metric-card strong {
+  color: #e8f2ff;
+}
+
+[data-syn-theme="dark"] .syn-app-shell * {
+  scrollbar-color: rgba(148, 163, 184, 0.72) rgba(13, 23, 42, 0.64);
+}
+
 .syn-theme-switch {
   position: fixed;
   right: 1rem;
