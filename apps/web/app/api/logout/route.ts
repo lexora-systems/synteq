@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { apiBaseUrl } from "../../../lib/config";
 
-export async function POST(request: Request) {
+export async function POST() {
   const cookieStore = await cookies();
   const refreshToken = cookieStore.get("synteq_refresh_token")?.value;
 
@@ -21,6 +21,10 @@ export async function POST(request: Request) {
 
   cookieStore.delete("synteq_token");
   cookieStore.delete("synteq_refresh_token");
-  const url = new URL(request.url);
-  return NextResponse.redirect(new URL("/login", `${url.protocol}//${url.host}`));
+  return new NextResponse(null, {
+    status: 303,
+    headers: {
+      Location: "/login"
+    }
+  });
 }
