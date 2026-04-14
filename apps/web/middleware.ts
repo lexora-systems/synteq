@@ -94,6 +94,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/session-setup/:path*",
     "/welcome/:path*",
     "/overview/:path*",
     "/incidents/:path*",

@@ -36,7 +36,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/welcome");
+    router.push("/session-setup");
   }
 
   return (
