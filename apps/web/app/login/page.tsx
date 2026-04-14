@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { WorkspaceSetupLoadingCard } from "../../components/workspace-setup-loading";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -37,6 +38,10 @@ export default function LoginPage() {
     }
 
     router.push("/session-setup");
+  }
+
+  if (loading) {
+    return <WorkspaceSetupLoadingCard />;
   }
 
   return (
