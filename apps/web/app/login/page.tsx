@@ -17,27 +17,31 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const response = await fetch("/api/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        tenant_id: tenantId || undefined,
-        email,
-        password
-      })
-    });
+    try {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          tenant_id: tenantId || undefined,
+          email,
+          password
+        })
+      });
 
-    setLoading(false);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ error: "Login failed" }));
+        setError(body.error ?? "Login failed");
+        setLoading(false);
+        return;
+      }
 
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({ error: "Login failed" }));
-      setError(body.error ?? "Login failed");
-      return;
+      router.push("/session-setup");
+    } catch {
+      setError("Login failed");
+      setLoading(false);
     }
-
-    router.push("/session-setup");
   }
 
   if (loading) {
