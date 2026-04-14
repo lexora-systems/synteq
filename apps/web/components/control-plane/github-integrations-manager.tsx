@@ -226,11 +226,11 @@ export function GitHubIntegrationsManager({
               {state.integrations.map((integration) => (
                 <tr key={integration.id} className="border-b border-slate-100 align-top" data-testid={`github-row-${integration.id}`}>
                   <td className="py-3 pr-2 text-ink">{integration.repository_full_name ?? "Any repository"}</td>
-                  <td className="py-3 pr-2 font-mono">{integration.webhook_id}</td>
-                  <td className="py-3 pr-2">{integration.is_active ? "active" : "inactive"}</td>
-                  <td className="py-3 pr-2 font-mono text-xs text-slate-600">{integration.last_delivery_id ?? "-"}</td>
-                  <td className="py-3 pr-2">{formatTimestamp(integration.last_seen_at)}</td>
-                  <td className="py-3 pr-2">{formatTimestamp(integration.created_at)}</td>
+                  <td className="py-3 pr-2 font-mono text-ink">{integration.webhook_id}</td>
+                  <td className="py-3 pr-2 text-ink">{integration.is_active ? "active" : "inactive"}</td>
+                  <td className="py-3 pr-2 font-mono text-xs text-ink">{integration.last_delivery_id ?? "-"}</td>
+                  <td className="py-3 pr-2 text-ink">{formatTimestamp(integration.last_seen_at)}</td>
+                  <td className="py-3 pr-2 text-ink">{formatTimestamp(integration.created_at)}</td>
                   <td className="py-3 pr-2">
                     {canManage ? (
                       <div className="flex flex-wrap items-center gap-2">
