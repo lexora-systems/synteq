@@ -16,6 +16,7 @@
   --syn-text-primary: #0f1726;
   --syn-text-secondary: #334155;
   --syn-text-muted: #64748b;
+  --syn-app-brand-accent: #0e7490;
   --syn-field-bg: #ffffff;
   --syn-field-border: #cbd5e1;
   --syn-field-text: #0f1726;
@@ -54,6 +55,7 @@
   --syn-text-primary: #e6f1ff;
   --syn-text-secondary: #b8cce7;
   --syn-text-muted: #91abca;
+  --syn-app-brand-accent: #7ddff2;
   --syn-field-bg: rgba(8, 24, 47, 0.72);
   --syn-field-border: #365578;
   --syn-field-text: #e8f2ff;
