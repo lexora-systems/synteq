@@ -15,6 +15,11 @@ export function TopNav() {
 
   const navItems: NavItem[] = [
     {
+      href: "/welcome",
+      label: "Home",
+      match: (path) => path === "/welcome" || path.startsWith("/welcome/")
+    },
+    {
       href: "/overview",
       label: "Overview",
       match: (path) => path === "/overview"
