@@ -216,19 +216,19 @@ export default async function WelcomePage({
 
         <section className="mt-5">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Trust and Access</p>
+            <p className="syn-app-kicker text-xs uppercase tracking-[0.2em]">Trust and Access</p>
             <h2 className="mt-1 text-xl font-semibold text-ink">Minimal access required</h2>
             <div className="mt-3 grid gap-3 text-sm text-slate-700 md:grid-cols-3">
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What Synteq receives</p>
+                <p className="syn-app-kicker text-xs uppercase tracking-[0.2em]">What Synteq receives</p>
                 <p className="mt-1">Operational signals and event-level telemetry.</p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What Synteq does NOT receive</p>
+                <p className="syn-app-kicker text-xs uppercase tracking-[0.2em]">What Synteq does NOT receive</p>
                 <p className="mt-1">Full system control, full repository access, or broad credentials.</p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Access model and control</p>
+                <p className="syn-app-kicker text-xs uppercase tracking-[0.2em]">Access model and control</p>
                 <p className="mt-1">Webhook/event-based, read-only, signal-level access. Disconnect anytime.</p>
               </div>
             </div>
