@@ -38,14 +38,24 @@ async function manageGitHubIntegrationsAction(
     if (intent === "create") {
       const repositoryFullNameRaw = String(formData.get("repository_full_name") ?? "").trim();
       const created = await createGitHubIntegration(token, repositoryFullNameRaw || undefined);
-      const list = await fetchGitHubIntegrations(token);
-      return {
-        ok: true,
-        message: "GitHub integration created. Synteq is now ready to monitor incoming GitHub workflow signals from this webhook.",
-        webhook_url: created.webhook_url,
-        integrations: list.integrations,
-        latest_secret: created.webhook_secret
-      };
+      try {
+        const list = await fetchGitHubIntegrations(token);
+        return {
+          ok: true,
+          message: "GitHub integration created. Synteq is now ready to monitor incoming GitHub workflow signals from this webhook.",
+          webhook_url: created.webhook_url,
+          integrations: list.integrations,
+          latest_secret: created.webhook_secret
+        };
+      } catch {
+        return {
+          ok: true,
+          message: "Integration created successfully. Copy the webhook secret now. Integration list refresh failed, so some status data may be temporarily stale.",
+          webhook_url: created.webhook_url,
+          integrations: [created.integration, ...state.integrations.filter((item) => item.id !== created.integration.id)],
+          latest_secret: created.webhook_secret
+        };
+      }
     }
 
     if (intent === "deactivate") {
@@ -80,14 +90,27 @@ async function manageGitHubIntegrationsAction(
         };
       }
       const rotated = await rotateGitHubIntegrationSecret(token, id);
-      const list = await fetchGitHubIntegrations(token);
-      return {
-        ok: true,
-        message: "Webhook secret rotated. Update GitHub webhook settings so Synteq can keep monitoring without interruption.",
-        webhook_url: rotated.webhook_url,
-        integrations: list.integrations,
-        latest_secret: rotated.webhook_secret
-      };
+      try {
+        const list = await fetchGitHubIntegrations(token);
+        return {
+          ok: true,
+          message: "Webhook secret rotated. Update GitHub webhook settings so Synteq can keep monitoring without interruption.",
+          webhook_url: rotated.webhook_url,
+          integrations: list.integrations,
+          latest_secret: rotated.webhook_secret
+        };
+      } catch {
+        return {
+          ok: true,
+          message:
+            "Secret rotated successfully. Copy it now. Integration list refresh failed, so some status data may be temporarily stale.",
+          webhook_url: rotated.webhook_url,
+          integrations: state.integrations.map((integration) =>
+            integration.id === rotated.integration.id ? rotated.integration : integration
+          ),
+          latest_secret: rotated.webhook_secret
+        };
+      }
     }
 
     return {

@@ -104,21 +104,38 @@ let apiKeyCounter = 1;
 let githubCounter = 1;
 let alertChannelCounter = 1;
 let alertPolicyCounter = 1;
+let failNextGitHubIntegrationsList = false;
+let failNextGitHubRotate = false;
 
-const API_KEYS = [
-  {
+const API_KEYS = [];
+
+const GITHUB_INTEGRATIONS = [];
+const ALERT_CHANNELS = [];
+const ALERT_POLICIES = [];
+
+function resetState() {
+  apiKeyCounter = 1;
+  githubCounter = 1;
+  alertChannelCounter = 1;
+  alertPolicyCounter = 1;
+  failNextGitHubIntegrationsList = false;
+  failNextGitHubRotate = false;
+
+  API_KEYS.length = 0;
+  API_KEYS.push({
     id: `key-${apiKeyCounter}`,
     name: "Primary ingest key",
     key_preview: "synteq_****abcdef",
     created_at: new Date().toISOString(),
     last_used_at: null,
     revoked_at: null
-  }
-];
+  });
+  GITHUB_INTEGRATIONS.length = 0;
+  ALERT_CHANNELS.length = 0;
+  ALERT_POLICIES.length = 0;
+}
 
-const GITHUB_INTEGRATIONS = [];
-const ALERT_CHANNELS = [];
-const ALERT_POLICIES = [];
+resetState();
 
 function currentWebhookUrl(req) {
   const host = req.headers.host ?? `127.0.0.1:${PORT}`;
@@ -131,6 +148,28 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "GET" && pathname === "/health") {
     sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/__test/reset") {
+    resetState();
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/__test/config") {
+    const body = await parseJsonBody(req);
+    if (typeof body.fail_next_github_integrations_get === "boolean") {
+      failNextGitHubIntegrationsList = body.fail_next_github_integrations_get;
+    }
+    if (typeof body.fail_next_github_rotate_post === "boolean") {
+      failNextGitHubRotate = body.fail_next_github_rotate_post;
+    }
+    sendJson(res, 200, {
+      ok: true,
+      fail_next_github_integrations_get: failNextGitHubIntegrationsList,
+      fail_next_github_rotate_post: failNextGitHubRotate
+    });
     return;
   }
 
@@ -379,6 +418,11 @@ const server = http.createServer(async (req, res) => {
     if (!persona) {
       return;
     }
+    if (failNextGitHubIntegrationsList) {
+      failNextGitHubIntegrationsList = false;
+      sendJson(res, 500, { error: "mock github list refresh failure" });
+      return;
+    }
     sendJson(res, 200, {
       webhook_url: currentWebhookUrl(req),
       integrations: GITHUB_INTEGRATIONS
@@ -439,6 +483,11 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && pathname.match(/^\/v1\/control-plane\/github-integrations\/[^/]+\/rotate-secret$/)) {
     const persona = ensureAuth(req, res);
     if (!persona) {
+      return;
+    }
+    if (failNextGitHubRotate) {
+      failNextGitHubRotate = false;
+      sendJson(res, 500, { error: "mock github rotate failure" });
       return;
     }
     const id = pathname.split("/")[4];
