@@ -15,6 +15,7 @@ import {
 import { requireToken } from "../../../../lib/auth";
 
 const GITHUB_SECRET_FLASH_COOKIE = "synteq_github_secret_flash";
+const GITHUB_SECRET_FLASH_SEEN_COOKIE = "synteq_github_secret_flash_seen";
 
 type GitHubSecretFlashPayload = {
   message: string;
@@ -60,11 +61,13 @@ async function setGitHubSecretFlash(payload: GitHubSecretFlashPayload) {
     path: "/settings/control-plane/github",
     maxAge: 120
   });
+  cookieStore.delete(GITHUB_SECRET_FLASH_SEEN_COOKIE);
 }
 
 async function clearGitHubSecretFlash() {
   const cookieStore = await cookies();
   cookieStore.delete(GITHUB_SECRET_FLASH_COOKIE);
+  cookieStore.delete(GITHUB_SECRET_FLASH_SEEN_COOKIE);
 }
 
 function toFailureMessage(error: unknown): string {

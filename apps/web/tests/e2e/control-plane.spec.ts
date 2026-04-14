@@ -50,6 +50,14 @@ async function createGitHubIntegration(page: Page, repository = "acme/demo-repo"
   await expect(page.getByTestId("github-secret-value")).toBeVisible();
 }
 
+async function expectGitHubSecretClearedAfterReloads(page: Page) {
+  await page.reload();
+  if ((await page.getByTestId("github-secret-value").count()) > 0) {
+    await page.reload();
+  }
+  await expect(page.getByTestId("github-secret-value")).toHaveCount(0);
+}
+
 test.beforeEach(async ({ request }) => {
   await resetMockApi(request);
 });
@@ -70,8 +78,7 @@ test("control plane lifecycle surfaces are usable", async ({ page }) => {
   await page.getByTestId("github-create-submit").click();
   await expect(page.getByTestId("github-secret-value")).toBeVisible();
   await expect(page.getByTestId("github-operational-state")).toContainText("Waiting for webhook delivery");
-  await page.reload();
-  await expect(page.getByTestId("github-secret-value")).toHaveCount(0);
+  await expectGitHubSecretClearedAfterReloads(page);
 
   await page.goto("/settings/control-plane/alerts");
   await page.getByTestId("alerts-channel-name-input").fill("Ops Email");
@@ -89,8 +96,7 @@ test("rotate succeeds and refresh succeeds keeps secret visible", async ({ page 
 
   await expect(page.getByTestId("github-feedback")).toContainText("Webhook secret rotated.");
   await expect(page.getByTestId("github-secret-value")).toContainText("gh_mock_rotated_");
-  await page.reload();
-  await expect(page.getByTestId("github-secret-value")).toHaveCount(0);
+  await expectGitHubSecretClearedAfterReloads(page);
 });
 
 test("rotate succeeds but refresh fails still shows rotated secret", async ({ page, request }) => {

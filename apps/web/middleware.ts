@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { apiBaseUrl } from "./lib/config";
 
 const GITHUB_SECRET_FLASH_COOKIE = "synteq_github_secret_flash";
+const GITHUB_SECRET_FLASH_SEEN_COOKIE = "synteq_github_secret_flash_seen";
 
 function decodeJwtExp(token: string): number | null {
   const parts = token.split(".");
@@ -47,13 +48,33 @@ function isGitHubControlPlanePath(pathname: string): boolean {
 }
 
 function withFlashCookieCleared(request: NextRequest, response: NextResponse): NextResponse {
-  if (
-    request.method === "GET" &&
-    isGitHubControlPlanePath(request.nextUrl.pathname) &&
-    request.cookies.get(GITHUB_SECRET_FLASH_COOKIE)?.value
-  ) {
-    response.cookies.delete(GITHUB_SECRET_FLASH_COOKIE);
+  if (!isGitHubControlPlanePath(request.nextUrl.pathname) || request.method !== "GET") {
+    return response;
   }
+
+  const hasFlash = Boolean(request.cookies.get(GITHUB_SECRET_FLASH_COOKIE)?.value);
+  const hasSeen = Boolean(request.cookies.get(GITHUB_SECRET_FLASH_SEEN_COOKIE)?.value);
+
+  if (!hasFlash) {
+    if (hasSeen) {
+      response.cookies.delete(GITHUB_SECRET_FLASH_SEEN_COOKIE);
+    }
+    return response;
+  }
+
+  if (!hasSeen) {
+    response.cookies.set(GITHUB_SECRET_FLASH_SEEN_COOKIE, "1", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/settings/control-plane/github",
+      maxAge: 120
+    });
+    return response;
+  }
+
+  response.cookies.delete(GITHUB_SECRET_FLASH_COOKIE);
+  response.cookies.delete(GITHUB_SECRET_FLASH_SEEN_COOKIE);
   return response;
 }
 
