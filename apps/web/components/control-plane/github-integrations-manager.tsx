@@ -32,23 +32,15 @@ function toTimestampMs(value: string | null): number {
 }
 
 export function GitHubIntegrationsManager({
-  initialWebhookUrl,
-  initialIntegrations,
+  initialState,
   canManage,
   action
 }: {
-  initialWebhookUrl: string;
-  initialIntegrations: GitHubIntegrationRow[];
+  initialState: GitHubIntegrationsActionState;
   canManage: boolean;
   action: ManageGitHubIntegrationsAction;
 }) {
-  const [state, formAction, pending] = useActionState(action, {
-    ok: true,
-    message: null,
-    webhook_url: initialWebhookUrl,
-    integrations: initialIntegrations,
-    latest_secret: null
-  });
+  const [state, formAction, pending] = useActionState(action, initialState);
   const [copied, setCopied] = useState(false);
   const activeIntegrations = state.integrations.filter((integration) => integration.is_active);
   const verifiedIntegrations = activeIntegrations.filter(

@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { apiBaseUrl } from "./lib/config";
 
+const GITHUB_SECRET_FLASH_COOKIE = "synteq_github_secret_flash";
+
 function decodeJwtExp(token: string): number | null {
   const parts = token.split(".");
   if (parts.length < 2) {
@@ -40,15 +42,30 @@ function redirectToLogin() {
   return response;
 }
 
+function isGitHubControlPlanePath(pathname: string): boolean {
+  return pathname === "/settings/control-plane/github" || pathname === "/settings/control-plane/github/";
+}
+
+function withFlashCookieCleared(request: NextRequest, response: NextResponse): NextResponse {
+  if (
+    request.method === "GET" &&
+    isGitHubControlPlanePath(request.nextUrl.pathname) &&
+    request.cookies.get(GITHUB_SECRET_FLASH_COOKIE)?.value
+  ) {
+    response.cookies.delete(GITHUB_SECRET_FLASH_COOKIE);
+  }
+  return response;
+}
+
 export async function middleware(request: NextRequest) {
   const accessToken = request.cookies.get("synteq_token")?.value;
   if (accessToken && isTokenFresh(accessToken)) {
-    return NextResponse.next();
+    return withFlashCookieCleared(request, NextResponse.next());
   }
 
   const refreshToken = request.cookies.get("synteq_refresh_token")?.value;
   if (!refreshToken) {
-    return redirectToLogin();
+    return withFlashCookieCleared(request, redirectToLogin());
   }
 
   try {
@@ -62,7 +79,7 @@ export async function middleware(request: NextRequest) {
     });
 
     if (!refreshResponse.ok) {
-      return redirectToLogin();
+      return withFlashCookieCleared(request, redirectToLogin());
     }
 
     const payload = (await refreshResponse.json()) as {
@@ -72,7 +89,7 @@ export async function middleware(request: NextRequest) {
     };
     const nextAccessToken = payload.access_token ?? payload.token;
     if (!nextAccessToken || !payload.refresh_token) {
-      return redirectToLogin();
+      return withFlashCookieCleared(request, redirectToLogin());
     }
 
     const response = NextResponse.next();
@@ -91,9 +108,9 @@ export async function middleware(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 30
     });
 
-    return response;
+    return withFlashCookieCleared(request, response);
   } catch {
-    return redirectToLogin();
+    return withFlashCookieCleared(request, redirectToLogin());
   }
 }
 

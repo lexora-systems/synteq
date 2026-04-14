@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { TopNav } from "../../../../components/top-nav";
 import {
   GitHubIntegrationsManager,
@@ -12,6 +13,59 @@ import {
   rotateGitHubIntegrationSecret
 } from "../../../../lib/api";
 import { requireToken } from "../../../../lib/auth";
+
+const GITHUB_SECRET_FLASH_COOKIE = "synteq_github_secret_flash";
+
+type GitHubSecretFlashPayload = {
+  message: string;
+  webhook_url: string;
+  webhook_secret: string;
+};
+
+function encodeGitHubSecretFlash(payload: GitHubSecretFlashPayload): string {
+  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+}
+
+function decodeGitHubSecretFlash(raw: string | undefined): GitHubSecretFlashPayload | null {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as Partial<GitHubSecretFlashPayload>;
+    if (
+      typeof parsed.message !== "string" ||
+      typeof parsed.webhook_url !== "string" ||
+      typeof parsed.webhook_secret !== "string"
+    ) {
+      return null;
+    }
+
+    return {
+      message: parsed.message,
+      webhook_url: parsed.webhook_url,
+      webhook_secret: parsed.webhook_secret
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function setGitHubSecretFlash(payload: GitHubSecretFlashPayload) {
+  const cookieStore = await cookies();
+  cookieStore.set(GITHUB_SECRET_FLASH_COOKIE, encodeGitHubSecretFlash(payload), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/settings/control-plane/github",
+    maxAge: 120
+  });
+}
+
+async function clearGitHubSecretFlash() {
+  const cookieStore = await cookies();
+  cookieStore.delete(GITHUB_SECRET_FLASH_COOKIE);
+}
 
 function toFailureMessage(error: unknown): string {
   if (!(error instanceof Error)) {
@@ -40,17 +94,30 @@ async function manageGitHubIntegrationsAction(
       const created = await createGitHubIntegration(token, repositoryFullNameRaw || undefined);
       try {
         const list = await fetchGitHubIntegrations(token);
+        const message = "GitHub integration created. Synteq is now ready to monitor incoming GitHub workflow signals from this webhook.";
+        await setGitHubSecretFlash({
+          message,
+          webhook_url: created.webhook_url,
+          webhook_secret: created.webhook_secret
+        });
         return {
           ok: true,
-          message: "GitHub integration created. Synteq is now ready to monitor incoming GitHub workflow signals from this webhook.",
+          message,
           webhook_url: created.webhook_url,
           integrations: list.integrations,
           latest_secret: created.webhook_secret
         };
       } catch {
+        const message =
+          "Integration created successfully. Copy the webhook secret now. Integration list refresh failed, so some status data may be temporarily stale.";
+        await setGitHubSecretFlash({
+          message,
+          webhook_url: created.webhook_url,
+          webhook_secret: created.webhook_secret
+        });
         return {
           ok: true,
-          message: "Integration created successfully. Copy the webhook secret now. Integration list refresh failed, so some status data may be temporarily stale.",
+          message,
           webhook_url: created.webhook_url,
           integrations: [created.integration, ...state.integrations.filter((item) => item.id !== created.integration.id)],
           latest_secret: created.webhook_secret
@@ -61,6 +128,7 @@ async function manageGitHubIntegrationsAction(
     if (intent === "deactivate") {
       const id = String(formData.get("id") ?? "");
       if (!id) {
+        await clearGitHubSecretFlash();
         return {
           ...state,
           ok: false,
@@ -70,6 +138,7 @@ async function manageGitHubIntegrationsAction(
       }
       await deactivateGitHubIntegration(token, id);
       const list = await fetchGitHubIntegrations(token);
+      await clearGitHubSecretFlash();
       return {
         ok: true,
         message: "GitHub integration deactivated. Synteq will stop watching events from this webhook.",
@@ -82,6 +151,7 @@ async function manageGitHubIntegrationsAction(
     if (intent === "rotate") {
       const id = String(formData.get("id") ?? "");
       if (!id) {
+        await clearGitHubSecretFlash();
         return {
           ...state,
           ok: false,
@@ -92,18 +162,30 @@ async function manageGitHubIntegrationsAction(
       const rotated = await rotateGitHubIntegrationSecret(token, id);
       try {
         const list = await fetchGitHubIntegrations(token);
+        const message = "Webhook secret rotated. Update GitHub webhook settings so Synteq can keep monitoring without interruption.";
+        await setGitHubSecretFlash({
+          message,
+          webhook_url: rotated.webhook_url,
+          webhook_secret: rotated.webhook_secret
+        });
         return {
           ok: true,
-          message: "Webhook secret rotated. Update GitHub webhook settings so Synteq can keep monitoring without interruption.",
+          message,
           webhook_url: rotated.webhook_url,
           integrations: list.integrations,
           latest_secret: rotated.webhook_secret
         };
       } catch {
+        const message =
+          "Secret rotated successfully. Copy it now. Integration list refresh failed, so some status data may be temporarily stale.";
+        await setGitHubSecretFlash({
+          message,
+          webhook_url: rotated.webhook_url,
+          webhook_secret: rotated.webhook_secret
+        });
         return {
           ok: true,
-          message:
-            "Secret rotated successfully. Copy it now. Integration list refresh failed, so some status data may be temporarily stale.",
+          message,
           webhook_url: rotated.webhook_url,
           integrations: state.integrations.map((integration) =>
             integration.id === rotated.integration.id ? rotated.integration : integration
@@ -113,6 +195,7 @@ async function manageGitHubIntegrationsAction(
       }
     }
 
+    await clearGitHubSecretFlash();
     return {
       ...state,
       ok: false,
@@ -120,6 +203,7 @@ async function manageGitHubIntegrationsAction(
       latest_secret: null
     };
   } catch (error) {
+    await clearGitHubSecretFlash();
     return {
       ...state,
       ok: false,
@@ -130,6 +214,8 @@ async function manageGitHubIntegrationsAction(
 }
 
 export default async function GitHubIntegrationsControlPlanePage() {
+  const cookieStore = await cookies();
+  const flashPayload = decodeGitHubSecretFlash(cookieStore.get(GITHUB_SECRET_FLASH_COOKIE)?.value);
   const token = await requireToken();
   const [me, payload] = await Promise.all([fetchMe(token), fetchGitHubIntegrations(token)]);
   const canManage = ["owner", "admin"].includes(me.user.role);
@@ -170,8 +256,13 @@ export default async function GitHubIntegrationsControlPlanePage() {
 
         <div className="mt-4">
           <GitHubIntegrationsManager
-            initialWebhookUrl={payload.webhook_url}
-            initialIntegrations={payload.integrations}
+            initialState={{
+              ok: true,
+              message: flashPayload?.message ?? null,
+              webhook_url: flashPayload?.webhook_url ?? payload.webhook_url,
+              integrations: payload.integrations,
+              latest_secret: flashPayload?.webhook_secret ?? null
+            }}
             canManage={canManage}
             action={manageGitHubIntegrationsAction}
           />
