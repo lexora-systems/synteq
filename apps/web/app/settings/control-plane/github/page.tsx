@@ -17,10 +17,13 @@ import { requireToken } from "../../../../lib/auth";
 const GITHUB_SECRET_FLASH_COOKIE = "synteq_github_secret_flash";
 const GITHUB_SECRET_FLASH_SEEN_COOKIE = "synteq_github_secret_flash_seen";
 
+type GitHubSecretRevealKind = "created" | "rotated";
+
 type GitHubSecretFlashPayload = {
   message: string;
   webhook_url: string;
   webhook_secret: string;
+  reveal_kind: GitHubSecretRevealKind;
 };
 
 function encodeGitHubSecretFlash(payload: GitHubSecretFlashPayload): string {
@@ -45,7 +48,8 @@ function decodeGitHubSecretFlash(raw: string | undefined): GitHubSecretFlashPayl
     return {
       message: parsed.message,
       webhook_url: parsed.webhook_url,
-      webhook_secret: parsed.webhook_secret
+      webhook_secret: parsed.webhook_secret,
+      reveal_kind: parsed.reveal_kind === "rotated" ? "rotated" : "created"
     };
   } catch {
     return null;
@@ -101,14 +105,16 @@ async function manageGitHubIntegrationsAction(
         await setGitHubSecretFlash({
           message,
           webhook_url: created.webhook_url,
-          webhook_secret: created.webhook_secret
+          webhook_secret: created.webhook_secret,
+          reveal_kind: "created"
         });
         return {
           ok: true,
           message,
           webhook_url: created.webhook_url,
           integrations: list.integrations,
-          latest_secret: created.webhook_secret
+          latest_secret: created.webhook_secret,
+          latest_secret_kind: "created"
         };
       } catch {
         const message =
@@ -116,14 +122,16 @@ async function manageGitHubIntegrationsAction(
         await setGitHubSecretFlash({
           message,
           webhook_url: created.webhook_url,
-          webhook_secret: created.webhook_secret
+          webhook_secret: created.webhook_secret,
+          reveal_kind: "created"
         });
         return {
           ok: true,
           message,
           webhook_url: created.webhook_url,
           integrations: [created.integration, ...state.integrations.filter((item) => item.id !== created.integration.id)],
-          latest_secret: created.webhook_secret
+          latest_secret: created.webhook_secret,
+          latest_secret_kind: "created"
         };
       }
     }
@@ -136,7 +144,8 @@ async function manageGitHubIntegrationsAction(
           ...state,
           ok: false,
           message: "Missing integration id.",
-          latest_secret: null
+          latest_secret: null,
+          latest_secret_kind: null
         };
       }
       await deactivateGitHubIntegration(token, id);
@@ -147,7 +156,8 @@ async function manageGitHubIntegrationsAction(
         message: "GitHub integration deactivated. Synteq will stop watching events from this webhook.",
         webhook_url: list.webhook_url,
         integrations: list.integrations,
-        latest_secret: null
+        latest_secret: null,
+        latest_secret_kind: null
       };
     }
 
@@ -159,7 +169,8 @@ async function manageGitHubIntegrationsAction(
           ...state,
           ok: false,
           message: "Missing integration id.",
-          latest_secret: null
+          latest_secret: null,
+          latest_secret_kind: null
         };
       }
       const rotated = await rotateGitHubIntegrationSecret(token, id);
@@ -169,14 +180,16 @@ async function manageGitHubIntegrationsAction(
         await setGitHubSecretFlash({
           message,
           webhook_url: rotated.webhook_url,
-          webhook_secret: rotated.webhook_secret
+          webhook_secret: rotated.webhook_secret,
+          reveal_kind: "rotated"
         });
         return {
           ok: true,
           message,
           webhook_url: rotated.webhook_url,
           integrations: list.integrations,
-          latest_secret: rotated.webhook_secret
+          latest_secret: rotated.webhook_secret,
+          latest_secret_kind: "rotated"
         };
       } catch {
         const message =
@@ -184,7 +197,8 @@ async function manageGitHubIntegrationsAction(
         await setGitHubSecretFlash({
           message,
           webhook_url: rotated.webhook_url,
-          webhook_secret: rotated.webhook_secret
+          webhook_secret: rotated.webhook_secret,
+          reveal_kind: "rotated"
         });
         return {
           ok: true,
@@ -193,7 +207,8 @@ async function manageGitHubIntegrationsAction(
           integrations: state.integrations.map((integration) =>
             integration.id === rotated.integration.id ? rotated.integration : integration
           ),
-          latest_secret: rotated.webhook_secret
+          latest_secret: rotated.webhook_secret,
+          latest_secret_kind: "rotated"
         };
       }
     }
@@ -203,7 +218,8 @@ async function manageGitHubIntegrationsAction(
       ...state,
       ok: false,
       message: "Unknown GitHub integration action.",
-      latest_secret: null
+      latest_secret: null,
+      latest_secret_kind: null
     };
   } catch (error) {
     await clearGitHubSecretFlash();
@@ -211,7 +227,8 @@ async function manageGitHubIntegrationsAction(
       ...state,
       ok: false,
       message: toFailureMessage(error),
-      latest_secret: null
+      latest_secret: null,
+      latest_secret_kind: null
     };
   }
 }
@@ -264,7 +281,8 @@ export default async function GitHubIntegrationsControlPlanePage() {
               message: flashPayload?.message ?? null,
               webhook_url: flashPayload?.webhook_url ?? payload.webhook_url,
               integrations: payload.integrations,
-              latest_secret: flashPayload?.webhook_secret ?? null
+              latest_secret: flashPayload?.webhook_secret ?? null,
+              latest_secret_kind: flashPayload?.reveal_kind ?? null
             }}
             canManage={canManage}
             action={manageGitHubIntegrationsAction}

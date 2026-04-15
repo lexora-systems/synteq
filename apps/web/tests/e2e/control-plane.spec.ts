@@ -47,7 +47,9 @@ async function createGitHubIntegration(page: Page, repository = "acme/demo-repo"
   await page.goto("/settings/control-plane/github");
   await page.getByTestId("github-repository-input").fill(repository);
   await page.getByTestId("github-create-submit").click();
-  await expect(page.getByTestId("github-secret-value")).toBeVisible();
+  await expect(page.getByTestId("github-secret-panel")).toBeVisible();
+  await expect(page.getByTestId("github-secret-webhook-url")).toContainText("/v1/integrations/github/webhook");
+  await expect(page.getByText("Copy this secret now. For security reasons it may not be shown again.")).toBeVisible();
 }
 
 async function expectGitHubSecretClearedAfterReloads(page: Page) {
@@ -76,7 +78,7 @@ test("control plane lifecycle surfaces are usable", async ({ page }) => {
   await page.goto("/settings/control-plane/github");
   await page.getByTestId("github-repository-input").fill("acme/demo-repo");
   await page.getByTestId("github-create-submit").click();
-  await expect(page.getByTestId("github-secret-value")).toBeVisible();
+  await expect(page.getByTestId("github-secret-panel")).toBeVisible();
   await expect(page.getByTestId("github-operational-state")).toContainText("Waiting for webhook delivery");
   await expectGitHubSecretClearedAfterReloads(page);
 
@@ -95,6 +97,8 @@ test("rotate succeeds and refresh succeeds keeps secret visible", async ({ page 
   await page.getByRole("button", { name: "Rotate secret" }).first().click();
 
   await expect(page.getByTestId("github-feedback")).toContainText("Webhook secret rotated.");
+  await expect(page.getByTestId("github-secret-panel")).toBeVisible();
+  await expect(page.getByTestId("github-secret-webhook-url")).toContainText("/v1/integrations/github/webhook");
   await expect(page.getByTestId("github-secret-value")).toContainText("gh_mock_rotated_");
   await expectGitHubSecretClearedAfterReloads(page);
 });
@@ -107,6 +111,8 @@ test("rotate succeeds but refresh fails still shows rotated secret", async ({ pa
   await page.getByRole("button", { name: "Rotate secret" }).first().click();
 
   await expect(page.getByTestId("github-feedback")).toContainText("Secret rotated successfully. Copy it now.");
+  await expect(page.getByTestId("github-secret-panel")).toBeVisible();
+  await expect(page.getByTestId("github-secret-webhook-url")).toContainText("/v1/integrations/github/webhook");
   await expect(page.getByTestId("github-secret-value")).toContainText("gh_mock_rotated_");
 });
 

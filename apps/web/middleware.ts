@@ -47,8 +47,21 @@ function isGitHubControlPlanePath(pathname: string): boolean {
   return pathname === "/settings/control-plane/github" || pathname === "/settings/control-plane/github/";
 }
 
+function isPrefetchRequest(request: NextRequest): boolean {
+  if (request.headers.get("next-router-prefetch")) {
+    return true;
+  }
+
+  const purpose = request.headers.get("purpose");
+  return typeof purpose === "string" && purpose.toLowerCase() === "prefetch";
+}
+
 function withFlashCookieCleared(request: NextRequest, response: NextResponse): NextResponse {
   if (!isGitHubControlPlanePath(request.nextUrl.pathname) || request.method !== "GET") {
+    return response;
+  }
+
+  if (isPrefetchRequest(request)) {
     return response;
   }
 

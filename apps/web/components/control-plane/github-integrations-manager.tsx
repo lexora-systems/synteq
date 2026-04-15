@@ -1,7 +1,9 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import type { GitHubIntegrationRow } from "../../lib/api";
+
+type GitHubSecretRevealKind = "created" | "rotated";
 
 export type GitHubIntegrationsActionState = {
   ok: boolean;
@@ -9,6 +11,7 @@ export type GitHubIntegrationsActionState = {
   webhook_url: string;
   integrations: GitHubIntegrationRow[];
   latest_secret: string | null;
+  latest_secret_kind: GitHubSecretRevealKind | null;
 };
 
 type ManageGitHubIntegrationsAction = (
@@ -42,10 +45,16 @@ export function GitHubIntegrationsManager({
 }) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const [copied, setCopied] = useState(false);
+  const [copiedWebhookUrl, setCopiedWebhookUrl] = useState(false);
   const activeIntegrations = state.integrations.filter((integration) => integration.is_active);
   const verifiedIntegrations = activeIntegrations.filter(
     (integration) => Boolean(integration.last_seen_at || integration.last_delivery_id)
   );
+
+  useEffect(() => {
+    setCopied(false);
+    setCopiedWebhookUrl(false);
+  }, [state.latest_secret]);
 
   let latestDeliveryAt: string | null = null;
   let latestDeliveryAtMs = Number.NaN;
@@ -142,15 +151,23 @@ export function GitHubIntegrationsManager({
       </div>
 
       {state.latest_secret ? (
-        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 shadow-panel">
-          <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Webhook secret</p>
-          <p className="mt-1 text-sm text-slate-700">
-            Save this secret now. Synteq only returns the raw value at create/rotate time.
+        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 shadow-panel" data-testid="github-secret-panel">
+          <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">
+            {state.latest_secret_kind === "rotated" ? "Rotated webhook secret" : "New webhook secret"}
           </p>
+          <p className="mt-1 text-sm text-slate-700">
+            Copy this secret now. For security reasons it may not be shown again.
+          </p>
+          <div
+            className="mt-3 rounded-lg border border-cyan-200 bg-white px-3 py-2 font-mono text-xs text-slate-700"
+            data-testid="github-secret-webhook-url"
+          >
+            {state.webhook_url}
+          </div>
           <div className="mt-3 rounded-lg border border-cyan-200 bg-white px-3 py-2 font-mono text-sm text-ink" data-testid="github-secret-value">
             {state.latest_secret}
           </div>
-          <div className="mt-3">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
               className="rounded-lg border border-cyan-300 px-3 py-1.5 text-xs font-semibold text-cyan-800"
@@ -163,7 +180,20 @@ export function GitHubIntegrationsManager({
             >
               Copy secret
             </button>
-            {copied ? <span className="ml-2 text-xs text-cyan-800">Copied.</span> : null}
+            <button
+              type="button"
+              className="rounded-lg border border-cyan-300 px-3 py-1.5 text-xs font-semibold text-cyan-800"
+              data-testid="github-copy-webhook-url"
+              onClick={async () => {
+                await navigator.clipboard.writeText(state.webhook_url);
+                setCopiedWebhookUrl(true);
+                setTimeout(() => setCopiedWebhookUrl(false), 1200);
+              }}
+            >
+              Copy webhook URL
+            </button>
+            {copied ? <span className="text-xs text-cyan-800">Secret copied.</span> : null}
+            {copiedWebhookUrl ? <span className="text-xs text-cyan-800">Webhook URL copied.</span> : null}
           </div>
         </div>
       ) : null}
