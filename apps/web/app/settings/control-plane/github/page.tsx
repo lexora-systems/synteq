@@ -79,6 +79,18 @@ function toFailureMessage(error: unknown): string {
     return "Unable to process GitHub integration action.";
   }
 
+  if (error.message.includes("API /v1/control-plane/github-integrations/") && error.message.includes("/deactivate")) {
+    if (error.message.includes("401")) {
+      return "Session expired while deactivating integration. Sign in again and retry.";
+    }
+    if (error.message.includes("404")) {
+      return "Integration not found for this workspace. Refresh and retry.";
+    }
+    if (error.message.includes("Route POST:")) {
+      return "Deactivation endpoint is unavailable on the API service. Deploy the latest API revision and retry.";
+    }
+  }
+
   if (error.message.includes("FORBIDDEN_PERMISSION")) {
     return "Only owner/admin can manage GitHub integrations.";
   }
@@ -148,7 +160,33 @@ async function manageGitHubIntegrationsAction(
           latest_secret_kind: null
         };
       }
-      const deactivated = await deactivateGitHubIntegration(token, id);
+      let deactivated: Awaited<ReturnType<typeof deactivateGitHubIntegration>> | null = null;
+      try {
+        deactivated = await deactivateGitHubIntegration(token, id);
+      } catch (error) {
+        // If the API mutated successfully but the initial response failed, recover from a fresh read.
+        try {
+          const list = await fetchGitHubIntegrations(token);
+          const recovered = list.integrations.find((integration) => integration.id === id);
+          if (recovered && !recovered.is_active) {
+            await clearGitHubSecretFlash();
+            return {
+              ok: true,
+              message: "GitHub integration deactivated. Synteq will stop watching events from this webhook.",
+              webhook_url: list.webhook_url,
+              integrations: list.integrations,
+              latest_secret: null,
+              latest_secret_kind: null
+            };
+          }
+        } catch {
+          // Fall through to the standard failure message below.
+        }
+        throw error;
+      }
+      if (!deactivated) {
+        throw new Error("Deactivation response missing");
+      }
       try {
         const list = await fetchGitHubIntegrations(token);
         await clearGitHubSecretFlash();

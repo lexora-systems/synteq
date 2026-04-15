@@ -144,3 +144,18 @@ test("deactivate succeeds but refresh fails still marks integration inactive", a
   await expect(row).toContainText("inactive");
   await expect(row.getByRole("button", { name: "Deactivate" })).toBeDisabled();
 });
+
+test("deactivate response failure after mutation still reconciles to inactive", async ({ page, request }) => {
+  await setSession(page);
+  await createGitHubIntegration(page, "acme/deactivate-recover");
+
+  await setMockApiBehavior(request, { fail_next_github_deactivate_after_mutation: true });
+  await page.getByRole("button", { name: "Deactivate" }).first().click();
+
+  await expect(page.getByTestId("github-feedback")).toContainText(
+    "GitHub integration deactivated. Synteq will stop watching events from this webhook."
+  );
+  const row = page.locator("tr", { hasText: "acme/deactivate-recover" }).first();
+  await expect(row).toContainText("inactive");
+  await expect(row.getByRole("button", { name: "Deactivate" })).toBeDisabled();
+});

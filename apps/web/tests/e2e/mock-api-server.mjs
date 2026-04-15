@@ -106,6 +106,7 @@ let alertChannelCounter = 1;
 let alertPolicyCounter = 1;
 let failNextGitHubIntegrationsList = false;
 let failNextGitHubRotate = false;
+let failNextGitHubDeactivateAfterMutation = false;
 
 const API_KEYS = [];
 
@@ -120,6 +121,7 @@ function resetState() {
   alertPolicyCounter = 1;
   failNextGitHubIntegrationsList = false;
   failNextGitHubRotate = false;
+  failNextGitHubDeactivateAfterMutation = false;
 
   API_KEYS.length = 0;
   API_KEYS.push({
@@ -165,10 +167,14 @@ const server = http.createServer(async (req, res) => {
     if (typeof body.fail_next_github_rotate_post === "boolean") {
       failNextGitHubRotate = body.fail_next_github_rotate_post;
     }
+    if (typeof body.fail_next_github_deactivate_after_mutation === "boolean") {
+      failNextGitHubDeactivateAfterMutation = body.fail_next_github_deactivate_after_mutation;
+    }
     sendJson(res, 200, {
       ok: true,
       fail_next_github_integrations_get: failNextGitHubIntegrationsList,
-      fail_next_github_rotate_post: failNextGitHubRotate
+      fail_next_github_rotate_post: failNextGitHubRotate,
+      fail_next_github_deactivate_after_mutation: failNextGitHubDeactivateAfterMutation
     });
     return;
   }
@@ -474,6 +480,11 @@ const server = http.createServer(async (req, res) => {
     }
     found.is_active = false;
     found.updated_at = new Date().toISOString();
+    if (failNextGitHubDeactivateAfterMutation) {
+      failNextGitHubDeactivateAfterMutation = false;
+      sendJson(res, 500, { error: "mock github deactivate response failure after mutation" });
+      return;
+    }
     sendJson(res, 200, {
       integration: found
     });
