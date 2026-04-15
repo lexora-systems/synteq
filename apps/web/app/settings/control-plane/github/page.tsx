@@ -148,17 +148,32 @@ async function manageGitHubIntegrationsAction(
           latest_secret_kind: null
         };
       }
-      await deactivateGitHubIntegration(token, id);
-      const list = await fetchGitHubIntegrations(token);
-      await clearGitHubSecretFlash();
-      return {
-        ok: true,
-        message: "GitHub integration deactivated. Synteq will stop watching events from this webhook.",
-        webhook_url: list.webhook_url,
-        integrations: list.integrations,
-        latest_secret: null,
-        latest_secret_kind: null
-      };
+      const deactivated = await deactivateGitHubIntegration(token, id);
+      try {
+        const list = await fetchGitHubIntegrations(token);
+        await clearGitHubSecretFlash();
+        return {
+          ok: true,
+          message: "GitHub integration deactivated. Synteq will stop watching events from this webhook.",
+          webhook_url: list.webhook_url,
+          integrations: list.integrations,
+          latest_secret: null,
+          latest_secret_kind: null
+        };
+      } catch {
+        await clearGitHubSecretFlash();
+        return {
+          ok: true,
+          message:
+            "GitHub integration deactivated successfully. Integration list refresh failed, so some status data may be temporarily stale.",
+          webhook_url: state.webhook_url,
+          integrations: state.integrations.map((integration) =>
+            integration.id === deactivated.integration.id ? deactivated.integration : integration
+          ),
+          latest_secret: null,
+          latest_secret_kind: null
+        };
+      }
     }
 
     if (intent === "rotate") {
