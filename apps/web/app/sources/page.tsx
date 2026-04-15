@@ -253,20 +253,20 @@ export default async function ConnectedSourcesPage() {
             <table className="w-full min-w-[1180px] border-collapse text-sm" data-testid="connected-sources-table">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-slate-500">
-                  <th className="py-2">Name</th>
-                  <th className="py-2">Type</th>
-                  <th className="py-2">Status</th>
-                  <th className="py-2">Access model</th>
-                  <th className="py-2">Signals watched</th>
-                  <th className="py-2">Risk patterns detected</th>
-                  <th className="py-2">Last activity</th>
-                  <th className="py-2">Connected</th>
+                  <th className="py-2 pr-2">Name</th>
+                  <th className="py-2 pr-2">Type</th>
+                  <th className="py-2 pr-2">Status</th>
+                  <th className="py-2 pr-2">Access model</th>
+                  <th className="py-2 pr-2">Signals watched</th>
+                  <th className="py-2 pr-2">Risk patterns detected</th>
+                  <th className="py-2 pr-2">Last activity</th>
+                  <th className="py-2 pr-2">Connected</th>
                 </tr>
               </thead>
               <tbody>
                 {payload.sources.map((source) => (
-                  <tr key={`${source.type}-${source.id}`} className="border-b border-slate-100 align-top">
-                    <td className="py-3 pr-2 text-ink">{source.name}</td>
+                  <tr key={`${source.type}-${source.id}`} className="border-b border-slate-100 align-top text-slate-700">
+                    <td className="py-3 pr-2">{source.name}</td>
                     <td className="py-3 pr-2">{toLabel(source.type)}</td>
                     <td className="py-3 pr-2">{source.status}</td>
                     <td className="py-3 pr-2">{accessModel(source.type)}</td>
