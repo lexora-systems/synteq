@@ -58,6 +58,7 @@ async function expectGitHubSecretClearedAfterReloads(page: Page) {
     await page.reload();
   }
   await expect(page.getByTestId("github-secret-value")).toHaveCount(0);
+  await expect(page.getByTestId("github-secret-placeholder")).toBeVisible();
 }
 
 test.beforeEach(async ({ request }) => {
@@ -76,6 +77,7 @@ test("control plane lifecycle surfaces are usable", async ({ page }) => {
   await expect(page.getByTestId("api-key-secret-value")).toBeVisible();
 
   await page.goto("/settings/control-plane/github");
+  await expect(page.getByTestId("github-secret-placeholder")).toBeVisible();
   await page.getByTestId("github-repository-input").fill("acme/demo-repo");
   await page.getByTestId("github-create-submit").click();
   await expect(page.getByTestId("github-secret-panel")).toBeVisible();
@@ -126,4 +128,19 @@ test("rotate failure does not show secret", async ({ page, request }) => {
 
   await expect(page.getByTestId("github-feedback")).toContainText("Unable to process GitHub integration action.");
   await expect(page.getByTestId("github-secret-value")).toHaveCount(0);
+});
+
+test("deactivate succeeds but refresh fails still marks integration inactive", async ({ page, request }) => {
+  await setSession(page);
+  await createGitHubIntegration(page, "acme/deactivate-refresh-fail");
+
+  await setMockApiBehavior(request, { fail_next_github_integrations_get: true });
+  await page.getByRole("button", { name: "Deactivate" }).first().click();
+
+  await expect(page.getByTestId("github-feedback")).toContainText(
+    "GitHub integration deactivated successfully. Integration list refresh failed"
+  );
+  const row = page.locator("tr", { hasText: "acme/deactivate-refresh-fail" }).first();
+  await expect(row).toContainText("inactive");
+  await expect(row.getByRole("button", { name: "Deactivate" })).toBeDisabled();
 });

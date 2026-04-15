@@ -150,53 +150,63 @@ export function GitHubIntegrationsManager({
         </p>
       </div>
 
-      {state.latest_secret ? (
-        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 shadow-panel" data-testid="github-secret-panel">
-          <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">
-            {state.latest_secret_kind === "rotated" ? "Rotated webhook secret" : "New webhook secret"}
-          </p>
-          <p className="mt-1 text-sm text-slate-700">
-            Copy this secret now. For security reasons it may not be shown again.
-          </p>
-          <div
-            className="mt-3 rounded-lg border border-cyan-200 bg-white px-3 py-2 font-mono text-xs text-slate-700"
-            data-testid="github-secret-webhook-url"
-          >
-            {state.webhook_url}
-          </div>
-          <div className="mt-3 rounded-lg border border-cyan-200 bg-white px-3 py-2 font-mono text-sm text-ink" data-testid="github-secret-value">
-            {state.latest_secret}
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="rounded-lg border border-cyan-300 px-3 py-1.5 text-xs font-semibold text-cyan-800"
-              data-testid="github-copy-secret"
-              onClick={async () => {
-                await navigator.clipboard.writeText(state.latest_secret ?? "");
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1200);
-              }}
+      <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 shadow-panel" data-testid="github-secret-panel">
+        <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">
+          {state.latest_secret
+            ? state.latest_secret_kind === "rotated"
+              ? "Rotated webhook secret"
+              : "New webhook secret"
+            : "One-time webhook secret output"}
+        </p>
+        {state.latest_secret ? (
+          <>
+            <p className="mt-1 text-sm text-slate-700">
+              Copy this secret now. For security reasons it may not be shown again.
+            </p>
+            <div
+              className="mt-3 rounded-lg border border-cyan-200 bg-white px-3 py-2 font-mono text-xs text-slate-700"
+              data-testid="github-secret-webhook-url"
             >
-              Copy secret
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-cyan-300 px-3 py-1.5 text-xs font-semibold text-cyan-800"
-              data-testid="github-copy-webhook-url"
-              onClick={async () => {
-                await navigator.clipboard.writeText(state.webhook_url);
-                setCopiedWebhookUrl(true);
-                setTimeout(() => setCopiedWebhookUrl(false), 1200);
-              }}
-            >
-              Copy webhook URL
-            </button>
-            {copied ? <span className="text-xs text-cyan-800">Secret copied.</span> : null}
-            {copiedWebhookUrl ? <span className="text-xs text-cyan-800">Webhook URL copied.</span> : null}
-          </div>
-        </div>
-      ) : null}
+              {state.webhook_url}
+            </div>
+            <div className="mt-3 rounded-lg border border-cyan-200 bg-white px-3 py-2 font-mono text-sm text-ink" data-testid="github-secret-value">
+              {state.latest_secret}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-cyan-300 px-3 py-1.5 text-xs font-semibold text-cyan-800"
+                data-testid="github-copy-secret"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(state.latest_secret ?? "");
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1200);
+                }}
+              >
+                Copy secret
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-cyan-300 px-3 py-1.5 text-xs font-semibold text-cyan-800"
+                data-testid="github-copy-webhook-url"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(state.webhook_url);
+                  setCopiedWebhookUrl(true);
+                  setTimeout(() => setCopiedWebhookUrl(false), 1200);
+                }}
+              >
+                Copy webhook URL
+              </button>
+              {copied ? <span className="text-xs text-cyan-800">Secret copied.</span> : null}
+              {copiedWebhookUrl ? <span className="text-xs text-cyan-800">Webhook URL copied.</span> : null}
+            </div>
+          </>
+        ) : (
+          <p className="mt-1 text-sm text-slate-700" data-testid="github-secret-placeholder">
+            After you create or rotate an integration secret, the one-time value will appear here with copy actions.
+          </p>
+        )}
+      </div>
 
       {canManage ? (
         <form action={formAction} className="rounded-2xl bg-white p-5 shadow-panel" data-testid="github-create-form">
