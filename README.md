@@ -1,8 +1,26 @@
-# Synteq Production Upgrade
+# Synteq
 
-Synteq is now upgraded from MVP to a production-ready, multi-tenant observability system for workflow execution reliability, anomalies, incidents, and cost monitoring.
+## Reliability Intelligence for Automation and Workflow Infrastructure
 
-## What Changed
+Synteq continuously analyzes event-driven systems to detect failures, latency spikes, retry storms, and operational risks early, before they escalate into business-impacting incidents.
+
+Synteq is an operator-focused control plane for automation and workflow reliability. It ingests execution and operational event signals, evaluates reliability patterns on scheduled cadence, and surfaces actionable incidents, alerts, and guidance for response teams.
+
+### What Synteq does today
+
+- Ingests execution, heartbeat, and normalized operational events (including GitHub Actions webhooks).
+- Aggregates metrics and evaluates reliability anomalies through scheduled jobs.
+- Opens and updates incidents with deterministic, rule-based guidance and lifecycle actions (`ack`, `resolve`).
+- Supports alert channels and policy-based dispatch for monitored risk conditions.
+- Provides deterministic reliability scans and simulation scenarios for controlled validation.
+
+### Scope boundaries
+
+- Synteq is focused on event-driven automation/workflow reliability, not broad full-stack infrastructure observability.
+- Incident guidance is deterministic (`rules_v1` + template narration), not autonomous remediation.
+- Detection quality depends on source signal coverage and healthy scheduler/worker cadence.
+
+## Implemented Capabilities (Current)
 
 ### Ingestion Hardening
 
