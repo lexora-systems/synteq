@@ -90,6 +90,8 @@ export function GitHubIntegrationsManager({
         : verifiedIntegrations.length === 0
           ? "Webhook is configured, but Synteq has not received a verified delivery yet."
           : "Synteq is receiving verified webhook deliveries. If incidents are empty, the system may be quiet by design.";
+  const rotateFailedWithoutSecret =
+    !state.ok && !state.latest_secret && typeof state.message === "string" && /rotate|one-time webhook secret/i.test(state.message);
 
   return (
     <div className="grid gap-4">
@@ -202,9 +204,16 @@ export function GitHubIntegrationsManager({
             </div>
           </>
         ) : (
-          <p className="mt-1 text-sm text-slate-700" data-testid="github-secret-placeholder">
-            After you create or rotate an integration secret, the one-time value will appear here with copy actions.
-          </p>
+          <>
+            {rotateFailedWithoutSecret ? (
+              <p className="mt-1 text-sm text-rose-700" data-testid="github-secret-rotate-error">
+                Rotation did not return a displayable one-time secret. Retry rotate and copy immediately when it appears.
+              </p>
+            ) : null}
+            <p className="mt-1 text-sm text-slate-700" data-testid="github-secret-placeholder">
+              After you create or rotate an integration secret, the one-time value will appear here with copy actions.
+            </p>
+          </>
         )}
       </div>
 

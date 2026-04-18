@@ -126,8 +126,29 @@ test("rotate failure does not show secret", async ({ page, request }) => {
   await setMockApiBehavior(request, { fail_next_github_rotate_post: true });
   await page.getByRole("button", { name: "Rotate secret" }).first().click();
 
-  await expect(page.getByTestId("github-feedback")).toContainText("Unable to process GitHub integration action.");
+  await expect(page.getByTestId("github-feedback")).toContainText(
+    "Rotate secret failed because API returned a server error. No new one-time secret was displayed."
+  );
   await expect(page.getByTestId("github-secret-value")).toHaveCount(0);
+  await expect(page.getByTestId("github-secret-rotate-error")).toBeVisible();
+  await expect(page.getByTestId("github-feedback")).not.toContainText("gh_mock_rotated_");
+});
+
+test("rotate success response missing webhook_secret fails loudly instead of empty success", async ({ page, request }) => {
+  await setSession(page);
+  await createGitHubIntegration(page, "acme/rotate-missing-secret");
+
+  await page.reload();
+  await setMockApiBehavior(request, { omit_next_github_rotate_secret: true });
+  await page.getByRole("button", { name: "Rotate secret" }).first().click();
+
+  await expect(page.getByTestId("github-feedback")).toContainText(
+    "Rotate secret failed because API response did not include a usable one-time webhook secret."
+  );
+  await expect(page.getByTestId("github-secret-value")).toHaveCount(0);
+  await expect(page.getByTestId("github-copy-secret")).toHaveCount(0);
+  await expect(page.getByTestId("github-secret-rotate-error")).toBeVisible();
+  await expect(page.getByTestId("github-feedback")).not.toContainText("gh_mock_rotated_");
 });
 
 test("deactivate succeeds but refresh fails still marks integration inactive", async ({ page, request }) => {

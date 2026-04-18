@@ -10,6 +10,8 @@ import {
   deactivateGitHubIntegration,
   fetchGitHubIntegrations,
   fetchMe,
+  isApiContractError,
+  isApiRequestError,
   rotateGitHubIntegrationSecret
 } from "../../../../lib/api";
 import { requireToken } from "../../../../lib/auth";
@@ -74,7 +76,89 @@ async function clearGitHubSecretFlash() {
   cookieStore.delete(GITHUB_SECRET_FLASH_SEEN_COOKIE);
 }
 
+function toActionErrorLogFields(error: unknown): Record<string, string | number | null> {
+  if (isApiRequestError(error)) {
+    return {
+      error_type: error.name,
+      path: error.path,
+      status: error.status,
+      code: error.code,
+      kind: error.kind,
+      request_id: error.requestId
+    };
+  }
+
+  if (isApiContractError(error)) {
+    return {
+      error_type: error.name,
+      path: error.path,
+      status: null,
+      code: error.contract,
+      kind: "contract",
+      request_id: null
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      error_type: error.name,
+      path: null,
+      status: null,
+      code: null,
+      kind: "unknown",
+      request_id: null
+    };
+  }
+
+  return {
+    error_type: "UnknownError",
+    path: null,
+    status: null,
+    code: null,
+    kind: "unknown",
+    request_id: null
+  };
+}
+
+function logGitHubActionFailure(action: string, error: unknown) {
+  console.error("github.integration.action_failed", {
+    action,
+    ...toActionErrorLogFields(error)
+  });
+}
+
 function toFailureMessage(error: unknown): string {
+  if (isApiContractError(error)) {
+    if (error.path.includes("/rotate-secret")) {
+      return "Rotate secret failed because API response did not include a usable one-time webhook secret.";
+    }
+    return "GitHub integration API response was malformed. Retry after deploying matching web/API revisions.";
+  }
+
+  if (isApiRequestError(error)) {
+    if (error.path.includes("/rotate-secret")) {
+      if (error.status === 401) {
+        return "Session expired while rotating secret. Sign in again and retry.";
+      }
+      if (error.status === 403 || error.code === "FORBIDDEN_PERMISSION") {
+        return "Only owner/admin can manage GitHub integrations.";
+      }
+      if (error.status === 404) {
+        return "Integration not found for this workspace. Refresh and retry.";
+      }
+      if (error.kind === "network") {
+        return "Rotate secret failed due to network/API connectivity. No new one-time secret was displayed.";
+      }
+      if (error.kind === "invalid_json") {
+        return "Rotate secret failed because API returned an unreadable response payload.";
+      }
+      if ((error.status ?? 0) >= 500) {
+        return "Rotate secret failed because API returned a server error. No new one-time secret was displayed.";
+      }
+      return "Rotate secret failed. No new one-time secret was displayed.";
+    }
+  }
+
   if (!(error instanceof Error)) {
     return "Unable to process GitHub integration action.";
   }
@@ -226,7 +310,39 @@ async function manageGitHubIntegrationsAction(
           latest_secret_kind: null
         };
       }
-      const rotated = await rotateGitHubIntegrationSecret(token, id);
+      let rotated: Awaited<ReturnType<typeof rotateGitHubIntegrationSecret>> | null = null;
+      try {
+        rotated = await rotateGitHubIntegrationSecret(token, id);
+      } catch (error) {
+        logGitHubActionFailure("rotate", error);
+        await clearGitHubSecretFlash();
+        return {
+          ...state,
+          ok: false,
+          message: toFailureMessage(error),
+          latest_secret: null,
+          latest_secret_kind: null
+        };
+      }
+      if (!rotated || !rotated.webhook_secret || rotated.webhook_secret.trim().length === 0) {
+        console.error("github.integration.action_failed", {
+          action: "rotate",
+          error_type: "RotateSecretMissingInResponse",
+          path: "/v1/control-plane/github-integrations/:id/rotate-secret",
+          status: 200,
+          code: "github_rotate_secret_response_missing_secret",
+          kind: "contract",
+          request_id: null
+        });
+        await clearGitHubSecretFlash();
+        return {
+          ...state,
+          ok: false,
+          message: "Rotate secret failed because API response did not include a usable one-time webhook secret.",
+          latest_secret: null,
+          latest_secret_kind: null
+        };
+      }
       try {
         const list = await fetchGitHubIntegrations(token);
         const message = "Webhook secret rotated. Update GitHub webhook settings so Synteq can keep monitoring without interruption.";
@@ -275,6 +391,7 @@ async function manageGitHubIntegrationsAction(
       latest_secret_kind: null
     };
   } catch (error) {
+    logGitHubActionFailure("manage", error);
     await clearGitHubSecretFlash();
     return {
       ...state,

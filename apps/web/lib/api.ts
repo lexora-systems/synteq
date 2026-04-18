@@ -18,6 +18,191 @@ type RequestOptions = {
   body?: unknown;
 };
 
+type ApiRequestFailureKind = "http" | "network" | "invalid_json";
+
+export class ApiRequestError extends Error {
+  readonly path: string;
+  readonly status: number | null;
+  readonly code: string | null;
+  readonly requestId: string | null;
+  readonly kind: ApiRequestFailureKind;
+
+  constructor(input: {
+    message: string;
+    path: string;
+    status: number | null;
+    code?: string | null;
+    requestId?: string | null;
+    kind: ApiRequestFailureKind;
+  }) {
+    super(input.message);
+    this.name = "ApiRequestError";
+    this.path = input.path;
+    this.status = input.status;
+    this.code = input.code ?? null;
+    this.requestId = input.requestId ?? null;
+    this.kind = input.kind;
+  }
+}
+
+export class ApiContractError extends Error {
+  readonly path: string;
+  readonly contract: string;
+
+  constructor(input: { message: string; path: string; contract: string }) {
+    super(input.message);
+    this.name = "ApiContractError";
+    this.path = input.path;
+    this.contract = input.contract;
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function toOptionalString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function toResponseSnippet(value: string): string | null {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  if (normalized.length === 0) {
+    return null;
+  }
+  return normalized.slice(0, 160);
+}
+
+async function readResponsePayload(response: Response): Promise<{ raw: string; json: unknown | null }> {
+  const raw = await response.text();
+  if (!raw) {
+    return {
+      raw: "",
+      json: null
+    };
+  }
+
+  try {
+    return {
+      raw,
+      json: JSON.parse(raw) as unknown
+    };
+  } catch {
+    return {
+      raw,
+      json: null
+    };
+  }
+}
+
+function toHttpApiError(input: { path: string; status: number; payload: { raw: string; json: unknown | null } }): ApiRequestError {
+  const payloadObject = asRecord(input.payload.json);
+  const code = toOptionalString(payloadObject?.code);
+  const requestId = toOptionalString(payloadObject?.request_id);
+  const messageValue = toOptionalString(payloadObject?.message) ?? toOptionalString(payloadObject?.error) ?? toResponseSnippet(input.payload.raw);
+  const message = `API ${input.path} failed: ${input.status}${code ? ` ${code}` : ""}${messageValue ? ` ${messageValue}` : ""}`;
+
+  return new ApiRequestError({
+    message,
+    path: input.path,
+    status: input.status,
+    code,
+    requestId,
+    kind: "http"
+  });
+}
+
+function ensureNonEmptyStringField(input: {
+  value: unknown;
+  key: string;
+  path: string;
+  contract: string;
+}): string {
+  if (typeof input.value !== "string" || input.value.trim().length === 0) {
+    throw new ApiContractError({
+      path: input.path,
+      contract: input.contract,
+      message: `API ${input.path} returned malformed response: missing ${input.key}`
+    });
+  }
+  return input.value;
+}
+
+function parseGitHubIntegrationRow(input: {
+  value: unknown;
+  path: string;
+  contract: string;
+}): GitHubIntegrationRow {
+  const record = asRecord(input.value);
+  if (!record) {
+    throw new ApiContractError({
+      path: input.path,
+      contract: input.contract,
+      message: `API ${input.path} returned malformed response: missing integration`
+    });
+  }
+
+  if (typeof record.is_active !== "boolean") {
+    throw new ApiContractError({
+      path: input.path,
+      contract: input.contract,
+      message: `API ${input.path} returned malformed response: missing integration.is_active`
+    });
+  }
+  if (record.last_delivery_id !== null && record.last_delivery_id !== undefined && typeof record.last_delivery_id !== "string") {
+    throw new ApiContractError({
+      path: input.path,
+      contract: input.contract,
+      message: `API ${input.path} returned malformed response: malformed integration.last_delivery_id`
+    });
+  }
+  if (record.last_seen_at !== null && record.last_seen_at !== undefined && typeof record.last_seen_at !== "string") {
+    throw new ApiContractError({
+      path: input.path,
+      contract: input.contract,
+      message: `API ${input.path} returned malformed response: malformed integration.last_seen_at`
+    });
+  }
+
+  return {
+    id: ensureNonEmptyStringField({
+      value: record.id,
+      key: "integration.id",
+      path: input.path,
+      contract: input.contract
+    }),
+    webhook_id: ensureNonEmptyStringField({
+      value: record.webhook_id,
+      key: "integration.webhook_id",
+      path: input.path,
+      contract: input.contract
+    }),
+    repository_full_name: record.repository_full_name === null ? null : typeof record.repository_full_name === "string" ? record.repository_full_name : null,
+    is_active: record.is_active,
+    last_delivery_id: record.last_delivery_id === undefined ? null : (record.last_delivery_id as string | null),
+    last_seen_at: record.last_seen_at === undefined ? null : (record.last_seen_at as string | null),
+    created_at: ensureNonEmptyStringField({
+      value: record.created_at,
+      key: "integration.created_at",
+      path: input.path,
+      contract: input.contract
+    }),
+    updated_at: ensureNonEmptyStringField({
+      value: record.updated_at,
+      key: "integration.updated_at",
+      path: input.path,
+      contract: input.contract
+    })
+  };
+}
+
 type IncidentRow = {
   id: string;
   tenant_id: string;
@@ -134,25 +319,52 @@ export type ConnectedSourceRow = {
 };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    method: options.method ?? "GET",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.token ? { Authorization: `Bearer ${options.token}` } : {})
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-    cache: "no-store"
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`API ${path} failed: ${response.status} ${text}`);
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, {
+      method: options.method ?? "GET",
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.token ? { Authorization: `Bearer ${options.token}` } : {})
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      cache: "no-store"
+    });
+  } catch {
+    throw new ApiRequestError({
+      message: `API ${path} failed: network request error`,
+      path,
+      status: null,
+      kind: "network"
+    });
   }
 
-  return (await response.json()) as T;
+  const payload = await readResponsePayload(response);
+  if (!response.ok) {
+    throw toHttpApiError({
+      path,
+      status: response.status,
+      payload
+    });
+  }
+
+  if (payload.json === null) {
+    throw new ApiRequestError({
+      message: `API ${path} failed: invalid JSON response`,
+      path,
+      status: response.status,
+      code: "API_RESPONSE_INVALID_JSON",
+      kind: "invalid_json"
+    });
+  }
+
+  return payload.json as T;
 }
 
 export function extractApiErrorCode(error: unknown): string | null {
+  if (error instanceof ApiRequestError) {
+    return error.code;
+  }
   if (!(error instanceof Error)) {
     return null;
   }
@@ -163,6 +375,14 @@ export function extractApiErrorCode(error: unknown): string | null {
     return "FORBIDDEN_PERMISSION";
   }
   return null;
+}
+
+export function isApiRequestError(error: unknown): error is ApiRequestError {
+  return error instanceof ApiRequestError;
+}
+
+export function isApiContractError(error: unknown): error is ApiContractError {
+  return error instanceof ApiContractError;
 }
 
 export async function fetchOverview(token: string, range: "15m" | "1h" | "6h" | "24h" | "7d", workflowId?: string) {
@@ -500,14 +720,40 @@ export async function deactivateGitHubIntegration(token: string, id: string) {
 }
 
 export async function rotateGitHubIntegrationSecret(token: string, id: string) {
-  return request<{
-    webhook_url: string;
-    integration: GitHubIntegrationRow;
-    webhook_secret: string;
-  }>(`/v1/control-plane/github-integrations/${id}/rotate-secret`, {
+  const path = `/v1/control-plane/github-integrations/${id}/rotate-secret`;
+  const response = await request<unknown>(path, {
     token,
     method: "POST"
   });
+
+  const payload = asRecord(response);
+  if (!payload) {
+    throw new ApiContractError({
+      path,
+      contract: "github_rotate_secret_response",
+      message: `API ${path} returned malformed response: expected object body`
+    });
+  }
+
+  return {
+    webhook_url: ensureNonEmptyStringField({
+      value: payload.webhook_url,
+      key: "webhook_url",
+      path,
+      contract: "github_rotate_secret_response"
+    }),
+    integration: parseGitHubIntegrationRow({
+      value: payload.integration,
+      path,
+      contract: "github_rotate_secret_response"
+    }),
+    webhook_secret: ensureNonEmptyStringField({
+      value: payload.webhook_secret,
+      key: "webhook_secret",
+      path,
+      contract: "github_rotate_secret_response"
+    })
+  };
 }
 
 export async function fetchAlertChannels(token: string) {

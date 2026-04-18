@@ -218,6 +218,49 @@ describe("control plane github integrations routes", () => {
     expect(body.webhook_secret.length).toBeGreaterThan(10);
   });
 
+  it("rotates integration secret and returns new one-time webhook secret", async () => {
+    updateMock.mockResolvedValueOnce({
+      id: "gh-1",
+      webhook_id: "hook-1",
+      repository_full_name: "acme/payments",
+      is_active: true,
+      last_delivery_id: null,
+      last_seen_at: null,
+      created_at: new Date("2026-03-31T02:00:00.000Z"),
+      updated_at: new Date("2026-03-31T05:00:00.000Z")
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/control-plane/github-integrations/gh-1/rotate-secret",
+      headers: {
+        host: "api.synteq.local"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toMatchObject({
+      integration: {
+        id: "gh-1",
+        webhook_id: "hook-1"
+      },
+      webhook_url: "http://api.synteq.local/v1/integrations/github/webhook"
+    });
+    expect(typeof body.webhook_secret).toBe("string");
+    expect(body.webhook_secret.length).toBeGreaterThan(10);
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: "gh-1"
+        },
+        data: expect.objectContaining({
+          webhook_secret: expect.any(String)
+        })
+      })
+    );
+  });
+
   it("prevents viewer from mutating integrations", async () => {
     role = "viewer";
     const response = await app.inject({

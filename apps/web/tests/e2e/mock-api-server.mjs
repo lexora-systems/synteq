@@ -106,6 +106,7 @@ let alertChannelCounter = 1;
 let alertPolicyCounter = 1;
 let failNextGitHubIntegrationsList = false;
 let failNextGitHubRotate = false;
+let omitNextGitHubRotateSecret = false;
 let failNextGitHubDeactivateAfterMutation = false;
 
 const API_KEYS = [];
@@ -121,6 +122,7 @@ function resetState() {
   alertPolicyCounter = 1;
   failNextGitHubIntegrationsList = false;
   failNextGitHubRotate = false;
+  omitNextGitHubRotateSecret = false;
   failNextGitHubDeactivateAfterMutation = false;
 
   API_KEYS.length = 0;
@@ -167,6 +169,9 @@ const server = http.createServer(async (req, res) => {
     if (typeof body.fail_next_github_rotate_post === "boolean") {
       failNextGitHubRotate = body.fail_next_github_rotate_post;
     }
+    if (typeof body.omit_next_github_rotate_secret === "boolean") {
+      omitNextGitHubRotateSecret = body.omit_next_github_rotate_secret;
+    }
     if (typeof body.fail_next_github_deactivate_after_mutation === "boolean") {
       failNextGitHubDeactivateAfterMutation = body.fail_next_github_deactivate_after_mutation;
     }
@@ -174,6 +179,7 @@ const server = http.createServer(async (req, res) => {
       ok: true,
       fail_next_github_integrations_get: failNextGitHubIntegrationsList,
       fail_next_github_rotate_post: failNextGitHubRotate,
+      omit_next_github_rotate_secret: omitNextGitHubRotateSecret,
       fail_next_github_deactivate_after_mutation: failNextGitHubDeactivateAfterMutation
     });
     return;
@@ -508,6 +514,14 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     found.updated_at = new Date().toISOString();
+    if (omitNextGitHubRotateSecret) {
+      omitNextGitHubRotateSecret = false;
+      sendJson(res, 200, {
+        webhook_url: currentWebhookUrl(req),
+        integration: found
+      });
+      return;
+    }
     sendJson(res, 200, {
       webhook_url: currentWebhookUrl(req),
       integration: found,
