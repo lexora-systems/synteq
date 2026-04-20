@@ -586,52 +586,152 @@ const controlPlaneRoutes: FastifyPluginAsync = async (app) => {
       preHandler: [app.requireDashboardAuth, app.requirePermissions([Permission.SETTINGS_MANAGE])]
     },
     async (request, reply) => {
+      const routeName = "control_plane.github.rotate_secret";
       const tenantId = request.authUser?.tenant_id;
+      const userId = request.authUser?.user_id ?? null;
+      const rawParamRecord = request.params as Record<string, unknown> | undefined;
+      const rawIntegrationId = typeof rawParamRecord?.id === "string" ? rawParamRecord.id : null;
+      request.log.info(
+        {
+          route: routeName,
+          integration_id: rawIntegrationId,
+          tenant_id: tenantId ?? null,
+          user_id: userId
+        },
+        "github.integration.rotate_secret.entered"
+      );
       if (!tenantId) {
         return reply.code(401).send({ error: "Unauthorized" });
       }
-      const params = parseWithSchema(idParamSchema, request.params);
+      try {
+        const params = parseWithSchema(idParamSchema, request.params);
 
-      const existing = await prisma.gitHubIntegration.findFirst({
-        where: {
-          id: params.id,
-          tenant_id: tenantId
-        },
-        select: {
-          id: true
+        request.log.info(
+          {
+            route: routeName,
+            integration_id: params.id,
+            tenant_id: tenantId
+          },
+          "github.integration.rotate_secret.lookup_started"
+        );
+        const existing = await prisma.gitHubIntegration.findFirst({
+          where: {
+            id: params.id,
+            tenant_id: tenantId
+          },
+          select: {
+            id: true
+          }
+        });
+        request.log.info(
+          {
+            route: routeName,
+            integration_id: params.id,
+            tenant_id: tenantId,
+            found: Boolean(existing)
+          },
+          "github.integration.rotate_secret.lookup_completed"
+        );
+
+        if (!existing) {
+          return reply.code(404).send({ error: "GitHub integration not found" });
         }
-      });
 
-      if (!existing) {
-        return reply.code(404).send({ error: "GitHub integration not found" });
+        request.log.info(
+          {
+            route: routeName,
+            integration_id: params.id,
+            tenant_id: tenantId
+          },
+          "github.integration.rotate_secret.secret_generation_started"
+        );
+        const nextSecret = randomOpaqueToken(36);
+        request.log.info(
+          {
+            route: routeName,
+            integration_id: params.id,
+            tenant_id: tenantId
+          },
+          "github.integration.rotate_secret.secret_generation_completed"
+        );
+
+        request.log.info(
+          {
+            route: routeName,
+            integration_id: params.id,
+            tenant_id: tenantId
+          },
+          "github.integration.rotate_secret.db_update_started"
+        );
+        const updated = await prisma.gitHubIntegration.update({
+          where: {
+            id: existing.id
+          },
+          data: {
+            webhook_secret: nextSecret
+          },
+          select: {
+            id: true,
+            webhook_id: true,
+            repository_full_name: true,
+            is_active: true,
+            last_delivery_id: true,
+            last_seen_at: true,
+            created_at: true,
+            updated_at: true
+          }
+        });
+        request.log.info(
+          {
+            route: routeName,
+            integration_id: params.id,
+            tenant_id: tenantId
+          },
+          "github.integration.rotate_secret.db_update_completed"
+        );
+
+        const payload = {
+          webhook_url: deriveWebhookUrl(request),
+          integration: updated,
+          webhook_secret: nextSecret,
+          request_id: request.id
+        };
+
+        request.log.info(
+          {
+            route: routeName,
+            integration_id: params.id,
+            tenant_id: tenantId,
+            has_integration: Boolean(payload.integration),
+            has_webhook_url: typeof payload.webhook_url === "string" && payload.webhook_url.length > 0,
+            has_webhook_secret: typeof payload.webhook_secret === "string" && payload.webhook_secret.length > 0
+          },
+          "github.integration.rotate_secret.response_payload_summary"
+        );
+        request.log.info(
+          {
+            route: routeName,
+            integration_id: params.id,
+            tenant_id: tenantId
+          },
+          "github.integration.rotate_secret.completed"
+        );
+
+        return payload;
+      } catch (error) {
+        request.log.error(
+          {
+            route: routeName,
+            integration_id: rawIntegrationId,
+            tenant_id: tenantId,
+            user_id: userId,
+            error_message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : null
+          },
+          "github.integration.rotate_secret.exception"
+        );
+        throw error;
       }
-
-      const nextSecret = randomOpaqueToken(36);
-      const updated = await prisma.gitHubIntegration.update({
-        where: {
-          id: existing.id
-        },
-        data: {
-          webhook_secret: nextSecret
-        },
-        select: {
-          id: true,
-          webhook_id: true,
-          repository_full_name: true,
-          is_active: true,
-          last_delivery_id: true,
-          last_seen_at: true,
-          created_at: true,
-          updated_at: true
-        }
-      });
-
-      return {
-        webhook_url: deriveWebhookUrl(request),
-        integration: updated,
-        webhook_secret: nextSecret,
-        request_id: request.id
-      };
     }
   );
 

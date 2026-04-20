@@ -319,15 +319,18 @@ export type ConnectedSourceRow = {
 };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const hasJsonBody = options.body !== undefined;
+  const headers: Record<string, string> = {
+    ...(hasJsonBody ? { "Content-Type": "application/json" } : {}),
+    ...(options.token ? { Authorization: `Bearer ${options.token}` } : {})
+  };
+
   let response: Response;
   try {
     response = await fetch(`${apiBaseUrl}${path}`, {
       method: options.method ?? "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...(options.token ? { Authorization: `Bearer ${options.token}` } : {})
-      },
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      headers,
+      body: hasJsonBody ? JSON.stringify(options.body) : undefined,
       cache: "no-store"
     });
   } catch {
