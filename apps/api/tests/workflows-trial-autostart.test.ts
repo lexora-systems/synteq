@@ -9,6 +9,8 @@ const githubIntegrationFindManyMock = vi.fn();
 const githubIntegrationCountMock = vi.fn();
 const workflowVersionFindFirstMock = vi.fn();
 const workflowVersionCreateMock = vi.fn();
+const alertPolicyFindFirstMock = vi.fn();
+const alertPolicyCreateMock = vi.fn();
 const startTrialIfEligibleMock = vi.fn();
 const getTenantEntitlementsMock = vi.fn();
 
@@ -27,6 +29,10 @@ vi.mock("../src/lib/prisma.js", () => ({
     workflowVersion: {
       findFirst: workflowVersionFindFirstMock,
       create: workflowVersionCreateMock
+    },
+    alertPolicy: {
+      findFirst: alertPolicyFindFirstMock,
+      create: alertPolicyCreateMock
     }
   }
 }));
@@ -48,6 +54,8 @@ describe("workflow register trial auto-start", () => {
     githubIntegrationCountMock.mockReset();
     workflowVersionFindFirstMock.mockReset();
     workflowVersionCreateMock.mockReset();
+    alertPolicyFindFirstMock.mockReset();
+    alertPolicyCreateMock.mockReset();
     startTrialIfEligibleMock.mockReset();
     getTenantEntitlementsMock.mockReset();
 
@@ -68,6 +76,8 @@ describe("workflow register trial auto-start", () => {
     githubIntegrationCountMock.mockResolvedValue(0);
     workflowVersionFindFirstMock.mockResolvedValue(null);
     workflowVersionCreateMock.mockResolvedValue({ id: "ver-1" });
+    alertPolicyFindFirstMock.mockResolvedValue(null);
+    alertPolicyCreateMock.mockResolvedValue({ id: "policy-1" });
     startTrialIfEligibleMock.mockResolvedValue({ code: "started" });
     getTenantEntitlementsMock.mockResolvedValue({
       tenant_id: "tenant-A",
@@ -131,6 +141,17 @@ describe("workflow register trial auto-start", () => {
       tenantId: "tenant-A",
       source: "auto_workflow_connect"
     });
+    expect(alertPolicyCreateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tenant_id: "tenant-A",
+          metric: "missing_heartbeat",
+          filter_env: "prod",
+          filter_workflow_id: "wf-1",
+          is_enabled: true
+        })
+      })
+    );
   });
 
   it("blocks free tenants from registering a second active source", async () => {
@@ -186,5 +207,25 @@ describe("workflow register trial auto-start", () => {
 
     expect(response.statusCode).toBe(200);
     expect(workflowUpsertMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not create duplicate missing-heartbeat policy when one already exists", async () => {
+    alertPolicyFindFirstMock.mockResolvedValue({
+      id: "policy-existing"
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/workflows/register",
+      payload: {
+        slug: "payments-daily",
+        display_name: "Payments Daily",
+        system: "airflow",
+        environment: "prod"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(alertPolicyCreateMock).not.toHaveBeenCalled();
   });
 });

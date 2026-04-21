@@ -7,6 +7,56 @@ import { startTrialIfEligible } from "../services/tenant-trial-service.js";
 import { replyIfEntitlementError, requireSourceCapacity, resolveTenantAccess } from "../services/entitlement-guard-service.js";
 import { countCapacitySourcesForTenant } from "../services/source-service.js";
 
+async function ensureMissingHeartbeatPolicy(input: {
+  tenantId: string;
+  workflowId: string;
+  workflowDisplayName: string;
+  environment: string;
+}) {
+  const existingPolicy = await prisma.alertPolicy.findFirst({
+    where: {
+      tenant_id: input.tenantId,
+      metric: "missing_heartbeat",
+      filter_workflow_id: input.workflowId,
+      filter_env: input.environment
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (existingPolicy) {
+    return {
+      created: false,
+      policyId: existingPolicy.id
+    };
+  }
+
+  const createdPolicy = await prisma.alertPolicy.create({
+    data: {
+      tenant_id: input.tenantId,
+      name: `${input.workflowDisplayName} heartbeat silence`,
+      metric: "missing_heartbeat",
+      window_sec: 300,
+      threshold: 1,
+      comparator: "gte",
+      min_events: 0,
+      severity: "high",
+      is_enabled: true,
+      filter_workflow_id: input.workflowId,
+      filter_env: input.environment
+    },
+    select: {
+      id: true
+    }
+  });
+
+  return {
+    created: true,
+    policyId: createdPolicy.id
+  };
+}
+
 const workflowRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     "/workflows",
@@ -125,6 +175,13 @@ const workflowRoutes: FastifyPluginAsync = async (app) => {
           }
         });
       }
+      await ensureMissingHeartbeatPolicy({
+        tenantId,
+        workflowId: workflow.id,
+        workflowDisplayName: workflow.display_name,
+        environment: workflow.environment
+      });
+
       await startTrialIfEligible({
         tenantId,
         source: "auto_workflow_connect"

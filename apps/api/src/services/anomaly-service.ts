@@ -46,6 +46,13 @@ type HistoryPoint = {
   avg_cost_usd: number | null;
 };
 
+type HeartbeatGapSummary = {
+  gapSec: number | null;
+  lastHeartbeat: Date | null;
+  heartbeatCount: number;
+  inferredExpectedIntervalSec: number | null;
+};
+
 type DetectionResult = {
   triggered: boolean;
   observed: number;
@@ -53,6 +60,15 @@ type DetectionResult = {
   baseline: number;
   summary: string;
   minEventsMet: boolean;
+};
+
+type MissingHeartbeatEvaluation = {
+  triggered: boolean;
+  expectedIntervalSec: number;
+  thresholdGapSec: number;
+  observedGapSec: number | null;
+  expectedSource: "heartbeat_payload" | "policy_window";
+  skipReason?: "no_baseline";
 };
 
 function asNumber(value: unknown, fallback = 0): number {
@@ -237,12 +253,19 @@ async function queryHeartbeatGap(input: {
   tenantId: string;
   workflowId: string;
   env: string;
-}): Promise<number | null> {
+}): Promise<HeartbeatGapSummary> {
   const bq = getBigQueryClient();
   const [rows] = await bq.query({
     query: `
       SELECT
-        MAX(heartbeat_ts) AS last_heartbeat
+        MAX(heartbeat_ts) AS last_heartbeat,
+        COUNT(*) AS heartbeat_count,
+        ARRAY_AGG(
+          SAFE_CAST(JSON_EXTRACT_SCALAR(payload, '$.expected_interval_sec') AS INT64)
+          IGNORE NULLS
+          ORDER BY heartbeat_ts DESC
+          LIMIT 1
+        )[SAFE_OFFSET(0)] AS expected_interval_sec
       FROM \`${config.BIGQUERY_PROJECT_ID}.${config.BIGQUERY_DATASET}.heartbeats\`
       WHERE tenant_id = @tenantId
         AND workflow_id = @workflowId
@@ -254,11 +277,46 @@ async function queryHeartbeatGap(input: {
 
   const row = (rows[0] as Record<string, unknown> | undefined) ?? {};
   const lastHeartbeat = row.last_heartbeat instanceof Date ? row.last_heartbeat : null;
-  if (!lastHeartbeat) {
-    return null;
+  const heartbeatCount = Math.max(0, Math.round(asNumber(row.heartbeat_count, 0)));
+  const expectedInterval = Math.round(asNumber(row.expected_interval_sec, 0));
+  const inferredExpectedIntervalSec = expectedInterval > 0 ? expectedInterval : null;
+
+  return {
+    gapSec: lastHeartbeat ? (Date.now() - lastHeartbeat.getTime()) / 1000 : null,
+    lastHeartbeat,
+    heartbeatCount,
+    inferredExpectedIntervalSec
+  };
+}
+
+export function evaluateMissingHeartbeatWindow(input: {
+  observedGapSec: number | null;
+  heartbeatCount: number;
+  policyWindowSec: number;
+  inferredExpectedIntervalSec: number | null;
+}): MissingHeartbeatEvaluation {
+  const expectedSource = input.inferredExpectedIntervalSec !== null ? "heartbeat_payload" : "policy_window";
+  const expectedIntervalSec = Math.max(60, Math.round(input.inferredExpectedIntervalSec ?? input.policyWindowSec));
+  const thresholdGapSec = expectedIntervalSec * 3;
+
+  if (input.heartbeatCount <= 0 || input.observedGapSec === null) {
+    return {
+      triggered: false,
+      expectedIntervalSec,
+      thresholdGapSec,
+      observedGapSec: input.observedGapSec,
+      expectedSource,
+      skipReason: "no_baseline"
+    };
   }
 
-  return (Date.now() - lastHeartbeat.getTime()) / 1000;
+  return {
+    triggered: input.observedGapSec > thresholdGapSec,
+    expectedIntervalSec,
+    thresholdGapSec,
+    observedGapSec: input.observedGapSec,
+    expectedSource
+  };
 }
 
 function weightedBaseline(
@@ -821,16 +879,30 @@ export async function runAnomalyDetectionJob(now = new Date()) {
     const targets = buildTargets(policy, workflows);
     for (const target of targets) {
       if (policy.metric === "missing_heartbeat") {
-        const gapSec = await queryHeartbeatGap({
+        const heartbeatSummary = await queryHeartbeatGap({
           tenantId: policy.tenant_id,
           workflowId: target.workflowId,
           env: target.env
         });
-        const expected = Math.max(policy.window_sec, 60);
-        const observedGap = gapSec ?? Number.MAX_SAFE_INTEGER;
-        const triggered = observedGap > expected * 3;
+        const evaluation = evaluateMissingHeartbeatWindow({
+          observedGapSec: heartbeatSummary.gapSec,
+          heartbeatCount: heartbeatSummary.heartbeatCount,
+          policyWindowSec: policy.window_sec,
+          inferredExpectedIntervalSec: heartbeatSummary.inferredExpectedIntervalSec
+        });
 
-        if (triggered) {
+        if (evaluation.skipReason === "no_baseline") {
+          await clearIncidentIfStable({
+            tenantId: policy.tenant_id,
+            policyId: policy.id,
+            workflowId: target.workflowId,
+            env: target.env,
+            now
+          });
+          continue;
+        }
+
+        if (evaluation.triggered) {
           const summary: WindowSummary = {
             total: 0,
             failed: 0,
@@ -852,10 +924,12 @@ export async function runAnomalyDetectionJob(now = new Date()) {
             summary,
             result: {
               triggered: true,
-              observed: observedGap,
-              zScore: observedGap,
-              baseline: expected,
-              summary: `missing heartbeat gap_sec=${Math.round(observedGap)} expected<=${expected * 3}`,
+              observed: evaluation.observedGapSec ?? 0,
+              zScore: evaluation.observedGapSec ?? 0,
+              baseline: evaluation.expectedIntervalSec,
+              summary: `missing heartbeat gap_sec=${Math.round(
+                evaluation.observedGapSec ?? 0
+              )} expected<=${evaluation.thresholdGapSec} source=${evaluation.expectedSource}`,
               minEventsMet: true
             }
           });

@@ -329,6 +329,9 @@ export default async function AlertControlPlanePage({
           <div className="rounded-2xl bg-white p-5 shadow-panel">
             <h3 className="text-lg font-semibold text-ink">Alert policies</h3>
             <p className="mt-1 text-sm text-slate-600">Attach channels to anomaly thresholds already supported by Synteq.</p>
+            <p className="mt-1 text-sm text-slate-600">
+              Missing-heartbeat policies use observed heartbeat cadence when available, then fall back to configured window thresholds.
+            </p>
             <p className="mt-1 text-sm text-slate-600">Disable or delete anytime from the right-side actions.</p>
 
             {canManage ? (
