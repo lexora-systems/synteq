@@ -140,7 +140,112 @@ Synteq is an operator-focused control plane for automation and workflow reliabil
 - `POST /v1/ingest/execution`
 - `POST /v1/ingest/heartbeat`
 - `POST /v1/ingest/events` (normalized operational events, single or batch)
+- `POST /v1/ingest/workflow-event` (generic workflow execution event adapter)
 - `POST /v1/integrations/github/webhook` (GitHub Actions webhook adapter)
+
+Generic workflow event ingest notes (safe first step for non-GitHub automations):
+
+- Route: `POST /v1/ingest/workflow-event`
+- Auth: same ingestion auth as existing ingest routes:
+  - `X-Synteq-Key: <ingestion_api_key>`
+  - optional/enforced HMAC headers depending on `INGEST_HMAC_REQUIRED`
+- Supports source types:
+  - `github`
+  - `webhook`
+  - `n8n`
+  - `make`
+  - `zapier`
+- This route validates and maps incoming workflow execution events into `operational_events`.
+- It is generic workflow ingestion, not a full native n8n/make/zapier integration yet.
+
+Generic workflow source onboarding:
+
+- UI: `/sources` -> Generic workflow source.
+- Create API: `POST /v1/control-plane/workflow-sources`
+  - Auth: dashboard JWT with workflow write permission.
+  - Body:
+
+```json
+{
+  "display_name": "Customer Onboarding",
+  "source_type": "n8n",
+  "environment": "production"
+}
+```
+
+- The create response returns the workflow source id, source key, `/v1/ingest/workflow-event` endpoint, and a one-time ingestion key for the `X-Synteq-Key` header.
+- Send test event API: `POST /v1/control-plane/sources/:sourceId/test-workflow-event`
+  - Body: `{ "status": "succeeded" }`, `{ "status": "failed" }`, or `{ "status": "timed_out" }`.
+  - Test events are synthetic metadata-tagged workflow execution events and pass through the same workflow-event to operational-event ingestion path.
+- This supports n8n, Make, Zapier, and custom webhook tools through HTTP requests. It is not yet a native n8n, Make, or Zapier setup wizard/integration.
+
+Generic workflow incident detection:
+
+- Non-GitHub workflow sources (`webhook`, `n8n`, `make`, `zapier`) create or update incidents when `status` is `failed` or `timed_out`.
+- Repeated failures reuse the same active incident by tenant, source, workflow id, environment, and rule category, so new execution ids do not create duplicate active incidents.
+- A `succeeded` event resolves matching open or acknowledged generic workflow incidents for the same source and workflow.
+- This detection uses the generic workflow ingestion path for both real HTTP requests and synthetic test events. It is not yet native n8n, Make, or Zapier setup automation.
+
+Example generic workflow event request:
+
+```json
+{
+  "source_type": "n8n",
+  "source_id": "<source-id>",
+  "workflow_id": "customer-onboarding",
+  "workflow_name": "Customer Onboarding",
+  "status": "succeeded",
+  "execution_id": "exec-12345",
+  "started_at": "2026-04-28T10:00:00.000Z",
+  "finished_at": "2026-04-28T10:01:05.000Z",
+  "duration_ms": 65000,
+  "environment": "production",
+  "metadata": {
+    "platform": "n8n",
+    "example": true
+  }
+}
+```
+
+Example n8n HTTP Request node JSON body:
+
+```json
+{
+  "source_type": "n8n",
+  "source_key": "n8n-main-prod",
+  "workflow_id": "{{$workflow.id}}",
+  "workflow_name": "{{$workflow.name}}",
+  "status": "{{$json.status}}",
+  "execution_id": "{{$execution.id}}",
+  "timestamp": "{{$now}}",
+  "duration_ms": "{{$json.durationMs}}",
+  "metadata": {
+    "run_mode": "{{$execution.mode}}"
+  }
+}
+```
+
+Example response:
+
+```json
+{
+  "ok": true,
+  "accepted": 1,
+  "ingested": 1,
+  "duplicates": 0,
+  "skipped": 0,
+  "failed": 0,
+  "persisted": 1,
+  "normalized_status": "succeeded",
+  "source_type": "n8n",
+  "analysis_handoff": {
+    "mode": "operational_events_table",
+    "queued": 1,
+    "next_stage": "pending_worker"
+  },
+  "request_id": "..."
+}
+```
 
 Example single event payload:
 
@@ -229,6 +334,8 @@ Durable event idempotency ledger notes (Step 5 foundation):
 - `POST /v1/auth/password-reset/confirm`
 - `POST /v1/workflows/register`
 - `GET /v1/workflows`
+- `POST /v1/control-plane/workflow-sources`
+- `POST /v1/control-plane/sources/:sourceId/test-workflow-event`
 - `GET /v1/metrics/overview?workflow_id=&env=&range=`
 - `GET /v1/incidents?status=&workflow_id=&page=&page_size=`
 - `POST /v1/incidents/:id/ack`

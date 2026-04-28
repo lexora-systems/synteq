@@ -1,8 +1,21 @@
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
 import { TopNav } from "../../components/top-nav";
-import { fetchConnectedSources } from "../../lib/api";
+import {
+  createGenericWorkflowSource,
+  fetchConnectedSources,
+  fetchMe,
+  sendGenericWorkflowSourceTestEvent,
+  type ConnectedSourceRow,
+  type GenericWorkflowSourceType,
+  type WorkflowSourceTestStatus
+} from "../../lib/api";
 import { resolveActivationJourney } from "../../lib/activation";
 import { requireToken } from "../../lib/auth";
+import {
+  GenericWorkflowSourceOnboarding,
+  type GenericWorkflowSourceOnboardingState
+} from "../../components/generic-workflow-source-onboarding";
 
 function formatTimestamp(value: string | null): string {
   if (!value) {
@@ -45,37 +58,184 @@ function freshnessClasses(state: FreshnessState): string {
   return "border-slate-200 bg-slate-100 text-slate-600";
 }
 
-function toLabel(type: "workflow" | "github_integration"): string {
-  if (type === "workflow") {
-    return "Workflow";
+function sourceTypeFromDetails(source: ConnectedSourceRow): string {
+  const sourceType = source.details.source_type;
+  return typeof sourceType === "string" && sourceType.trim().length > 0 ? sourceType : "workflow";
+}
+
+function toLabel(source: ConnectedSourceRow): string {
+  if (source.type === "workflow") {
+    const sourceType = sourceTypeFromDetails(source);
+    if (sourceType === "workflow") {
+      return "Workflow";
+    }
+    if (sourceType === "n8n") {
+      return "n8n workflow";
+    }
+    if (sourceType === "make") {
+      return "Make workflow";
+    }
+    if (sourceType === "zapier") {
+      return "Zapier workflow";
+    }
+    return "Webhook workflow";
   }
   return "GitHub integration";
 }
 
-function accessModel(type: "workflow" | "github_integration"): string {
-  if (type === "github_integration") {
+function accessModel(source: ConnectedSourceRow): string {
+  if (source.type === "github_integration") {
     return "Webhook-based, event-based, read-only";
+  }
+  if (sourceTypeFromDetails(source) !== "workflow") {
+    return "API-key authenticated HTTP event ingestion";
   }
   return "Signal-level event ingestion";
 }
 
-function signalSummary(type: "workflow" | "github_integration"): string {
-  if (type === "github_integration") {
+function signalSummary(source: ConnectedSourceRow): string {
+  if (source.type === "github_integration") {
     return "Workflow run/job webhook events";
+  }
+  if (sourceTypeFromDetails(source) !== "workflow") {
+    return "Workflow execution status, timing, environment";
   }
   return "Execution status, retries, latency, heartbeat";
 }
 
-function riskSummary(type: "workflow" | "github_integration"): string {
-  if (type === "github_integration") {
+function riskSummary(source: ConnectedSourceRow): string {
+  if (source.type === "github_integration") {
     return "Failed runs, retry storms, latency drift";
+  }
+  if (sourceTypeFromDetails(source) !== "workflow") {
+    return "Failed, timed out, or delayed workflow executions";
   }
   return "Failure spikes, missing heartbeats, latency/cost spikes";
 }
 
+function toWorkflowSourceFailureMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "Unable to process workflow source action right now.";
+  }
+
+  if (error.message.includes("UPGRADE_REQUIRED")) {
+    return "Source limit reached for this workspace. Upgrade or deactivate another source before creating a new one.";
+  }
+
+  if (error.message.includes("FORBIDDEN_PERMISSION") || error.message.includes("403")) {
+    return "Owner/admin role is required to create workflow sources.";
+  }
+
+  return "Unable to process workflow source action right now.";
+}
+
+function isGenericWorkflowSourceType(value: string): value is GenericWorkflowSourceType {
+  return ["webhook", "n8n", "make", "zapier"].includes(value);
+}
+
+function isWorkflowSourceTestStatus(value: string): value is WorkflowSourceTestStatus {
+  return ["succeeded", "failed", "timed_out"].includes(value);
+}
+
+async function manageGenericWorkflowSourceAction(
+  state: GenericWorkflowSourceOnboardingState,
+  formData: FormData
+): Promise<GenericWorkflowSourceOnboardingState> {
+  "use server";
+
+  const token = await requireToken();
+  const intent = String(formData.get("intent") ?? "");
+
+  try {
+    if (intent === "create") {
+      const displayName = String(formData.get("display_name") ?? "").trim();
+      const sourceTypeRaw = String(formData.get("source_type") ?? "").trim();
+      const environment = String(formData.get("environment") ?? "production").trim() || "production";
+
+      if (!displayName) {
+        return {
+          ...state,
+          ok: false,
+          message: "Source name is required.",
+          last_test: null
+        };
+      }
+
+      if (!isGenericWorkflowSourceType(sourceTypeRaw)) {
+        return {
+          ...state,
+          ok: false,
+          message: "Choose a supported workflow source type.",
+          last_test: null
+        };
+      }
+
+      const created = await createGenericWorkflowSource(token, {
+        display_name: displayName,
+        source_type: sourceTypeRaw,
+        environment
+      });
+      revalidatePath("/sources");
+
+      return {
+        ok: true,
+        message: `Workflow source "${created.workflow_source.display_name}" created. Copy the key before leaving this page.`,
+        latest_source: {
+          ...created.workflow_source,
+          ingestion_key: created.ingestion_key
+        },
+        last_test: null
+      };
+    }
+
+    if (intent === "test") {
+      const sourceId = String(formData.get("source_id") ?? "").trim();
+      const statusRaw = String(formData.get("status") ?? "").trim();
+
+      if (!sourceId || !isWorkflowSourceTestStatus(statusRaw)) {
+        return {
+          ...state,
+          ok: false,
+          message: "Choose a valid test event.",
+          last_test: null
+        };
+      }
+
+      const result = await sendGenericWorkflowSourceTestEvent(token, sourceId, statusRaw);
+      revalidatePath("/sources");
+
+      return {
+        ...state,
+        ok: result.ok,
+        message: result.message,
+        last_test: result
+      };
+    }
+
+    return {
+      ...state,
+      ok: false,
+      message: "Unknown workflow source action.",
+      last_test: null
+    };
+  } catch (error) {
+    return {
+      ...state,
+      ok: false,
+      message: toWorkflowSourceFailureMessage(error),
+      last_test: null
+    };
+  }
+}
+
 export default async function ConnectedSourcesPage() {
   const token = await requireToken();
-  const [payload, activationJourney] = await Promise.all([fetchConnectedSources(token), resolveActivationJourney(token)]);
+  const [payload, activationJourney, me] = await Promise.all([
+    fetchConnectedSources(token),
+    resolveActivationJourney(token),
+    fetchMe(token)
+  ]);
+  const canManageWorkflowSources = ["owner", "admin"].includes(me.user.role);
   const hasSources = payload.sources.length > 0;
   const activeSources = payload.sources.filter((source) => source.status === "active");
   const hasActiveSources = activeSources.length > 0;
@@ -225,6 +385,13 @@ export default async function ConnectedSourcesPage() {
           </p>
         </div>
 
+        <div className="mt-4">
+          <GenericWorkflowSourceOnboarding
+            canManage={canManageWorkflowSources}
+            action={manageGenericWorkflowSourceAction}
+          />
+        </div>
+
         <div className="mt-4 grid gap-4 md:grid-cols-4">
           <div className="rounded-2xl bg-white p-4 shadow-panel">
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Workflow sources</p>
@@ -267,11 +434,11 @@ export default async function ConnectedSourcesPage() {
                 {payload.sources.map((source) => (
                   <tr key={`${source.type}-${source.id}`} className="border-b border-slate-100 align-top text-slate-700">
                     <td className="py-3 pr-2">{source.name}</td>
-                    <td className="py-3 pr-2">{toLabel(source.type)}</td>
+                    <td className="py-3 pr-2">{toLabel(source)}</td>
                     <td className="py-3 pr-2">{source.status}</td>
-                    <td className="py-3 pr-2">{accessModel(source.type)}</td>
-                    <td className="py-3 pr-2">{signalSummary(source.type)}</td>
-                    <td className="py-3 pr-2">{riskSummary(source.type)}</td>
+                    <td className="py-3 pr-2">{accessModel(source)}</td>
+                    <td className="py-3 pr-2">{signalSummary(source)}</td>
+                    <td className="py-3 pr-2">{riskSummary(source)}</td>
                     <td className="py-3 pr-2">{formatTimestamp(source.last_activity_at)}</td>
                     <td className="py-3 pr-2">{formatTimestamp(source.connected_at)}</td>
                   </tr>

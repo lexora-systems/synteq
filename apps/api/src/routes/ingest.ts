@@ -1,5 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
-import { ingestExecutionSchema, ingestHeartbeatSchema, ingestOperationalEventsRequestSchema } from "@synteq/shared";
+import {
+  ingestExecutionSchema,
+  ingestHeartbeatSchema,
+  ingestOperationalEventsRequestSchema,
+  ingestWorkflowEventSchema
+} from "@synteq/shared";
 import { parseWithSchema } from "../utils/validation.js";
 import { enqueueExecutionEvent, enqueueHeartbeatEvent } from "../services/ingest-queue-service.js";
 import { config } from "../config.js";
@@ -8,6 +13,11 @@ import { consumeRateLimit } from "../services/rate-limit-service.js";
 import { ingestOperationalEvents } from "../services/operational-event-ingestion-service.js";
 import { startTrialIfEligible } from "../services/tenant-trial-service.js";
 import {
+  ingestWorkflowExecutionEvent,
+  isSimulationWorkflowEvent,
+  looksSynthetic
+} from "../services/workflow-event-ingestion-service.js";
+import {
   assertOperationalSourceOwnership,
   assertWorkflowSourceOwnership,
   isIngestSourceOwnershipError
@@ -15,14 +25,6 @@ import {
 
 function getIngestionRateLimitKey(request: { apiKeyId?: string; ip: string }) {
   return request.apiKeyId ? `api_key:${request.apiKeyId}` : `ip:${request.ip}`;
-}
-
-function looksSynthetic(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  return record.simulation === true || record.synthetic === true;
 }
 
 function isSimulationOperationalIngest(body: { events: Array<Record<string, unknown>> }) {
@@ -154,6 +156,101 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         runtimeMetrics.increment("ingest_operational_failed_total");
         request.log.error({ err: error, request_id: request.id }, "Failed to ingest operational events");
         return reply.code(500).send({ error: "Failed to ingest events" });
+      }
+    }
+  );
+
+  app.post(
+    "/ingest/workflow-event",
+    {
+      preHandler: [app.requireIngestionKey, app.requireIngestionSignature],
+      config: {
+        rawBody: true
+      }
+    },
+    async (request, reply) => {
+      const rate = await consumeRateLimit({
+        scope: "ingest_workflow_event",
+        key: getIngestionRateLimitKey(request),
+        max: config.INGEST_RATE_LIMIT_PER_MIN,
+        windowSec: 60
+      });
+      if (!rate.allowed) {
+        runtimeMetrics.increment("ingest_rate_limited_total");
+        reply.header("Retry-After", String(rate.retryAfterSec));
+        return reply.code(429).send({
+          error: "Rate limit exceeded",
+          code: "INGEST_RATE_LIMITED"
+        });
+      }
+
+      if (request.rawBody && Buffer.byteLength(request.rawBody, "utf8") > config.MAX_INGEST_BODY_BYTES) {
+        runtimeMetrics.increment("ingest_rejected_payload_too_large_total");
+        return reply.code(413).send({ error: "Payload too large" });
+      }
+
+      const tenantId = request.tenantId;
+      if (!tenantId) {
+        return reply.code(401).send({ error: "Unauthorized" });
+      }
+
+      const body = parseWithSchema(ingestWorkflowEventSchema, request.body);
+
+      try {
+        const result = await ingestWorkflowExecutionEvent(body, {
+          tenantId,
+          apiKeyId: request.apiKeyId,
+          requestId: request.id,
+          sourceOwner: {
+            kind: "api_key",
+            apiKeyId: request.apiKeyId ?? null
+          }
+        });
+
+        if (result.accepted > 0 && !isSimulationWorkflowEvent(body)) {
+          await tryAutoStartTrialFromIngest({
+            tenantId,
+            request
+          });
+        }
+
+        runtimeMetrics.increment("ingest_workflow_event_accepted_total", result.accepted);
+
+        return reply.code(200).send({
+          ok: result.failed === 0,
+          accepted: result.accepted,
+          ingested: result.ingested,
+          duplicates: result.duplicates,
+          skipped: result.skipped,
+          failed: result.failed,
+          persisted: result.persisted,
+          analysis_handoff: result.analysis_handoff,
+          normalized_status: result.normalized_status,
+          source_type: result.source_type,
+          request_id: request.id
+        });
+      } catch (error) {
+        if (isIngestSourceOwnershipError(error)) {
+          runtimeMetrics.increment("ingest_rejected_unregistered_source_total");
+          request.log.warn(
+            {
+              request_id: request.id,
+              tenant_id: tenantId,
+              api_key_id: request.apiKeyId ?? null,
+              code: error.code,
+              details: error.details ?? null
+            },
+            "Workflow event ingestion rejected due to source ownership policy"
+          );
+          return reply.code(error.statusCode).send({
+            error: error.message,
+            code: error.code
+          });
+        }
+
+        runtimeMetrics.increment("ingest_operational_failed_total");
+        request.log.error({ err: error, request_id: request.id }, "Failed to ingest workflow event");
+        return reply.code(500).send({ error: "Failed to ingest workflow event" });
       }
     }
   );

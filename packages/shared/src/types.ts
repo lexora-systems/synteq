@@ -10,6 +10,8 @@ import {
   comparatorSchema,
   emailVerifyConfirmSchema,
   executionStatusSchema,
+  genericWorkflowSourceCreateSchema,
+  genericWorkflowSourceTypeSchema,
   githubIntegrationCreateSchema,
   incidentConfidenceSchema,
   incidentGuidanceNarrationInputSchema,
@@ -19,6 +21,7 @@ import {
   incidentsQuerySchema,
   ingestExecutionSchema,
   ingestHeartbeatSchema,
+  ingestWorkflowEventSchema,
   ingestOperationalEventSchema,
   ingestOperationalEventsRequestSchema,
   inviteAcceptSchema,
@@ -43,6 +46,9 @@ import {
   securityEventsQuerySchema,
   securityEventTypeSchema,
   operationalEventSeveritySchema,
+  workflowEventSourceTypeSchema,
+  workflowExecutionStatusSchema,
+  workflowSourceTestEventSchema,
   teamUpdateRoleSchema,
   userRoleSchema,
   workflowRegisterSchema
@@ -51,9 +57,15 @@ import {
 export type ExecutionStatus = z.infer<typeof executionStatusSchema>;
 export type IngestExecutionInput = z.infer<typeof ingestExecutionSchema>;
 export type IngestHeartbeatInput = z.infer<typeof ingestHeartbeatSchema>;
+export type IngestWorkflowEventInput = z.infer<typeof ingestWorkflowEventSchema>;
 export type IngestOperationalEventInput = z.infer<typeof ingestOperationalEventSchema>;
 export type IngestOperationalEventsRequest = z.infer<typeof ingestOperationalEventsRequestSchema>;
 export type OperationalEventSeverity = z.infer<typeof operationalEventSeveritySchema>;
+export type GenericWorkflowSourceType = z.infer<typeof genericWorkflowSourceTypeSchema>;
+export type WorkflowEventSourceType = z.infer<typeof workflowEventSourceTypeSchema>;
+export type WorkflowExecutionStatus = z.infer<typeof workflowExecutionStatusSchema>;
+export type GenericWorkflowSourceCreateInput = z.infer<typeof genericWorkflowSourceCreateSchema>;
+export type WorkflowSourceTestEventInput = z.infer<typeof workflowSourceTestEventSchema>;
 export type WorkflowRegisterInput = z.infer<typeof workflowRegisterSchema>;
 export type MetricsOverviewQuery = z.infer<typeof metricsOverviewQuerySchema>;
 export type IncidentsQuery = z.infer<typeof incidentsQuerySchema>;

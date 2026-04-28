@@ -6,7 +6,9 @@ import {
   alertPolicyCreateSchema,
   alertPolicyUpdateSchema,
   apiKeyCreateSchema,
-  githubIntegrationCreateSchema
+  genericWorkflowSourceCreateSchema,
+  githubIntegrationCreateSchema,
+  workflowSourceTestEventSchema
 } from "@synteq/shared";
 import { z } from "zod";
 import { parseWithSchema } from "../utils/validation.js";
@@ -26,6 +28,12 @@ import {
   listCanonicalSourcesForTenant,
   summarizeCanonicalSources
 } from "../services/source-service.js";
+import { startTrialIfEligible } from "../services/tenant-trial-service.js";
+import {
+  ingestWorkflowExecutionEvent,
+  isGenericWorkflowSourceType,
+  type GenericWorkflowSourceTypeValue
+} from "../services/workflow-event-ingestion-service.js";
 
 const idParamSchema = z.object({
   id: z.string().min(1)
@@ -118,6 +126,90 @@ function deriveWebhookUrl(request: FastifyRequest) {
   const host = forwardedHost ?? firstHeaderValue(request.headers.host) ?? "localhost:8080";
   const proto = forwardedProto ?? request.protocol ?? "https";
   return `${proto}://${host}/v1/integrations/github/webhook`;
+}
+
+const WORKFLOW_EVENT_INGEST_PATH = "/v1/ingest/workflow-event";
+
+function deriveWorkflowEventIngestUrl(request: FastifyRequest) {
+  const forwardedProto = firstHeaderValue(request.headers["x-forwarded-proto"]);
+  const forwardedHost = firstHeaderValue(request.headers["x-forwarded-host"]);
+  const host = forwardedHost ?? firstHeaderValue(request.headers.host) ?? "localhost:8080";
+  const proto = forwardedProto ?? request.protocol ?? "https";
+  return `${proto}://${host}${WORKFLOW_EVENT_INGEST_PATH}`;
+}
+
+function slugifySourceKey(value: string) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
+
+  return normalized || "workflow-source";
+}
+
+function buildSourceKey(input: { sourceType: GenericWorkflowSourceTypeValue; displayName: string; attempt: number }) {
+  const base = `${input.sourceType}-${slugifySourceKey(input.displayName)}`.slice(0, 128);
+  if (input.attempt === 0) {
+    return base;
+  }
+  return `${base}-${randomOpaqueToken(5).toLowerCase()}`.slice(0, 191);
+}
+
+function compactId(value: string) {
+  const compact = value.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  return compact.slice(0, 10) || "source";
+}
+
+function minuteKey(value: Date) {
+  return value.toISOString().slice(0, 16).replace(/[-:T]/g, "");
+}
+
+function buildSyntheticWorkflowEvent(input: {
+  source: {
+    id: string;
+    display_name: string;
+    slug: string;
+    source_type: GenericWorkflowSourceTypeValue;
+    environment: string;
+  };
+  status: "succeeded" | "failed" | "timed_out";
+  now: Date;
+}) {
+  const startedAt = new Date(Math.floor(input.now.getTime() / 60_000) * 60_000);
+  const durationMs = input.status === "timed_out" ? 120_000 : input.status === "failed" ? 45_000 : 65_000;
+  const finishedAt = new Date(startedAt.getTime() + durationMs);
+  const workflowId = `synteq-test-${input.source.source_type}-${compactId(input.source.id)}`;
+  const executionId = `synteq-test-${input.status}-${minuteKey(startedAt)}`;
+
+  return {
+    source_type: input.source.source_type,
+    source_id: input.source.id,
+    source_key: input.source.slug,
+    workflow_id: workflowId,
+    workflow_name: `Synteq Test ${input.source.display_name}`,
+    execution_id: executionId,
+    status: input.status,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    duration_ms: durationMs,
+    error_message:
+      input.status === "failed"
+        ? "Synthetic workflow failure generated from Synteq source setup."
+        : input.status === "timed_out"
+          ? "Synthetic workflow timeout generated from Synteq source setup."
+          : undefined,
+    environment: input.source.environment,
+    metadata: {
+      synthetic: true,
+      test: true,
+      generated_by: "synteq_workflow_source_test",
+      platform: input.source.source_type,
+      source_id: input.source.id,
+      source_key: input.source.slug
+    }
+  };
 }
 
 async function assertAlertsFeatureOrReply(request: FastifyRequest, reply: { code: (code: number) => { send: (payload: unknown) => unknown } }) {
@@ -396,6 +488,181 @@ const controlPlaneRoutes: FastifyPluginAsync = async (app) => {
         secret: rawKey,
         request_id: request.id
       };
+    }
+  );
+
+  app.post(
+    "/control-plane/workflow-sources",
+    {
+      preHandler: [app.requireDashboardAuth, app.requirePermissions([Permission.SETTINGS_MANAGE])]
+    },
+    async (request, reply) => {
+      const tenantId = request.authUser?.tenant_id;
+      if (!tenantId) {
+        return reply.code(401).send({ error: "Unauthorized" });
+      }
+
+      const body = parseWithSchema(genericWorkflowSourceCreateSchema, request.body);
+
+      try {
+        const access = await resolveTenantAccess({
+          tenantId
+        });
+        const currentActiveSources = await countCapacitySourcesForTenant({
+          tenantId
+        });
+        requireSourceCapacity({
+          access,
+          currentActiveSources
+        });
+      } catch (error) {
+        if (replyIfEntitlementError(reply, request.id, error)) {
+          return;
+        }
+        throw error;
+      }
+
+      let created:
+        | {
+            workflow: {
+              id: string;
+              display_name: string;
+              slug: string;
+              source_type: string;
+              environment: string;
+              created_at: Date;
+            };
+            apiKey: {
+              id: string;
+              name: string;
+              key_hash: string;
+              created_at: Date;
+              last_used_at: Date | null;
+              revoked_at: Date | null;
+            };
+            rawKey: string;
+          }
+        | null = null;
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const sourceKey = buildSourceKey({
+          sourceType: body.source_type,
+          displayName: body.display_name,
+          attempt
+        });
+        const rawKey = randomApiKey();
+        const keyHash = hashApiKey(rawKey, config.SYNTEQ_API_KEY_SALT);
+
+        try {
+          created = await prisma.$transaction(async (tx) => {
+            const workflow = await tx.workflow.create({
+              data: {
+                tenant_id: tenantId,
+                slug: sourceKey,
+                display_name: body.display_name,
+                system: body.source_type,
+                environment: body.environment,
+                source_type: body.source_type,
+                is_active: true
+              },
+              select: {
+                id: true,
+                display_name: true,
+                slug: true,
+                source_type: true,
+                environment: true,
+                created_at: true
+              }
+            });
+
+            await tx.workflowVersion.create({
+              data: {
+                workflow_id: workflow.id,
+                version: "v1",
+                config_json: {
+                  source: "generic_workflow_source",
+                  source_type: body.source_type,
+                  source_key: sourceKey,
+                  created_at: new Date().toISOString()
+                }
+              }
+            });
+
+            const apiKey = await tx.apiKey.create({
+              data: {
+                tenant_id: tenantId,
+                name: `${body.display_name} workflow source`,
+                key_hash: keyHash
+              },
+              select: {
+                id: true,
+                name: true,
+                key_hash: true,
+                created_at: true,
+                last_used_at: true,
+                revoked_at: true
+              }
+            });
+
+            return {
+              workflow,
+              apiKey,
+              rawKey
+            };
+          });
+          break;
+        } catch (error) {
+          const prismaError = error as { code?: string };
+          if (prismaError.code !== "P2002") {
+            throw error;
+          }
+        }
+      }
+
+      if (!created) {
+        return reply.code(500).send({
+          error: "Unable to allocate a unique workflow source key. Please retry."
+        });
+      }
+
+      await startTrialIfEligible({
+        tenantId,
+        source: "auto_workflow_connect"
+      }).catch((error) => {
+        request.log.warn(
+          { err: error, tenant_id: tenantId, workflow_id: created?.workflow.id },
+          "trial auto-start failed for generic workflow source creation"
+        );
+      });
+
+      const ingestEndpointUrl = deriveWorkflowEventIngestUrl(request);
+
+      return reply.code(201).send({
+        workflow_source: {
+          id: created.workflow.id,
+          display_name: created.workflow.display_name,
+          source_type: created.workflow.source_type,
+          source_key: created.workflow.slug,
+          environment: created.workflow.environment,
+          created_at: created.workflow.created_at,
+          ingest_endpoint_path: WORKFLOW_EVENT_INGEST_PATH,
+          ingest_endpoint_url: ingestEndpointUrl,
+          api_key: {
+            id: created.apiKey.id,
+            name: created.apiKey.name,
+            key_preview: maskApiKeyPreview(created.apiKey.key_hash),
+            created_at: created.apiKey.created_at,
+            last_used_at: created.apiKey.last_used_at,
+            revoked_at: created.apiKey.revoked_at
+          }
+        },
+        source_id: created.workflow.id,
+        source_key: created.workflow.slug,
+        ingestion_key: created.rawKey,
+        ingest_endpoint_path: WORKFLOW_EVENT_INGEST_PATH,
+        ingest_endpoint_url: ingestEndpointUrl,
+        request_id: request.id
+      });
     }
   );
 
@@ -1278,6 +1545,119 @@ const controlPlaneRoutes: FastifyPluginAsync = async (app) => {
     }
   );
 
+  app.post(
+    "/control-plane/sources/:id/test-workflow-event",
+    {
+      preHandler: [app.requireDashboardAuth, app.requirePermissions([Permission.WORKFLOWS_WRITE])]
+    },
+    async (request, reply) => {
+      const tenantId = request.authUser?.tenant_id;
+      if (!tenantId) {
+        return reply.code(401).send({ error: "Unauthorized" });
+      }
+
+      const params = parseWithSchema(idParamSchema, request.params);
+      const body = parseWithSchema(workflowSourceTestEventSchema, request.body);
+
+      const source = await prisma.workflow.findFirst({
+        where: {
+          id: params.id,
+          tenant_id: tenantId,
+          is_active: true
+        },
+        select: {
+          id: true,
+          display_name: true,
+          slug: true,
+          source_type: true,
+          environment: true
+        }
+      });
+
+      if (!source) {
+        const githubSource = await prisma.gitHubIntegration.findFirst({
+          where: {
+            id: params.id,
+            tenant_id: tenantId
+          },
+          select: {
+            id: true
+          }
+        });
+
+        if (githubSource) {
+          return reply.code(400).send({
+            error: "GitHub sources cannot use generic workflow test events"
+          });
+        }
+
+        return reply.code(404).send({
+          error: "Workflow source not found"
+        });
+      }
+
+      if (!isGenericWorkflowSourceType(source.source_type)) {
+        return reply.code(400).send({
+          error: "Workflow test events are only supported for generic workflow sources"
+        });
+      }
+
+      const syntheticEvent = buildSyntheticWorkflowEvent({
+        source: {
+          id: source.id,
+          display_name: source.display_name,
+          slug: source.slug,
+          source_type: source.source_type,
+          environment: source.environment
+        },
+        status: body.status,
+        now: new Date()
+      });
+
+      try {
+        const result = await ingestWorkflowExecutionEvent(syntheticEvent, {
+          tenantId,
+          requestId: request.id
+        });
+
+        return reply.code(200).send({
+          ok: result.failed === 0,
+          message: `Synthetic ${body.status} workflow event sent for ${source.display_name}.`,
+          ingest: {
+            accepted: result.accepted,
+            ingested: result.ingested,
+            duplicates: result.duplicates,
+            skipped: result.skipped,
+            failed: result.failed,
+            persisted: result.persisted,
+            analysis_handoff: result.analysis_handoff,
+            normalized_status: result.normalized_status,
+            source_type: result.source_type
+          },
+          event: {
+            source_id: syntheticEvent.source_id,
+            source_key: syntheticEvent.source_key,
+            workflow_id: syntheticEvent.workflow_id,
+            workflow_name: syntheticEvent.workflow_name,
+            execution_id: syntheticEvent.execution_id,
+            status: syntheticEvent.status,
+            started_at: syntheticEvent.started_at.toISOString(),
+            finished_at: syntheticEvent.finished_at.toISOString(),
+            duration_ms: syntheticEvent.duration_ms,
+            environment: syntheticEvent.environment,
+            metadata: syntheticEvent.metadata
+          },
+          request_id: request.id
+        });
+      } catch (error) {
+        request.log.error({ err: error, request_id: request.id }, "Failed to send synthetic workflow event");
+        return reply.code(500).send({
+          error: "Failed to send synthetic workflow event"
+        });
+      }
+    }
+  );
+
   app.get(
     "/control-plane/sources",
     {
@@ -1315,16 +1695,23 @@ const controlPlaneRoutes: FastifyPluginAsync = async (app) => {
           alert_channels_ready: enabledChannels
         },
         sources: [
-          ...workflowSources.map((source) => ({
-            id: source.id,
-            type: "workflow",
-            name: source.displayName,
-            status: source.status,
-            powers: "Execution and heartbeat telemetry",
-            details: source.details,
-            last_activity_at: source.lastActivityAt,
-            connected_at: source.connectedAt
-          })),
+          ...workflowSources.map((source) => {
+            const sourceType =
+              typeof source.details.source_type === "string" ? source.details.source_type : "workflow";
+            return {
+              id: source.id,
+              type: "workflow",
+              name: source.displayName,
+              status: source.status,
+              powers:
+                sourceType === "workflow"
+                  ? "Execution and heartbeat telemetry"
+                  : "Generic workflow execution events",
+              details: source.details,
+              last_activity_at: source.lastActivityAt,
+              connected_at: source.connectedAt
+            };
+          }),
           ...githubSources.map((source) => ({
             id: source.id,
             type: "github_integration",

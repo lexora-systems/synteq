@@ -24,6 +24,7 @@ type WorkflowSourceRow = {
   slug: string;
   system: string;
   environment: string;
+  source_type?: string;
   is_active: boolean;
   created_at: Date;
 };
@@ -74,7 +75,8 @@ function normalizeWorkflowSource(row: WorkflowSourceRow): CanonicalSource {
     details: {
       slug: row.slug,
       system: row.system,
-      environment: row.environment
+      environment: row.environment,
+      source_type: row.source_type ?? "workflow"
     }
   };
 }
@@ -137,6 +139,7 @@ export async function listCanonicalSourcesForTenant(input: {
         slug: true,
         system: true,
         environment: true,
+        source_type: true,
         is_active: true,
         created_at: true
       },

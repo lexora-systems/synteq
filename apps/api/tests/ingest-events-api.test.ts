@@ -8,6 +8,7 @@ const enqueueHeartbeatEventMock = vi.fn();
 const startTrialIfEligibleMock = vi.fn();
 const assertOperationalSourceOwnershipMock = vi.fn();
 const assertWorkflowSourceOwnershipMock = vi.fn();
+const handleGenericWorkflowEventDetectionMock = vi.fn();
 
 vi.mock("../src/config.js", () => ({
   config: {
@@ -40,6 +41,10 @@ vi.mock("../src/services/tenant-trial-service.js", () => ({
   startTrialIfEligible: startTrialIfEligibleMock
 }));
 
+vi.mock("../src/services/generic-workflow-incident-service.js", () => ({
+  handleGenericWorkflowEventDetection: handleGenericWorkflowEventDetectionMock
+}));
+
 describe("ingest events api", () => {
   let app: ReturnType<typeof Fastify>;
 
@@ -51,6 +56,7 @@ describe("ingest events api", () => {
     startTrialIfEligibleMock.mockReset();
     assertOperationalSourceOwnershipMock.mockReset();
     assertWorkflowSourceOwnershipMock.mockReset();
+    handleGenericWorkflowEventDetectionMock.mockReset();
 
     consumeRateLimitMock.mockResolvedValue({
       allowed: true,
@@ -84,6 +90,9 @@ describe("ingest events api", () => {
     });
     assertOperationalSourceOwnershipMock.mockResolvedValue(undefined);
     assertWorkflowSourceOwnershipMock.mockResolvedValue(undefined);
+    handleGenericWorkflowEventDetectionMock.mockResolvedValue({
+      action: "skipped"
+    });
 
     app = Fastify();
     app.decorate("requireDashboardAuth", async () => undefined);
@@ -264,6 +273,193 @@ describe("ingest events api", () => {
 
     expect(response.statusCode).toBe(400);
     expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts a valid generic workflow event and maps it to normalized operational event fields", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/ingest/workflow-event",
+      headers: {
+        "x-synteq-key": "key-tenant-a"
+      },
+      payload: {
+        source_type: "n8n",
+        source_key: "n8n-orders-prod",
+        workflow_id: "wf-orders-sync",
+        workflow_name: "Orders Sync",
+        status: "success",
+        execution_id: "exec-1001",
+        timestamp: "2026-04-24T10:00:00Z",
+        metadata: {
+          template_id: "orders-sync-v1"
+        }
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      accepted: 1,
+      ingested: 1,
+      normalized_status: "succeeded",
+      source_type: "n8n"
+    });
+
+    expect(ingestOperationalEventsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        events: [
+          expect.objectContaining({
+            source: "n8n",
+            event_type: "workflow_execution_succeeded",
+            service: "Orders Sync",
+            system: "n8n:wf-orders-sync",
+            correlation_key: "n8n:wf-orders-sync:exec-1001",
+            metadata: expect.objectContaining({
+              event_kind: "workflow_execution",
+              provider: "n8n",
+              source_type: "n8n",
+              workflow_id: "wf-orders-sync",
+              execution_id: "exec-1001",
+              status: "succeeded"
+            })
+          })
+        ]
+      }),
+      expect.objectContaining({
+        tenantId: "tenant-A",
+        sourceOwner: expect.objectContaining({
+          kind: "api_key"
+        }),
+        idempotencyHints: [
+          expect.objectContaining({
+            namespace: "workflow_execution_event",
+            upstreamKey: "n8n|n8n-orders-prod|wf-orders-sync|exec-1001|succeeded|2026-04-24T10:00:00.000Z"
+          })
+        ]
+      })
+    );
+  });
+
+  it("rejects malformed generic workflow event payload", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/ingest/workflow-event",
+      headers: {
+        "x-synteq-key": "key-tenant-a"
+      },
+      payload: {
+        source_type: "n8n",
+        workflow_id: "wf-orders-sync",
+        workflow_name: "Orders Sync",
+        status: "failed",
+        execution_id: "exec-1002"
+      }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+  });
+
+  it("dedupes repeated generic workflow execution events using stable idempotency hints", async () => {
+    const seen = new Set<string>();
+    ingestOperationalEventsMock.mockImplementationOnce(async (_body: unknown, context: { idempotencyHints?: Array<{ upstreamKey?: string }> }) => {
+      const key = context.idempotencyHints?.[0]?.upstreamKey ?? "";
+      seen.add(key);
+      return {
+        accepted: 1,
+        ingested: 1,
+        duplicates: 0,
+        skipped: 0,
+        failed: 0,
+        persisted: 1,
+        analysis_handoff: {
+          mode: "operational_events_table",
+          queued: 1,
+          next_stage: "pending_worker"
+        }
+      };
+    });
+    ingestOperationalEventsMock.mockImplementationOnce(async (_body: unknown, context: { idempotencyHints?: Array<{ upstreamKey?: string }> }) => {
+      const key = context.idempotencyHints?.[0]?.upstreamKey ?? "";
+      expect(seen.has(key)).toBe(true);
+      return {
+        accepted: 1,
+        ingested: 0,
+        duplicates: 1,
+        skipped: 0,
+        failed: 0,
+        persisted: 0,
+        analysis_handoff: {
+          mode: "operational_events_table",
+          queued: 0,
+          next_stage: "pending_worker"
+        }
+      };
+    });
+
+    const payload = {
+      source_type: "webhook",
+      source_id: "erp-webhook-1",
+      workflow_id: "wf-reconcile",
+      workflow_name: "Reconcile Orders",
+      status: "failed",
+      execution_id: "exec-reconcile-77",
+      timestamp: "2026-04-24T12:00:00Z"
+    };
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/v1/ingest/workflow-event",
+      headers: {
+        "x-synteq-key": "key-tenant-a"
+      },
+      payload
+    });
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/v1/ingest/workflow-event",
+      headers: {
+        "x-synteq-key": "key-tenant-a"
+      },
+      payload
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({
+      ingested: 1,
+      duplicates: 0
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({
+      ingested: 0,
+      duplicates: 1
+    });
+  });
+
+  it("does not require GitHub webhook headers for generic workflow ingestion", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/ingest/workflow-event",
+      headers: {
+        "x-synteq-key": "key-tenant-a"
+      },
+      payload: {
+        source_type: "zapier",
+        source_key: "zapier-leads-prod",
+        workflow_id: "wf-leads",
+        workflow_name: "Lead Router",
+        status: "started",
+        execution_id: "exec-5001",
+        started_at: "2026-04-24T13:00:00Z"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      source_type: "zapier"
+    });
   });
 
   it("supports small batch ingestion", async () => {

@@ -36,6 +36,56 @@ export const ingestHeartbeatSchema = z.object({
   payload: z.union([z.string(), z.record(z.any())]).optional()
 });
 
+export const genericWorkflowSourceTypeSchema = z.enum(["webhook", "n8n", "make", "zapier"]);
+export const workflowEventSourceTypeSchema = z.enum(["github", "webhook", "n8n", "make", "zapier"]);
+
+export const workflowExecutionStatusSchema = z.enum([
+  "started",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "timed_out",
+  // Accepted aliases normalized by API handlers.
+  "success",
+  "timeout",
+  "canceled"
+]);
+
+export const ingestWorkflowEventSchema = z
+  .object({
+    source_type: workflowEventSourceTypeSchema,
+    source_id: z.string().trim().min(1).max(191).optional(),
+    source_key: z.string().trim().min(1).max(191).optional(),
+    workflow_id: nonEmpty,
+    workflow_name: nonEmpty.max(255),
+    status: workflowExecutionStatusSchema,
+    execution_id: nonEmpty.max(191),
+    timestamp: z.coerce.date().optional(),
+    started_at: z.coerce.date().optional(),
+    finished_at: z.coerce.date().optional(),
+    duration_ms: z.number().int().nonnegative().max(86_400_000).optional(),
+    error_message: z.string().max(16_384).optional(),
+    environment: z.string().trim().min(1).max(64).optional(),
+    metadata: z.record(z.unknown()).optional()
+  })
+  .superRefine((value, ctx) => {
+    if (!value.source_id && !value.source_key) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["source_id"],
+        message: "Provide source_id or source_key"
+      });
+    }
+
+    if (!value.timestamp && !value.started_at) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["timestamp"],
+        message: "Provide timestamp or started_at"
+      });
+    }
+  });
+
 export const operationalEventSeveritySchema = z.enum(["warn", "low", "medium", "high", "critical"]);
 
 export const ingestOperationalEventSchema = z
@@ -95,6 +145,16 @@ export const workflowRegisterSchema = z.object({
   display_name: z.string().trim().min(1).max(255),
   system: z.string().trim().min(1).max(255),
   environment: z.string().trim().min(1).max(64)
+});
+
+export const genericWorkflowSourceCreateSchema = z.object({
+  display_name: z.string().trim().min(2).max(191),
+  source_type: genericWorkflowSourceTypeSchema,
+  environment: z.string().trim().min(1).max(64).default("production")
+});
+
+export const workflowSourceTestEventSchema = z.object({
+  status: z.enum(["succeeded", "failed", "timed_out"])
 });
 
 export const metricsOverviewQuerySchema = z.object({

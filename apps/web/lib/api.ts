@@ -277,6 +277,60 @@ export type GitHubIntegrationRow = {
   updated_at: string;
 };
 
+export type GenericWorkflowSourceType = "webhook" | "n8n" | "make" | "zapier";
+
+export type GenericWorkflowSourceSetup = {
+  id: string;
+  display_name: string;
+  source_type: GenericWorkflowSourceType;
+  source_key: string;
+  environment: string;
+  created_at: string;
+  ingest_endpoint_path: string;
+  ingest_endpoint_url: string;
+  api_key: ApiKeyRow;
+};
+
+export type GenericWorkflowSourceCreateResponse = {
+  workflow_source: GenericWorkflowSourceSetup;
+  source_id: string;
+  source_key: string;
+  ingestion_key: string;
+  ingest_endpoint_path: string;
+  ingest_endpoint_url: string;
+};
+
+export type WorkflowSourceTestStatus = "succeeded" | "failed" | "timed_out";
+
+export type WorkflowSourceTestEventResponse = {
+  ok: boolean;
+  message: string;
+  ingest: {
+    accepted: number;
+    ingested: number;
+    duplicates: number;
+    skipped: number;
+    failed: number;
+    persisted: number;
+    normalized_status: string;
+    source_type: string;
+    analysis_handoff: Record<string, unknown>;
+  };
+  event: {
+    source_id: string;
+    source_key: string;
+    workflow_id: string;
+    workflow_name: string;
+    execution_id: string;
+    status: WorkflowSourceTestStatus;
+    started_at: string;
+    finished_at: string;
+    duration_ms: number;
+    environment: string;
+    metadata: Record<string, unknown>;
+  };
+};
+
 export type AlertChannelRow = {
   id: string;
   name: string;
@@ -902,4 +956,33 @@ export async function fetchConnectedSources(token: string) {
       alert_dispatch_ready: boolean;
     };
   }>("/v1/control-plane/sources", { token });
+}
+
+export async function createGenericWorkflowSource(
+  token: string,
+  input: {
+    display_name: string;
+    source_type: GenericWorkflowSourceType;
+    environment?: string;
+  }
+) {
+  return request<GenericWorkflowSourceCreateResponse>("/v1/control-plane/workflow-sources", {
+    token,
+    method: "POST",
+    body: input
+  });
+}
+
+export async function sendGenericWorkflowSourceTestEvent(
+  token: string,
+  sourceId: string,
+  status: WorkflowSourceTestStatus
+) {
+  return request<WorkflowSourceTestEventResponse>(`/v1/control-plane/sources/${sourceId}/test-workflow-event`, {
+    token,
+    method: "POST",
+    body: {
+      status
+    }
+  });
 }

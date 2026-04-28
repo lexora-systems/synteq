@@ -353,6 +353,7 @@ model Workflow {
   display_name  String            @db.VarChar(191)
   system        String            @db.VarChar(191)
   environment   String            @db.VarChar(64)
+  source_type   String            @default("workflow") @db.VarChar(32)
   is_active     Boolean           @default(true)
   created_at    DateTime          @default(now())
   tenant        Tenant            @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
@@ -362,6 +363,7 @@ model Workflow {
 
   @@unique([tenant_id, slug, environment])
   @@index([tenant_id])
+  @@index([tenant_id, source_type, is_active])
   @@map("workflows")
 }
 
