@@ -108,6 +108,7 @@ let failNextGitHubIntegrationsList = false;
 let failNextGitHubRotate = false;
 let omitNextGitHubRotateSecret = false;
 let failNextGitHubDeactivateAfterMutation = false;
+let failNextControlPlaneSources = false;
 
 const API_KEYS = [];
 
@@ -124,6 +125,7 @@ function resetState() {
   failNextGitHubRotate = false;
   omitNextGitHubRotateSecret = false;
   failNextGitHubDeactivateAfterMutation = false;
+  failNextControlPlaneSources = false;
 
   API_KEYS.length = 0;
   API_KEYS.push({
@@ -175,12 +177,16 @@ const server = http.createServer(async (req, res) => {
     if (typeof body.fail_next_github_deactivate_after_mutation === "boolean") {
       failNextGitHubDeactivateAfterMutation = body.fail_next_github_deactivate_after_mutation;
     }
+    if (typeof body.fail_next_control_plane_sources_get === "boolean") {
+      failNextControlPlaneSources = body.fail_next_control_plane_sources_get;
+    }
     sendJson(res, 200, {
       ok: true,
       fail_next_github_integrations_get: failNextGitHubIntegrationsList,
       fail_next_github_rotate_post: failNextGitHubRotate,
       omit_next_github_rotate_secret: omitNextGitHubRotateSecret,
-      fail_next_github_deactivate_after_mutation: failNextGitHubDeactivateAfterMutation
+      fail_next_github_deactivate_after_mutation: failNextGitHubDeactivateAfterMutation,
+      fail_next_control_plane_sources_get: failNextControlPlaneSources
     });
     return;
   }
@@ -695,6 +701,11 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && pathname === "/v1/control-plane/sources") {
     const persona = ensureAuth(req, res);
     if (!persona) {
+      return;
+    }
+    if (failNextControlPlaneSources) {
+      failNextControlPlaneSources = false;
+      sendJson(res, 500, { error: "mock control plane sources failure" });
       return;
     }
 

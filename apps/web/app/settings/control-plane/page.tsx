@@ -1,11 +1,62 @@
 import Link from "next/link";
 import { TopNav } from "../../../components/top-nav";
-import { fetchConnectedSources, fetchMe } from "../../../lib/api";
+import { fetchConnectedSources, fetchMe, isApiRequestError } from "../../../lib/api";
 import { requireToken } from "../../../lib/auth";
+
+const unavailableSourcesPayload: Awaited<ReturnType<typeof fetchConnectedSources>> = {
+  summary: {
+    workflow_sources: 0,
+    github_sources: 0,
+    ingestion_keys_active: 0,
+    alert_channels_ready: 0
+  },
+  sources: [],
+  readiness: {
+    ingestion_api_keys_configured: false,
+    alert_dispatch_ready: false
+  }
+};
+
+function toStatusValue(value: number, available: boolean): string {
+  return available ? String(value) : "Unavailable";
+}
+
+function logSourcesLoadFailure(error: unknown) {
+  if (isApiRequestError(error)) {
+    console.error("control_plane.sources_load_failed", {
+      path: error.path,
+      status: error.status,
+      code: error.code,
+      kind: error.kind,
+      request_id: error.requestId
+    });
+    return;
+  }
+
+  console.error("control_plane.sources_load_failed", {
+    error_type: error instanceof Error ? error.name : "UnknownError"
+  });
+}
+
+async function loadConnectedSourcesStatus(token: string) {
+  try {
+    return {
+      available: true,
+      payload: await fetchConnectedSources(token)
+    };
+  } catch (error) {
+    logSourcesLoadFailure(error);
+    return {
+      available: false,
+      payload: unavailableSourcesPayload
+    };
+  }
+}
 
 export default async function ControlPlaneIndexPage() {
   const token = await requireToken();
-  const [me, sourcesPayload] = await Promise.all([fetchMe(token), fetchConnectedSources(token)]);
+  const [me, sourcesStatus] = await Promise.all([fetchMe(token), loadConnectedSourcesStatus(token)]);
+  const sourcesPayload = sourcesStatus.payload;
   const canManage = ["owner", "admin"].includes(me.user.role);
 
   return (
@@ -42,15 +93,24 @@ export default async function ControlPlaneIndexPage() {
           ) : null}
         </div>
 
+        {!sourcesStatus.available ? (
+          <div
+            className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-panel"
+            data-testid="control-plane-status-warning"
+          >
+            Setup status is temporarily unavailable. Configuration pages remain available, and source counts will refresh once the API responds.
+          </div>
+        ) : null}
+
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl bg-white p-5 shadow-panel">
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Readiness</p>
             <h3 className="mt-1 text-lg font-semibold text-ink">Current setup status</h3>
             <div className="mt-3 grid gap-2 text-sm text-slate-700">
-              <p>Active workflow sources: <strong>{sourcesPayload.summary.workflow_sources}</strong></p>
-              <p>Active GitHub sources: <strong>{sourcesPayload.summary.github_sources}</strong></p>
-              <p>Active ingestion keys: <strong>{sourcesPayload.summary.ingestion_keys_active}</strong></p>
-              <p>Enabled alert channels: <strong>{sourcesPayload.summary.alert_channels_ready}</strong></p>
+              <p>Active workflow sources: <strong>{toStatusValue(sourcesPayload.summary.workflow_sources, sourcesStatus.available)}</strong></p>
+              <p>Active GitHub sources: <strong>{toStatusValue(sourcesPayload.summary.github_sources, sourcesStatus.available)}</strong></p>
+              <p>Active ingestion keys: <strong>{toStatusValue(sourcesPayload.summary.ingestion_keys_active, sourcesStatus.available)}</strong></p>
+              <p>Enabled alert channels: <strong>{toStatusValue(sourcesPayload.summary.alert_channels_ready, sourcesStatus.available)}</strong></p>
             </div>
             <div className="mt-4">
               <Link href="/sources" className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">

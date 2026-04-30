@@ -780,7 +780,8 @@ export async function rotateGitHubIntegrationSecret(token: string, id: string) {
   const path = `/v1/control-plane/github-integrations/${id}/rotate-secret`;
   const response = await request<unknown>(path, {
     token,
-    method: "POST"
+    method: "POST",
+    body: {}
   });
 
   const payload = asRecord(response);

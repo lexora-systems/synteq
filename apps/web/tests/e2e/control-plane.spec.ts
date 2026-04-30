@@ -92,6 +92,19 @@ test("control plane lifecycle surfaces are usable", async ({ page }) => {
   await expect(page.getByTestId("alerts-feedback")).toBeVisible();
 });
 
+test("control plane index stays usable when setup status fails to load", async ({ page, request }) => {
+  await setSession(page);
+  await setMockApiBehavior(request, { fail_next_control_plane_sources_get: true });
+
+  await page.goto("/settings/control-plane");
+
+  await expect(page.getByRole("heading", { name: "Continuous signal and alert setup" })).toBeVisible();
+  await expect(page.getByTestId("control-plane-status-warning")).toContainText("Setup status is temporarily unavailable");
+  await expect(page.getByText("Active workflow sources:")).toContainText("Unavailable");
+  await expect(page.getByRole("link", { name: "API keys" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "GitHub integrations" })).toBeVisible();
+});
+
 test("rotate succeeds and refresh succeeds keeps secret visible", async ({ page }) => {
   await setSession(page);
   await createGitHubIntegration(page, "acme/rotate-success");
