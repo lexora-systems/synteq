@@ -8,6 +8,7 @@ const listIncidentEventsMock = vi.fn();
 const ackIncidentMock = vi.fn();
 const resolveIncidentMock = vi.fn();
 const generateIncidentGuidanceMock = vi.fn();
+const getIncidentTimelineMock = vi.fn();
 
 vi.mock("../src/services/incidents-service.js", () => ({
   listIncidents: listIncidentsMock,
@@ -19,6 +20,10 @@ vi.mock("../src/services/incidents-service.js", () => ({
 
 vi.mock("../src/services/incident-guidance-service.js", () => ({
   generateIncidentGuidance: generateIncidentGuidanceMock
+}));
+
+vi.mock("../src/services/incident-timeline-service.js", () => ({
+  getIncidentTimeline: getIncidentTimelineMock
 }));
 
 describe("incidents API guidance", () => {
@@ -33,6 +38,7 @@ describe("incidents API guidance", () => {
     ackIncidentMock.mockReset();
     resolveIncidentMock.mockReset();
     generateIncidentGuidanceMock.mockReset();
+    getIncidentTimelineMock.mockReset();
 
     app = Fastify();
     app.decorate("requireDashboardAuth", async (request: any) => {

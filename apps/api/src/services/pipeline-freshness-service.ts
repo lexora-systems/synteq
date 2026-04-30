@@ -76,24 +76,20 @@ function heartbeatUpdateError(stage: PipelineStageName, action: string, error: u
 
 async function updateStageHeartbeat(stage: PipelineStageName, data: { lastCompletedAt?: Date }, now = new Date()) {
   const definition = getStageDefinition(stage);
-  try {
-    await prisma.workerLease.upsert({
-      where: {
-        worker_name: definition.workerName
-      },
-      create: {
-        worker_name: definition.workerName,
-        last_heartbeat_at: now,
-        last_completed_at: data.lastCompletedAt ?? null
-      },
-      update: {
-        last_heartbeat_at: now,
-        ...(data.lastCompletedAt ? { last_completed_at: data.lastCompletedAt } : {})
-      }
-    });
-  } catch (error) {
-    heartbeatUpdateError(stage, data.lastCompletedAt ? "success" : "attempt", error);
-  }
+  await prisma.workerLease.upsert({
+    where: {
+      worker_name: definition.workerName
+    },
+    create: {
+      worker_name: definition.workerName,
+      last_heartbeat_at: now,
+      last_completed_at: data.lastCompletedAt ?? null
+    },
+    update: {
+      last_heartbeat_at: now,
+      ...(data.lastCompletedAt ? { last_completed_at: data.lastCompletedAt } : {})
+    }
+  });
 }
 
 export async function markPipelineStageAttempt(stage: PipelineStageName, now = new Date()) {

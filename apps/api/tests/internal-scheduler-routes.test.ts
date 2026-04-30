@@ -116,12 +116,12 @@ describe("internal scheduler routes", () => {
     expect(runSchedulerTaskMock).not.toHaveBeenCalled();
   });
 
-  it("rejects requests with bearer token that does not match configured scheduler secret", async () => {
+  it("rejects requests with bearer token that is neither shared secret nor JWT", async () => {
     const response = await app.inject({
       method: "POST",
       url: "/v1/internal/scheduler/anomaly",
       headers: schedulerHeaders({
-        authorization: "Bearer scheduler-oidc-token"
+        authorization: "Bearer scheduler-opaque-token"
       })
     });
 
@@ -130,6 +130,34 @@ describe("internal scheduler routes", () => {
       code: "SCHEDULER_BEARER_INVALID"
     });
     expect(runSchedulerTaskMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts JWT bearer token for Cloud Scheduler OIDC mode", async () => {
+    runSchedulerTaskMock.mockResolvedValueOnce({
+      task: "anomaly",
+      stage: "anomaly",
+      skipped: false,
+      reason: null
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/internal/scheduler/anomaly",
+      headers: schedulerHeaders({
+        authorization:
+          "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzeW50ZXEtc2NoZWR1bGVyIn0.longsignaturevalue12345"
+      })
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(runSchedulerTaskMock).toHaveBeenCalledWith("anomaly");
+    expect(response.json()).toMatchObject({
+      ok: true,
+      task: "anomaly",
+      stage: "anomaly",
+      skipped: false,
+      reason: null
+    });
   });
 
   it("rejects requests without Cloud Scheduler marker header", async () => {

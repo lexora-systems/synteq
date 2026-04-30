@@ -556,18 +556,42 @@ async function upsertIncident(input: {
     timeBucket
   });
 
-  const existing = await prisma.incident.findFirst({
-    where: {
-      tenant_id: input.tenantId,
-      fingerprint,
-      status: {
-        in: ["open", "acked"]
+  const existingByMetric =
+    input.policy.metric === "missing_heartbeat"
+      ? (
+          await prisma.incident.findMany({
+            where: {
+              tenant_id: input.tenantId,
+              workflow_id: input.workflowId,
+              environment: input.env,
+              status: {
+                in: ["open", "acked"]
+              }
+            },
+            orderBy: {
+              started_at: "desc"
+            }
+          })
+        ).find((incident) => {
+          const details = safeObject(incident.details_json);
+          return details.metric === "missing_heartbeat" || incident.policy_id === input.policy.id;
+        }) ?? null
+      : null;
+
+  const existing =
+    existingByMetric ??
+    (await prisma.incident.findFirst({
+      where: {
+        tenant_id: input.tenantId,
+        fingerprint,
+        status: {
+          in: ["open", "acked"]
+        }
+      },
+      orderBy: {
+        started_at: "desc"
       }
-    },
-    orderBy: {
-      started_at: "desc"
-    }
-  });
+    }));
 
   const details = {
     metric: input.policy.metric,

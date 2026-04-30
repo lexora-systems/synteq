@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { TopNav } from "../../../components/top-nav";
-import { fetchIncidentById, fetchMe, postIncidentAction } from "../../../lib/api";
+import {
+  fetchIncidentById,
+  fetchIncidentTimeline,
+  fetchMe,
+  postIncidentAction,
+  type IncidentTimelineEntry
+} from "../../../lib/api";
 import { requireToken } from "../../../lib/auth";
 
 function confidenceClass(confidence: "low" | "medium" | "high") {
@@ -13,6 +19,36 @@ function confidenceClass(confidence: "low" | "medium" | "high") {
   }
 
   return "bg-slate-100 text-slate-700 border-slate-200";
+}
+
+function formatTimelineValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return "";
+}
+
+function timelineMetadataEntries(metadata: IncidentTimelineEntry["metadata"]) {
+  if (!metadata) {
+    return [];
+  }
+
+  const hiddenKeys = new Set(["event_type", "details", "evidence"]);
+  return Object.entries(metadata)
+    .filter(([key, value]) => !hiddenKeys.has(key) && ["string", "number", "boolean"].includes(typeof value))
+    .slice(0, 4);
+}
+
+function timelineContextChips(entry: IncidentTimelineEntry) {
+  return [
+    ["source", entry.source],
+    ["workflow", entry.workflow],
+    ["environment", entry.environment],
+    ["severity", entry.severity]
+  ].filter(([, value]) => typeof value === "string" && value.length > 0) as Array<[string, string]>;
 }
 
 async function ackAction(formData: FormData) {
@@ -38,12 +74,19 @@ async function resolveAction(formData: FormData) {
 export default async function IncidentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const token = await requireToken();
-  const [payload, me] = await Promise.all([fetchIncidentById(token, id), fetchMe(token)]);
+  const [payload, me, timelineResult] = await Promise.all([
+    fetchIncidentById(token, id),
+    fetchMe(token),
+    fetchIncidentTimeline(token, id)
+      .then((timelinePayload) => ({ ok: true as const, payload: timelinePayload }))
+      .catch(() => ({ ok: false as const }))
+  ]);
   const incident = payload.incident;
   const guidance = incident.guidance;
   const canWriteIncident = me.user.role !== "viewer";
   const details = incident.details_json ?? {};
   const isSimulation = details.source === "simulation" || Number(details.synthetic_ratio ?? 0) > 0;
+  const timeline = timelineResult.ok ? timelineResult.payload.timeline : [];
 
   return (
     <main className="min-h-screen syn-app-shell pb-12">
@@ -108,6 +151,52 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
                 <li key={item} className="font-mono">{item}</li>
               ))}
             </ul>
+          </div>
+
+          <div className="rounded-2xl bg-white p-6 shadow-panel">
+            <h3 className="text-lg font-semibold text-ink">Timeline</h3>
+            {!timelineResult.ok ? (
+              <p className="mt-2 text-sm text-amber-800">Timeline is temporarily unavailable.</p>
+            ) : timeline.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-600">No timeline events recorded yet.</p>
+            ) : (
+              <ol className="mt-4 space-y-4 border-l border-slate-200 pl-4">
+                {timeline.map((entry) => {
+                  const contextChips = timelineContextChips(entry);
+                  const metadataEntries = timelineMetadataEntries(entry.metadata);
+                  return (
+                    <li key={entry.id} className="relative">
+                      <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full border border-cyan-300 bg-white" />
+                      <p className="text-xs text-slate-500">{new Date(entry.at).toLocaleString()}</p>
+                      <h4 className="mt-1 text-sm font-semibold text-ink">{entry.title}</h4>
+                      {entry.description ? (
+                        <p className="mt-1 text-sm text-slate-600">{entry.description}</p>
+                      ) : null}
+                      {contextChips.length > 0 || metadataEntries.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {contextChips.map(([label, value]) => (
+                            <span
+                              key={`${entry.id}-${label}`}
+                              className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600"
+                            >
+                              {label}: {value}
+                            </span>
+                          ))}
+                          {metadataEntries.map(([key, value]) => (
+                            <span
+                              key={`${entry.id}-${key}`}
+                              className="rounded-full border border-cyan-100 bg-cyan-50 px-2 py-0.5 text-[11px] text-cyan-800"
+                            >
+                              {key}: {formatTimelineValue(value)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
           </div>
 
           <div className="rounded-2xl bg-white p-6 shadow-panel">
@@ -177,4 +266,3 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
     </main>
   );
 }
-

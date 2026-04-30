@@ -66,11 +66,19 @@ test("successful login routes to /welcome", async ({ page }) => {
   await expect(page).toHaveURL(/\/welcome$/);
 });
 
+test("welcome shows activation next step for first-time user", async ({ page }) => {
+  await setSession(page, "nonactivated");
+  await page.goto("/welcome");
+  await expect(page.getByTestId("welcome-activation-panel")).toBeVisible();
+  await expect(page.getByTestId("welcome-primary-next-action")).toHaveText(/Connect GitHub|Complete webhook setup/);
+});
+
 test("non-activated user can access /overview", async ({ page }) => {
   await setSession(page, "nonactivated");
   await page.goto("/overview");
   await expect(page).toHaveURL(/\/overview$/);
   await expect(page.getByRole("heading", { name: /always-on risk detection and prevention/i, level: 2 })).toBeVisible();
+  await expect(page.getByTestId("overview-activation-banner")).toBeVisible();
 });
 
 test("activated user can access /overview", async ({ page }) => {

@@ -219,6 +219,30 @@ type IncidentRow = {
   guidance: IncidentGuidance;
 };
 
+export type IncidentTimelineEntry = {
+  id: string;
+  at: string;
+  type:
+    | "incident_created"
+    | "incident_refreshed"
+    | "incident_acknowledged"
+    | "incident_resolved"
+    | "alert_pending"
+    | "alert_sent"
+    | "alert_failed"
+    | "finding_linked"
+    | "detection_event"
+    | "status_change"
+    | "unknown_event";
+  title: string;
+  description?: string;
+  severity?: string;
+  source?: string;
+  workflow?: string;
+  environment?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export type WorkflowRow = {
   id: string;
   slug: string;
@@ -542,6 +566,13 @@ export async function fetchIncidentById(token: string, incidentId: string) {
       payload_json: Record<string, unknown>;
     }>;
   }>(`/v1/incidents/${incidentId}`, { token });
+}
+
+export async function fetchIncidentTimeline(token: string, incidentId: string) {
+  return request<{
+    incident_id: string;
+    timeline: IncidentTimelineEntry[];
+  }>(`/v1/incidents/${incidentId}/timeline`, { token });
 }
 
 export async function postIncidentAction(token: string, incidentId: string, action: "ack" | "resolve") {

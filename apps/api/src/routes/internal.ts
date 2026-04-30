@@ -47,6 +47,15 @@ function parseBearerToken(value: string | undefined): string | null {
   return match ? match[1] : null;
 }
 
+function isLikelyJwt(value: string): boolean {
+  const parts = value.split(".");
+  if (parts.length !== 3) {
+    return false;
+  }
+
+  return parts.every((part) => part.length >= 10 && /^[A-Za-z0-9_-]+$/.test(part));
+}
+
 function routePath(request: FastifyRequest) {
   return request.routeOptions.url ?? request.url;
 }
@@ -209,7 +218,9 @@ const internalRoutes: FastifyPluginAsync = async (app) => {
       return false;
     }
 
-    if (bearerToken !== sharedSecret) {
+    const usesLegacySecretBearer = bearerToken === sharedSecret;
+    const usesSchedulerOidcBearer = isLikelyJwt(bearerToken);
+    if (!usesLegacySecretBearer && !usesSchedulerOidcBearer) {
       logInternalAuthFailure(request, "scheduler_bearer_mismatch");
       reply.code(401).send({
         error: "Unauthorized scheduler bearer token",

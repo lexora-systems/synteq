@@ -11,6 +11,7 @@ import {
 } from "../services/incidents-service.js";
 import { Permission } from "../auth/permissions.js";
 import { generateIncidentGuidance } from "../services/incident-guidance-service.js";
+import { getIncidentTimeline } from "../services/incident-timeline-service.js";
 
 const incidentIdParamSchema = z.object({
   id: z.string().min(1)
@@ -55,6 +56,35 @@ const incidentsRoutes: FastifyPluginAsync = async (app) => {
           has_next: incidents.has_next
         },
         last_updated: new Date().toISOString(),
+        request_id: request.id
+      };
+    }
+  );
+
+  app.get(
+    "/incidents/:id/timeline",
+    {
+      preHandler: [app.requireDashboardAuth, app.requirePermissions([Permission.INCIDENTS_READ])]
+    },
+    async (request, reply) => {
+      const tenantId = request.authUser?.tenant_id;
+      if (!tenantId) {
+        return reply.code(401).send({ error: "Missing tenant context" });
+      }
+
+      const params = parseWithSchema(incidentIdParamSchema, request.params);
+      const timeline = await getIncidentTimeline({
+        tenantId,
+        incidentId: params.id
+      });
+
+      if (!timeline) {
+        return reply.code(404).send({ error: "Incident not found" });
+      }
+
+      return {
+        incident_id: timeline.incident_id,
+        timeline: timeline.entries,
         request_id: request.id
       };
     }
