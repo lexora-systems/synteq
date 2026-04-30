@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { TopNav } from "../../../components/top-nav";
-import { fetchConnectedSources, fetchMe, isApiRequestError } from "../../../lib/api";
+import { fetchConnectedSources, isApiRequestError } from "../../../lib/api";
 import { requireToken } from "../../../lib/auth";
+
+type DashboardRole = "owner" | "admin" | "engineer" | "viewer";
 
 const unavailableSourcesPayload: Awaited<ReturnType<typeof fetchConnectedSources>> = {
   summary: {
@@ -19,6 +21,22 @@ const unavailableSourcesPayload: Awaited<ReturnType<typeof fetchConnectedSources
 
 function toStatusValue(value: number, available: boolean): string {
   return available ? String(value) : "Unavailable";
+}
+
+function roleFromToken(token: string): DashboardRole | null {
+  const parts = token.split(".");
+  if (parts.length < 2) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as { role?: unknown };
+    return payload.role === "owner" || payload.role === "admin" || payload.role === "engineer" || payload.role === "viewer"
+      ? payload.role
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function logSourcesLoadFailure(error: unknown) {
@@ -55,9 +73,9 @@ async function loadConnectedSourcesStatus(token: string) {
 
 export default async function ControlPlaneIndexPage() {
   const token = await requireToken();
-  const [me, sourcesStatus] = await Promise.all([fetchMe(token), loadConnectedSourcesStatus(token)]);
+  const sourcesStatus = await loadConnectedSourcesStatus(token);
   const sourcesPayload = sourcesStatus.payload;
-  const canManage = ["owner", "admin"].includes(me.user.role);
+  const canManage = ["owner", "admin"].includes(roleFromToken(token) ?? "viewer");
 
   return (
     <main className="min-h-screen syn-app-shell pb-12">
