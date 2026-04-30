@@ -65,6 +65,13 @@ test.beforeEach(async ({ request }) => {
   await resetMockApi(request);
 });
 
+test("control plane redirects unauthenticated users to login", async ({ page }) => {
+  await page.goto("/settings/control-plane");
+
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("heading", { name: "Sign in to Synteq risk detection" })).toBeVisible();
+});
+
 test("control plane lifecycle surfaces are usable", async ({ page }) => {
   await setSession(page);
 

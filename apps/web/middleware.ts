@@ -31,13 +31,8 @@ function isTokenFresh(token: string): boolean {
   return exp - nowSec > 30;
 }
 
-function redirectToLogin() {
-  const response = new NextResponse(null, {
-    status: 307,
-    headers: {
-      Location: "/login"
-    }
-  });
+function redirectToLogin(request: NextRequest) {
+  const response = NextResponse.redirect(new URL("/login", request.url));
   response.cookies.delete("synteq_token");
   response.cookies.delete("synteq_refresh_token");
   return response;
@@ -99,7 +94,7 @@ export async function middleware(request: NextRequest) {
 
   const refreshToken = request.cookies.get("synteq_refresh_token")?.value;
   if (!refreshToken) {
-    return withFlashCookieCleared(request, redirectToLogin());
+    return withFlashCookieCleared(request, redirectToLogin(request));
   }
 
   try {
@@ -113,7 +108,7 @@ export async function middleware(request: NextRequest) {
     });
 
     if (!refreshResponse.ok) {
-      return withFlashCookieCleared(request, redirectToLogin());
+      return withFlashCookieCleared(request, redirectToLogin(request));
     }
 
     const payload = (await refreshResponse.json()) as {
@@ -123,7 +118,7 @@ export async function middleware(request: NextRequest) {
     };
     const nextAccessToken = payload.access_token ?? payload.token;
     if (!nextAccessToken || !payload.refresh_token) {
-      return withFlashCookieCleared(request, redirectToLogin());
+      return withFlashCookieCleared(request, redirectToLogin(request));
     }
 
     const response = NextResponse.next();
@@ -144,7 +139,7 @@ export async function middleware(request: NextRequest) {
 
     return withFlashCookieCleared(request, response);
   } catch {
-    return withFlashCookieCleared(request, redirectToLogin());
+    return withFlashCookieCleared(request, redirectToLogin(request));
   }
 }
 
