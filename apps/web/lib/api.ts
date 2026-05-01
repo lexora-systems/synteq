@@ -219,6 +219,34 @@ type IncidentRow = {
   guidance: IncidentGuidance;
 };
 
+export type IncidentAttentionGroup = {
+  id: string;
+  label: string;
+  attention: "urgent" | "elevated" | "normal" | "unknown";
+  incidentCount: number;
+  highestSeverity: "critical" | "high" | "medium" | "low" | "unknown";
+  lastSeenAt: string | null;
+  alertFailureCount: number;
+  activeStatuses: {
+    open: number;
+    acked: number;
+  };
+  groupKey: {
+    fingerprint?: string;
+    workflowId?: string;
+    workflowName?: string;
+    source?: string;
+    system?: string;
+    environment?: string;
+    ruleKey?: string;
+  };
+};
+
+export type IncidentAttentionGroups = {
+  generatedAt: string;
+  groups: IncidentAttentionGroup[];
+};
+
 export type IncidentTimelineEntry = {
   id: string;
   at: string;
@@ -396,6 +424,98 @@ export type ConnectedSourceRow = {
   connected_at: string;
 };
 
+export type OperationalHealthState = "healthy" | "degraded" | "failing" | "unknown";
+export type OperationalFreshnessState = "fresh" | "stale" | "unknown";
+export type ReliabilityWindowState = OperationalHealthState;
+
+export type ReliabilityWindows = {
+  generatedAt: string;
+  scope: {
+    tenantId?: string;
+    workflowId: string | null;
+    sourceId: string | null;
+    sourceKey: string | null;
+  };
+  windows: Array<{
+    label: "1h" | "24h" | "7d";
+    startAt: string;
+    endAt: string;
+    total: number;
+    succeeded: number;
+    failed: number;
+    timedOut: number;
+    unknown: number;
+    successRate: number | null;
+    failureRate: number | null;
+    timeoutRate: number | null;
+    lastSignalAt: string | null;
+    state: ReliabilityWindowState;
+  }>;
+};
+
+export type OperationalDashboard = {
+  generatedAt: string;
+  globalState: OperationalHealthState;
+  activeIncidents: {
+    total: number;
+    bySeverity: {
+      critical: number;
+      high: number;
+      medium: number;
+      low: number;
+      unknown: number;
+    };
+  };
+  recentlyResolved: {
+    total: number;
+    windowHours: number;
+  };
+  sources: {
+    total: number;
+    fresh: number;
+    stale: number;
+    unknown: number;
+    items: Array<{
+      id: string;
+      name: string;
+      type: string;
+      state: OperationalFreshnessState;
+      lastSignalAt: string | null;
+    }>;
+  };
+  workflows: {
+    total: number;
+    healthy: number;
+    degraded: number;
+    failing: number;
+    unknown: number;
+    items: Array<{
+      id: string;
+      name: string;
+      sourceName?: string;
+      environment?: string;
+      state: OperationalHealthState;
+      lastSignalAt: string | null;
+      activeIncidentCount: number;
+    }>;
+  };
+  pipeline: {
+    state: OperationalFreshnessState;
+    jobs: Array<{
+      name: string;
+      state: OperationalFreshnessState;
+      lastSeenAt: string | null;
+    }>;
+  };
+  events: {
+    windowHours: number;
+    succeeded: number;
+    failed: number;
+    timedOut: number;
+    unknown: number;
+  };
+};
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const hasJsonBody = options.body !== undefined;
   const headers: Record<string, string> = {
@@ -480,6 +600,33 @@ export async function fetchOverview(token: string, range: "15m" | "1h" | "6h" | 
   }>(`/v1/metrics/overview?${params.toString()}`, { token });
 }
 
+export async function fetchOperationalDashboard(token: string) {
+  return request<OperationalDashboard>("/v1/metrics/operational-dashboard", { token });
+}
+
+export async function fetchReliabilityWindows(
+  token: string,
+  options: {
+    workflowId?: string;
+    sourceId?: string;
+    sourceKey?: string;
+  } = {}
+) {
+  const params = new URLSearchParams();
+  if (options.workflowId) {
+    params.set("workflowId", options.workflowId);
+  }
+  if (options.sourceId) {
+    params.set("sourceId", options.sourceId);
+  }
+  if (options.sourceKey) {
+    params.set("sourceKey", options.sourceKey);
+  }
+
+  const query = params.toString();
+  return request<ReliabilityWindows>(`/v1/metrics/reliability-windows${query ? `?${query}` : ""}`, { token });
+}
+
 export async function fetchWorkflows(token: string) {
   return request<{
     workflows: WorkflowRow[];
@@ -556,14 +703,19 @@ export async function fetchIncidents(
   );
 }
 
+export async function fetchIncidentAttentionGroups(token: string) {
+  return request<IncidentAttentionGroups>("/v1/incidents/attention-groups", { token });
+}
+
 export async function fetchIncidentById(token: string, incidentId: string) {
   return request<{
     incident: IncidentRow;
     recent_events: Array<{
-      id: number;
+      id: string;
       event_type: string;
       at_time: string;
-      payload_json: Record<string, unknown>;
+      summary: string;
+      metadata?: Record<string, string | number | boolean | null>;
     }>;
   }>(`/v1/incidents/${incidentId}`, { token });
 }

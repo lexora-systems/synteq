@@ -132,6 +132,39 @@ describe("incidents API guidance", () => {
   });
 
   it("returns guidance in incident detail responses", async () => {
+    const rawEvents = [
+      {
+        id: 10,
+        incident_id: "inc-1",
+        event_type: "ALERT_FAILED",
+        at_time: new Date("2026-05-01T09:58:00.000Z"),
+        payload_json: {
+          source: "generic_workflow_event_detection",
+          metric: "failure_rate",
+          severity: "high",
+          webhook_secret: "do-not-return",
+          api_key: "do-not-return",
+          authorization: "Bearer hidden",
+          channel: "ops-email",
+          payload: {
+            raw: true
+          },
+          email: "ops@example.com",
+          url: "https://hooks.example.test/secret"
+        }
+      },
+      {
+        id: 11,
+        incident_id: "inc-1",
+        event_type: "DETECTED",
+        at_time: new Date("2026-05-01T09:57:00.000Z"),
+        payload_json: {
+          metric: "duplicate_rate",
+          workflowId: "wf-1",
+          env: "prod"
+        }
+      }
+    ];
     getIncidentByIdMock.mockResolvedValue({
       id: "inc-1",
       tenant_id: "tenant-A",
@@ -146,7 +179,7 @@ describe("incidents API guidance", () => {
       summary: "Duplicate webhook",
       details_json: {}
     });
-    listIncidentEventsMock.mockResolvedValue([]);
+    listIncidentEventsMock.mockResolvedValue(rawEvents);
     generateIncidentGuidanceMock.mockResolvedValue({
       incident_type: "duplicate_webhook",
       likely_causes: ["missing idempotency"],
@@ -164,7 +197,47 @@ describe("incidents API guidance", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().incident.guidance.incident_type).toBe("duplicate_webhook");
+    const body = response.json();
+    expect(body.incident.guidance.incident_type).toBe("duplicate_webhook");
+    expect(body.recent_events).toEqual([
+      {
+        id: "10",
+        event_type: "ALERT_FAILED",
+        at_time: "2026-05-01T09:58:00.000Z",
+        summary: "Alert dispatch failed.",
+        metadata: {
+          source: "generic_workflow_event_detection",
+          metric: "failure_rate",
+          severity: "high"
+        }
+      },
+      {
+        id: "11",
+        event_type: "DETECTED",
+        at_time: "2026-05-01T09:57:00.000Z",
+        summary: "Detection condition was observed again. Metric: duplicate_rate.",
+        metadata: {
+          metric: "duplicate_rate",
+          workflow: "wf-1",
+          environment: "prod"
+        }
+      }
+    ]);
+    expect(body.recent_events[0]).not.toHaveProperty("payload_json");
+    expect(JSON.stringify(body)).not.toContain("do-not-return");
+    expect(JSON.stringify(body)).not.toContain("webhook_secret");
+    expect(JSON.stringify(body)).not.toContain("api_key");
+    expect(JSON.stringify(body)).not.toContain("authorization");
+    expect(JSON.stringify(body)).not.toContain("ops@example.com");
+    expect(JSON.stringify(body)).not.toContain("hooks.example");
+    expect(getIncidentByIdMock).toHaveBeenCalledWith("tenant-A", "inc-1");
+    expect(listIncidentEventsMock).toHaveBeenCalledWith("inc-1", 20);
+    expect(generateIncidentGuidanceMock).toHaveBeenCalledWith({
+      incident: expect.objectContaining({
+        id: "inc-1"
+      }),
+      recentEvents: rawEvents
+    });
   });
 
   it("allows viewers to read incidents because INCIDENTS_READ is granted", async () => {

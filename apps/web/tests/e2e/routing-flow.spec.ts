@@ -77,7 +77,7 @@ test("non-activated user can access /overview", async ({ page }) => {
   await setSession(page, "nonactivated");
   await page.goto("/overview");
   await expect(page).toHaveURL(/\/overview$/);
-  await expect(page.getByRole("heading", { name: /always-on risk detection and prevention/i, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /what is happening right now/i, level: 2 })).toBeVisible();
   await expect(page.getByTestId("overview-activation-banner")).toBeVisible();
 });
 
@@ -85,7 +85,28 @@ test("activated user can access /overview", async ({ page }) => {
   await setSession(page, "activated");
   await page.goto("/overview");
   await expect(page).toHaveURL(/\/overview$/);
-  await expect(page.getByRole("heading", { name: /risk/i, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /what is happening right now/i, level: 2 })).toBeVisible();
+});
+
+test("phase 1 operational flow reaches incidents and timeline", async ({ page }) => {
+  await setSession(page, "activated");
+  await page.goto("/overview");
+
+  await expect(page.getByRole("heading", { name: /what is happening right now/i, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /recent reliability/i })).toBeVisible();
+  await expect(page.getByText(/scheduled synthetic checks are not enabled yet/i)).toBeVisible();
+
+  await page.getByRole("link", { name: "Incidents", exact: true }).click();
+  await expect(page).toHaveURL(/\/incidents$/);
+  await expect(page.getByTestId("attention-groups-section")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /active operational context/i })).toBeVisible();
+
+  await page.getByRole("link", { name: "Details" }).first().click();
+  await expect(page).toHaveURL(/\/incidents\/inc-e2e-1$/);
+  await expect(page.getByRole("heading", { name: "Timeline" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /sanitized lifecycle events/i })).toBeVisible();
+  await expect(page.getByText("super-secret-should-not-render")).toHaveCount(0);
+  await expect(page.getByText("webhook_secret")).toHaveCount(0);
 });
 
 test("activated user visiting /welcome is redirected to /overview", async ({ page }) => {

@@ -51,6 +51,41 @@ function timelineContextChips(entry: IncidentTimelineEntry) {
   ].filter(([, value]) => typeof value === "string" && value.length > 0) as Array<[string, string]>;
 }
 
+function eventTypeLabel(eventType: string): string {
+  return eventType.replace(/_/g, " ").toLowerCase();
+}
+
+function lifecycleEventSummary(eventType: string): string {
+  if (eventType === "ALERT_PENDING") {
+    return "Alert dispatch was queued.";
+  }
+  if (eventType === "ALERT_SENT") {
+    return "Alert dispatch completed.";
+  }
+  if (eventType === "ALERT_FAILED") {
+    return "Alert dispatch failed.";
+  }
+  if (eventType === "ALERT_SKIPPED") {
+    return "Alert dispatch was skipped.";
+  }
+  if (eventType === "ACKED") {
+    return "Incident was acknowledged.";
+  }
+  if (eventType === "RESOLVED_MANUAL" || eventType === "RESOLVED_AUTO" || eventType === "BRIDGE_RESOLVED") {
+    return "Incident resolution was recorded.";
+  }
+  if (eventType === "BRIDGE_REFRESHED" || eventType === "DETECTED") {
+    return "Detection condition was observed again.";
+  }
+  if (eventType === "BRIDGE_OPENED" || eventType === "BRIDGE_REOPENED" || eventType === "TRIGGERED") {
+    return "Detection opened or confirmed this incident.";
+  }
+  if (eventType === "SLA_BREACHED" || eventType === "SEVERITY_ESCALATED") {
+    return "Incident state changed.";
+  }
+  return "Lifecycle event recorded.";
+}
+
 async function ackAction(formData: FormData) {
   "use server";
   const incidentId = String(formData.get("incident_id") ?? "");
@@ -155,6 +190,9 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
 
           <div className="rounded-2xl bg-white p-6 shadow-panel">
             <h3 className="text-lg font-semibold text-ink">Timeline</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Primary investigation view with sanitized incident, alert, and finding history.
+            </p>
             {!timelineResult.ok ? (
               <p className="mt-2 text-sm text-amber-800">Timeline is temporarily unavailable.</p>
             ) : timeline.length === 0 ? (
@@ -200,7 +238,10 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
           </div>
 
           <div className="rounded-2xl bg-white p-6 shadow-panel">
-            <h3 className="text-lg font-semibold text-ink">Recent incident events</h3>
+            <h3 className="text-lg font-semibold text-ink">Sanitized lifecycle events</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Raw event payloads are hidden. Use the timeline above for investigation context.
+            </p>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full min-w-[640px] border-collapse text-sm">
                 <thead>
@@ -211,13 +252,21 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
                   </tr>
                 </thead>
                 <tbody>
-                  {payload.recent_events.map((event) => (
-                    <tr key={event.id} className="border-b border-slate-100 align-top">
-                      <td className="py-2 pr-3 whitespace-nowrap">{new Date(event.at_time).toLocaleString()}</td>
-                      <td className="py-2 pr-3">{event.event_type}</td>
-                      <td className="py-2 pr-3 font-mono text-xs">{JSON.stringify(event.payload_json)}</td>
+                  {payload.recent_events.length > 0 ? (
+                    payload.recent_events.map((event) => (
+                      <tr key={event.id} className="border-b border-slate-100 align-top">
+                        <td className="py-2 pr-3 whitespace-nowrap">{new Date(event.at_time).toLocaleString()}</td>
+                        <td className="py-2 pr-3">{eventTypeLabel(event.event_type)}</td>
+                        <td className="py-2 pr-3 text-slate-600">{event.summary || lifecycleEventSummary(event.event_type)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={3} className="py-4 text-sm text-slate-600">
+                        No recent lifecycle events recorded.
+                      </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>

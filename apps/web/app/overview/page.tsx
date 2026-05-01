@@ -1,96 +1,134 @@
 import Link from "next/link";
 import { TopNav } from "../../components/top-nav";
-import { MetricsChart } from "../../components/charts";
 import { ReliabilityTools } from "../../components/reliability-tools";
-import { fetchConnectedSources, fetchGitHubIntegrations, fetchIncidents, fetchOverview, fetchTenantSettings, fetchWorkflows } from "../../lib/api";
+import {
+  fetchConnectedSources,
+  fetchGitHubIntegrations,
+  fetchOperationalDashboard,
+  fetchReliabilityWindows,
+  fetchTenantSettings,
+  fetchWorkflows,
+  type OperationalDashboard,
+  type OperationalFreshnessState,
+  type OperationalHealthState,
+  type ReliabilityWindows
+} from "../../lib/api";
 import { deriveActivationJourney } from "../../lib/activation";
 import { requireToken } from "../../lib/auth";
 
-function asNumber(value: unknown): number {
-  return typeof value === "number" ? value : Number(value ?? 0);
+function formatState(value: string): string {
+  return value
+    .replace(/_/g, " ")
+    .split(" ")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function formatUsd(amount: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2
-  }).format(amount);
-}
-
-function formatPercent(value: number): string {
-  return `${(value * 100).toFixed(1)}%`;
-}
-
-function deriveRiskScore(input: {
-  failureRate: number;
-  retryRate: number;
-  openIncidents: number;
-  p95LatencyMs: number;
-}): number {
-  // Frontend-only fallback score until backend score is available.
-  const incidentPenalty = Math.min(input.openIncidents * 6, 30);
-  const latencyPenalty =
-    input.p95LatencyMs >= 2500 ? 20 : input.p95LatencyMs >= 1500 ? 12 : input.p95LatencyMs >= 800 ? 6 : 0;
-  const score =
-    100 -
-    input.failureRate * 45 -
-    input.retryRate * 22 -
-    incidentPenalty -
-    latencyPenalty;
-
-  return Math.round(clamp(score, 0, 100));
-}
-
-function riskStatus(score: number): "Healthy" | "Watch" | "High Risk" {
-  if (score >= 80) {
-    return "Healthy";
+function formatDateTime(value: string | null): string {
+  if (!value) {
+    return "No signal";
   }
-  if (score >= 60) {
-    return "Watch";
-  }
-  return "High Risk";
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
 
-function deriveDeploymentStability(input: {
-  successRate: number;
-  retryRate: number;
-  duplicateRate: number;
-  p95LatencyMs: number;
-}): number {
-  const latencyPenalty =
-    input.p95LatencyMs >= 2500 ? 12 : input.p95LatencyMs >= 1500 ? 8 : input.p95LatencyMs >= 800 ? 4 : 0;
-  const stability =
-    input.successRate * 100 -
-    input.retryRate * 18 -
-    input.duplicateRate * 14 -
-    latencyPenalty;
-
-  return Math.round(clamp(stability, 0, 100));
+function formatRate(value: number | null): string {
+  if (value === null) {
+    return "No signal";
+  }
+  return `${(value * 100).toFixed(value === 0 || value === 1 ? 0 : 1)}%`;
 }
 
-function deploymentStatus(score: number): "Stable" | "Needs Attention" | "Unstable" {
-  if (score >= 85) {
-    return "Stable";
+function healthBadgeClass(state: OperationalHealthState | OperationalFreshnessState): string {
+  if (state === "healthy" || state === "fresh") {
+    return "bg-emerald-100 text-emerald-700";
   }
-  if (score >= 65) {
-    return "Needs Attention";
+  if (state === "degraded" || state === "stale") {
+    return "bg-amber-100 text-amber-800";
   }
-  return "Unstable";
+  if (state === "failing") {
+    return "bg-rose-100 text-rose-700";
+  }
+  return "bg-slate-100 text-slate-700";
+}
+
+function StateBadge({ state }: { state: OperationalHealthState | OperationalFreshnessState }) {
+  return (
+    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${healthBadgeClass(state)}`}>
+      {formatState(state)}
+    </span>
+  );
+}
+
+function MetricTile({
+  label,
+  value,
+  detail,
+  state
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  state?: OperationalHealthState | OperationalFreshnessState;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{label}</p>
+        {state ? <StateBadge state={state} /> : null}
+      </div>
+      <p className="mt-3 text-2xl font-semibold text-ink">{value}</p>
+      <p className="mt-2 text-sm text-slate-600">{detail}</p>
+    </div>
+  );
+}
+
+function countRecentEvents(dashboard: OperationalDashboard | null): number {
+  if (!dashboard) {
+    return 0;
+  }
+  return dashboard.events.succeeded + dashboard.events.failed + dashboard.events.timedOut + dashboard.events.unknown;
+}
+
+function sortWorkflowsForAttention(items: OperationalDashboard["workflows"]["items"]) {
+  const priority: Record<OperationalHealthState, number> = {
+    failing: 0,
+    degraded: 1,
+    unknown: 2,
+    healthy: 3
+  };
+
+  return [...items].sort((left, right) => {
+    const stateDelta = priority[left.state] - priority[right.state];
+    if (stateDelta !== 0) {
+      return stateDelta;
+    }
+    return right.activeIncidentCount - left.activeIncidentCount;
+  });
+}
+
+function reliabilityWindowDetail(window: ReliabilityWindows["windows"][number]) {
+  if (window.total === 0) {
+    return "No events in this window";
+  }
+  return `${window.failed} failed - ${window.timedOut} timed out - ${window.unknown} unknown`;
 }
 
 export default async function OverviewPage() {
   const token = await requireToken();
 
-  const [overviewResult, incidentsPayload, workflowsPayload, settingsResult, sourcesResult, githubIntegrationsResult] = await Promise.all([
-    fetchOverview(token, "1h")
+  const [dashboardResult, reliabilityResult, workflowsPayload, settingsResult, sourcesResult, githubIntegrationsResult] = await Promise.all([
+    fetchOperationalDashboard(token)
       .then((payload) => ({ ok: true as const, payload }))
       .catch(() => ({ ok: false as const })),
-    fetchIncidents(token, "open"),
+    fetchReliabilityWindows(token)
+      .then((payload) => ({ ok: true as const, payload }))
+      .catch(() => ({ ok: false as const })),
     fetchWorkflows(token),
     fetchTenantSettings(token)
       .then((payload) => ({ ok: true as const, payload }))
@@ -123,51 +161,19 @@ export default async function OverviewPage() {
         }
       }))
   ]);
-  const monitoringDataUnavailable = !overviewResult.ok;
-  const overview = overviewResult.ok
-    ? overviewResult.payload
-    : {
-        summary: {},
-        series: [],
-        windows: {},
-        last_updated: new Date().toISOString()
-      };
 
-  const summary = overview.summary ?? {};
-  const total = asNumber(summary.count_total);
-  const failed = asNumber(summary.count_failed);
-  const success = asNumber(summary.count_success);
-  const p95 = asNumber(summary.p95_duration_ms);
-  const retryRate = asNumber(summary.retry_rate);
-  const duplicateRate = asNumber(summary.duplicate_rate);
-  const avgCost = asNumber(summary.avg_cost_usd);
-  const totalCost = asNumber(summary.sum_cost_usd);
-  const openIncidents = incidentsPayload.pagination.total;
-  const failureRate = total > 0 ? failed / total : 0;
-  const successRate = total > 0 ? success / total : 0;
-  const riskScore = deriveRiskScore({
-    failureRate,
-    retryRate,
-    openIncidents,
-    p95LatencyMs: p95
-  });
-  const riskLabel = riskStatus(riskScore);
-  const stabilityScore = deriveDeploymentStability({
-    successRate,
-    retryRate,
-    duplicateRate,
-    p95LatencyMs: p95
-  });
-  const stabilityLabel = deploymentStatus(stabilityScore);
-  const estimatedExposure = totalCost > 0 ? totalCost : avgCost * total;
+  const dashboard = dashboardResult.ok ? dashboardResult.payload : null;
+  const reliability = reliabilityResult.ok ? reliabilityResult.payload : null;
+  const monitoringDataUnavailable = !dashboard;
+  const openIncidents = dashboard?.activeIncidents.total ?? 0;
+  const recentEventTotal = countRecentEvents(dashboard);
   const connectedSourcesSummary = sourcesResult.payload.summary;
   const connectedSources = sourcesResult.payload.sources;
   const hasConfiguredSources = connectedSources.length > 0;
-  const noIncidentsYet = openIncidents === 0;
   const activationJourney = deriveActivationJourney({
     connectedSources,
     githubIntegrations: githubIntegrationsResult.payload.integrations,
-    totalSignals: total,
+    totalSignals: recentEventTotal,
     openIncidents,
     metricsUnavailable: monitoringDataUnavailable
   });
@@ -175,36 +181,8 @@ export default async function OverviewPage() {
   const activeConnectedSourceCount = connectedSources.filter(
     (source) => source.status === "active" && (source.type === "workflow" || source.type === "github_integration")
   ).length;
-  const connectedButQuiet = activationJourney.hasActiveSources && noIncidentsYet && !activationJourney.firstSignalReceived;
+  const connectedButQuiet = activationJourney.hasActiveSources && openIncidents === 0 && !activationJourney.firstSignalReceived;
   const activationIncomplete = !activationJourney.monitoringActive;
-  const window5m = overview.windows?.["5m"] as Record<string, unknown> | undefined;
-  const window15m = overview.windows?.["15m"] as Record<string, unknown> | undefined;
-
-  const chartData = (overview.series ?? []).map((point) => {
-    const totalCount = asNumber(point.count_total);
-    const successRate = totalCount > 0 ? asNumber(point.count_success) / totalCount : 0;
-    const failureRate = totalCount > 0 ? asNumber(point.count_failed) / totalCount : 0;
-
-    return {
-      bucket_ts: String(point.bucket_ts),
-      success_rate: successRate,
-      failure_rate: failureRate,
-      p95_duration_ms: asNumber(point.p95_duration_ms),
-      retry_rate: asNumber(point.retry_rate),
-      duplicate_rate: asNumber(point.duplicate_rate),
-      avg_cost_usd: asNumber(point.avg_cost_usd)
-    };
-  });
-  const latestSeriesTimestampMs = chartData.reduce((latest, point) => {
-    const parsed = new Date(point.bucket_ts).getTime();
-    if (!Number.isFinite(parsed)) {
-      return latest;
-    }
-    return Math.max(latest, parsed);
-  }, 0);
-  const telemetryAgeMinutes = latestSeriesTimestampMs > 0 ? (Date.now() - latestSeriesTimestampMs) / 60_000 : null;
-  const telemetryPossiblyStale =
-    !monitoringDataUnavailable && chartData.length > 0 && telemetryAgeMinutes !== null && telemetryAgeMinutes > 15;
   const tenantSettings = settingsResult.ok
     ? settingsResult.payload.settings
     : {
@@ -226,25 +204,35 @@ export default async function OverviewPage() {
   const trial = tenantSettings.trial;
   const showTrialActive = trial.active;
   const showTrialEnded = !trial.active && trial.consumed && tenantSettings.current_plan === "free";
+  const staleOrUnknownSources =
+    dashboard?.sources.items.filter((source) => source.state === "stale" || source.state === "unknown").slice(0, 5) ?? [];
+  const attentionWorkflows = dashboard
+    ? sortWorkflowsForAttention(
+        dashboard.workflows.items.filter((workflow) => workflow.state !== "healthy" || workflow.activeIncidentCount > 0)
+      ).slice(0, 5)
+    : [];
 
   return (
     <main className="min-h-screen syn-app-shell pb-12">
       <TopNav />
       <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pt-8">
         <div className="rounded-3xl bg-gradient-to-r from-ink to-ocean p-6 text-white shadow-panel">
-          <p className="text-xs uppercase tracking-[0.2em] text-cyan-200">Decision Layer</p>
-          <h2 className="mt-1 text-3xl font-semibold">Always-on risk detection and prevention</h2>
-          <p className="mt-2 text-sm text-cyan-100">
-            {monitoringDataUnavailable
-              ? "Detection telemetry temporarily unavailable"
-              : `Last updated: ${new Date(overview.last_updated).toLocaleString()}`}
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-cyan-200">Operational Dashboard</p>
+              <h2 className="mt-1 text-3xl font-semibold">What is happening right now</h2>
+              <p className="mt-2 text-sm text-cyan-100">
+                {dashboard ? `Generated ${formatDateTime(dashboard.generatedAt)}` : "Operational dashboard temporarily unavailable"}
+              </p>
+            </div>
+            {dashboard ? <StateBadge state={dashboard.globalState} /> : <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">Unavailable</span>}
+          </div>
           <div className="mt-4 flex flex-wrap gap-3">
             <Link href="/incidents?status=open" className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-ink">
               Open incidents ({openIncidents})
             </Link>
-            <Link href="#investigation-tools" className="rounded-xl border border-cyan-200 px-4 py-2 text-sm font-semibold text-white">
-              Run Reliability Scan
+            <Link href="/settings/control-plane" className="rounded-xl border border-cyan-200 px-4 py-2 text-sm font-semibold text-white">
+              Control plane
             </Link>
           </div>
         </div>
@@ -264,10 +252,9 @@ export default async function OverviewPage() {
             <p className="font-semibold text-ink">{hasConfiguredSources ? "Sources configured but inactive" : "No active source connected yet"}</p>
             <p className="mt-1">
               {hasConfiguredSources
-                ? "Synteq is not monitoring yet because configured sources are inactive. Activate one source to resume live detection."
-                : "Connect and activate a source to start always-on detection. Synteq begins monitoring as soon as operational signals arrive."}
+                ? "Synteq is not monitoring because configured sources are inactive."
+                : "Connect and activate a source to start monitoring operational signals."}
             </p>
-            <p className="mt-1">You&apos;ll be alerted when failure spikes, retries, latency drift, or missing heartbeat risks are detected.</p>
             <Link href="/settings/control-plane" className="mt-2 inline-flex rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">
               Open control plane
             </Link>
@@ -275,14 +262,11 @@ export default async function OverviewPage() {
         ) : (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-panel">
             <p className="font-semibold">
-              Synteq is continuously detecting across {activeConnectedSourceCount} active source{activeConnectedSourceCount === 1 ? "" : "s"}.
+              Synteq is monitoring {activeConnectedSourceCount} active source{activeConnectedSourceCount === 1 ? "" : "s"}.
             </p>
             <p className="mt-1">
               Watching {connectedSourcesSummary.workflow_sources} workflow signal source{connectedSourcesSummary.workflow_sources === 1 ? "" : "s"} and{" "}
               {connectedSourcesSummary.github_sources} GitHub integration{connectedSourcesSummary.github_sources === 1 ? "" : "s"}.
-            </p>
-            <p className="mt-1">
-              You&apos;ll be alerted when failure-rate spikes, retry storms, missing heartbeats, or latency-related risks are detected.
             </p>
           </div>
         )}
@@ -302,165 +286,202 @@ export default async function OverviewPage() {
           </div>
         ) : null}
 
-        <div className="grid gap-4 lg:grid-cols-4">
-          <div className="rounded-2xl border border-cyan-200 bg-white p-5 shadow-panel lg:col-span-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Platform Risk Score</p>
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                  monitoringDataUnavailable
-                    ? "bg-slate-100 text-slate-700"
-                    : riskLabel === "Healthy"
-                    ? "bg-emerald-100 text-emerald-700"
-                    : riskLabel === "Watch"
-                      ? "bg-amber-100 text-amber-800"
-                      : "bg-rose-100 text-rose-700"
-                }`}
-              >
-                {monitoringDataUnavailable ? "Data unavailable" : riskLabel}
-              </span>
-            </div>
-            <p className="mt-3 text-5xl font-semibold text-ink">{monitoringDataUnavailable ? "--" : riskScore}</p>
-            <p className="mt-2 text-sm text-slate-600">
-              {monitoringDataUnavailable
-                ? "Derived score is hidden until monitoring data source is reachable."
-                : "Derived from failures, retries, latency, and active incident load."}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Revenue Exposure</p>
-            <p className="mt-3 text-2xl font-semibold text-ink">
-              {monitoringDataUnavailable
-                ? "Unavailable"
-                : estimatedExposure > 0
-                  ? formatUsd(estimatedExposure)
-                  : "No data yet"}
-            </p>
-            <p className="mt-2 text-sm text-slate-600">
-              {monitoringDataUnavailable
-                ? "Monitoring source is unavailable. Retry after pipeline health check."
-                : estimatedExposure > 0
-                  ? "Estimated cost exposure in selected range."
-                  : "Run traffic or simulation to estimate exposure."}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Active Incidents</p>
-            <p className="mt-3 text-2xl font-semibold text-ink">{openIncidents.toLocaleString()}</p>
-            <Link href="/incidents?status=open" className="mt-2 inline-flex text-sm font-semibold text-ocean hover:text-ink">
-              Open incident queue
-            </Link>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Deployment Stability</p>
-            <p className="mt-3 text-2xl font-semibold text-ink">{monitoringDataUnavailable ? "--" : `${stabilityScore}/100`}</p>
-            <p className="mt-2 text-sm text-slate-600">
-              {monitoringDataUnavailable
-                ? "Deployment stability is unavailable until telemetry resumes."
-                : `${stabilityLabel} - Success rate ${formatPercent(successRate)}`}
-            </p>
-          </div>
-        </div>
-
         {monitoringDataUnavailable ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-panel">
-            Detection telemetry is temporarily unavailable. Check data source credentials and run `npm run check:pipeline:health`.
-            You can continue using simulation and incidents while telemetry recovers.
+            Operational dashboard data is temporarily unavailable. Incidents and source setup remain accessible.
           </div>
+        ) : null}
+
+        {dashboard?.globalState === "unknown" ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-panel">
+            <p className="font-semibold text-ink">Operational state unknown</p>
+            <p className="mt-1">No recent operational signal is available yet. Connect a source or wait for the next event batch.</p>
+          </div>
+        ) : null}
+
+        {dashboard ? (
+          <>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <MetricTile
+                label="Active Incidents"
+                value={dashboard.activeIncidents.total.toLocaleString()}
+                detail={`Critical ${dashboard.activeIncidents.bySeverity.critical} - High ${dashboard.activeIncidents.bySeverity.high} - Medium ${dashboard.activeIncidents.bySeverity.medium} - Low ${dashboard.activeIncidents.bySeverity.low}`}
+                state={dashboard.activeIncidents.total > 0 ? dashboard.globalState : "healthy"}
+              />
+              <MetricTile
+                label="Recently Resolved"
+                value={dashboard.recentlyResolved.total.toLocaleString()}
+                detail={`Resolved in the last ${dashboard.recentlyResolved.windowHours} hours`}
+              />
+              <MetricTile
+                label="Source Freshness"
+                value={`${dashboard.sources.fresh}/${dashboard.sources.total} fresh`}
+                detail={`${dashboard.sources.stale} stale - ${dashboard.sources.unknown} unknown`}
+                state={dashboard.sources.stale > 0 ? "stale" : dashboard.sources.unknown > 0 ? "unknown" : "fresh"}
+              />
+              <MetricTile
+                label="Workflow Health"
+                value={`${dashboard.workflows.healthy}/${dashboard.workflows.total} healthy`}
+                detail={`${dashboard.workflows.failing} failing - ${dashboard.workflows.degraded} degraded - ${dashboard.workflows.unknown} unknown`}
+                state={dashboard.workflows.failing > 0 ? "failing" : dashboard.workflows.degraded > 0 ? "degraded" : dashboard.workflows.unknown > 0 ? "unknown" : "healthy"}
+              />
+              <MetricTile
+                label="Pipeline Freshness"
+                value={formatState(dashboard.pipeline.state)}
+                detail={dashboard.pipeline.jobs.map((job) => `${formatState(job.name)}: ${formatState(job.state)}`).join(" - ")}
+                state={dashboard.pipeline.state}
+              />
+              <MetricTile
+                label="Recent Events"
+                value={recentEventTotal.toLocaleString()}
+                detail={`${dashboard.events.succeeded} succeeded - ${dashboard.events.failed} failed - ${dashboard.events.timedOut} timed out - ${dashboard.events.unknown} unknown`}
+              />
+            </div>
+
+            <section className="grid gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Reliability Windows</p>
+                  <h3 className="mt-1 text-xl font-semibold text-ink">Recent reliability</h3>
+                </div>
+                {reliability ? (
+                  <p className="text-xs text-slate-500">Generated {formatDateTime(reliability.generatedAt)}</p>
+                ) : null}
+              </div>
+              {reliability ? (
+                <>
+                  {reliability.windows.every((window) => window.state === "unknown") ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-panel">
+                      No recent reliability signals are available yet.
+                    </div>
+                  ) : null}
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {reliability.windows.map((window) => (
+                      <div key={window.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{window.label}</p>
+                            <p className="mt-2 text-2xl font-semibold text-ink">{formatRate(window.successRate)}</p>
+                          </div>
+                          <StateBadge state={window.state} />
+                        </div>
+                        <p className="mt-2 text-sm text-slate-600">{reliabilityWindowDetail(window)}</p>
+                        <p className="mt-2 text-xs text-slate-500">Last signal: {formatDateTime(window.lastSignalAt)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-panel">
+                  Recent reliability data is temporarily unavailable.
+                </div>
+              )}
+            </section>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Workflows</p>
+                    <h3 className="mt-1 text-xl font-semibold text-ink">Needs attention</h3>
+                  </div>
+                  <StateBadge state={dashboard.workflows.failing > 0 ? "failing" : dashboard.workflows.degraded > 0 ? "degraded" : dashboard.workflows.unknown > 0 ? "unknown" : "healthy"} />
+                </div>
+                <div className="mt-4 grid gap-3">
+                  {attentionWorkflows.length > 0 ? (
+                    attentionWorkflows.map((workflow) => (
+                      <div key={workflow.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="font-semibold text-ink">{workflow.name}</p>
+                          <StateBadge state={workflow.state} />
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {workflow.sourceName ?? "source"} - {workflow.environment ?? "default"} - {workflow.activeIncidentCount} active incident{workflow.activeIncidentCount === 1 ? "" : "s"}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">Last signal: {formatDateTime(workflow.lastSignalAt)}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                      No workflows are failing or degraded.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Sources</p>
+                    <h3 className="mt-1 text-xl font-semibold text-ink">Stale or unknown</h3>
+                  </div>
+                  <StateBadge state={dashboard.sources.stale > 0 ? "stale" : dashboard.sources.unknown > 0 ? "unknown" : "fresh"} />
+                </div>
+                <div className="mt-4 grid gap-3">
+                  {staleOrUnknownSources.length > 0 ? (
+                    staleOrUnknownSources.map((source) => (
+                      <div key={source.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="font-semibold text-ink">{source.name}</p>
+                          <StateBadge state={source.state} />
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">{formatState(source.type)}</p>
+                        <p className="mt-1 text-xs text-slate-500">Last signal: {formatDateTime(source.lastSignalAt)}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                      No stale or unknown sources.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Pipeline Jobs</p>
+                  <h3 className="mt-1 text-xl font-semibold text-ink">Scheduler freshness</h3>
+                </div>
+                <StateBadge state={dashboard.pipeline.state} />
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                {dashboard.pipeline.jobs.map((job) => (
+                  <div key={job.name} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-semibold text-ink">{formatState(job.name)}</p>
+                      <StateBadge state={job.state} />
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">Last seen: {formatDateTime(job.lastSeenAt)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
         ) : null}
 
         {connectedButQuiet ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-panel">
             <p className="font-semibold text-ink">Source connected, waiting for first signal batch</p>
-            <p className="mt-1">Synteq is continuously detecting now. As events arrive, risk scoring and incident detection will populate automatically.</p>
-            <p className="mt-1">You&apos;ll be alerted when monitored risk conditions are met.</p>
+            <p className="mt-1">As events arrive, dashboard state and incident pressure will populate automatically.</p>
           </div>
         ) : null}
 
         {activationJourney.quietMonitoring && !connectedButQuiet ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 shadow-panel">
             <p className="font-semibold">Connected and monitoring</p>
-            <p className="mt-1">No active incidents right now. Synteq is connected and continuously monitoring incoming operational signals.</p>
+            <p className="mt-1">No active incidents right now. Synteq is connected and receiving operational signals.</p>
           </div>
         ) : null}
-
-        {telemetryPossiblyStale ? (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-panel">
-            Detection telemetry appears delayed (last metrics point about {Math.round(telemetryAgeMinutes ?? 0)} minutes ago).
-            Verify scheduler cadence and run `npm run check:pipeline:freshness`.
-          </div>
-        ) : null}
-
-        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-slate-700 shadow-panel">
-          <p className="font-semibold text-ink">Always-on detection setup</p>
-          <p className="mt-1">
-            Simulations are for validation. For live risk intelligence, connect a real workflow and continuously ingest telemetry.
-          </p>
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Operational Metrics</p>
-            <h3 className="mt-1 text-xl font-semibold text-ink">Execution performance snapshot</h3>
-          </div>
-          <div className="grid gap-4 md:grid-cols-5">
-            <div className="metric-card">
-              <p>Total Runs</p>
-              <strong>{monitoringDataUnavailable ? "Unavailable" : total.toLocaleString()}</strong>
-            </div>
-            <div className="metric-card">
-              <p>Success</p>
-              <strong>{monitoringDataUnavailable ? "Unavailable" : success.toLocaleString()}</strong>
-            </div>
-            <div className="metric-card">
-              <p>Failures</p>
-              <strong className="text-ember">{monitoringDataUnavailable ? "Unavailable" : failed.toLocaleString()}</strong>
-            </div>
-            <div className="metric-card">
-              <p>P95 Latency</p>
-              <strong>{monitoringDataUnavailable ? "Unavailable" : `${p95.toFixed(0)} ms`}</strong>
-            </div>
-            <div className="metric-card">
-              <p>Avg Cost / Run</p>
-              <strong>{monitoringDataUnavailable ? "Unavailable" : `$${avgCost.toFixed(4)}`}</strong>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Detection Trends</p>
-            <h3 className="mt-1 text-xl font-semibold text-ink">Real-time stability and performance signals</h3>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-panel">
-            <p className="font-semibold text-ink">Sliding Window Summary</p>
-            {monitoringDataUnavailable ? (
-              <p className="mt-2 text-sm text-amber-800">Monitoring trends unavailable until data source access is restored.</p>
-            ) : (
-              <div className="mt-2 grid gap-2 md:grid-cols-3">
-                <p>5m failures: <strong>{asNumber(window5m?.count_failed).toLocaleString()}</strong></p>
-                <p>15m failures: <strong>{asNumber(window15m?.count_failed).toLocaleString()}</strong></p>
-                <p>Range total cost: <strong>{formatUsd(totalCost)}</strong></p>
-              </div>
-            )}
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <MetricsChart data={chartData} dataKey="success_rate" color="#0f766e" title="Success Rate" unavailable={monitoringDataUnavailable} />
-            <MetricsChart data={chartData} dataKey="failure_rate" color="#b91c1c" title="Failure Rate" unavailable={monitoringDataUnavailable} />
-            <MetricsChart data={chartData} dataKey="p95_duration_ms" color="#d97706" title="P95 Latency (ms)" unavailable={monitoringDataUnavailable} />
-            <MetricsChart data={chartData} dataKey="retry_rate" color="#0e7490" title="Retry Rate" unavailable={monitoringDataUnavailable} />
-          </div>
-        </div>
 
         <section id="investigation-tools" className="space-y-3">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Investigation Tools</p>
             <h3 className="mt-1 text-xl font-semibold text-ink">Investigate and validate risk signals</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Reliability windows are based on received operational events. Scheduled synthetic checks are not enabled yet.
+            </p>
           </div>
           {workflowsPayload.workflows.length > 0 ? (
             <ReliabilityTools workflows={workflowsPayload.workflows} />

@@ -154,6 +154,20 @@ export function GenericWorkflowSourceOnboarding({
         </div>
       )}
 
+      <div
+        className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-panel"
+        data-testid="synthetic-readiness-note"
+      >
+        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Validation mode</p>
+        <p className="mt-2">
+          Manual test events help validate that a source is connected. They are not scheduled synthetic monitors.
+        </p>
+        <p className="mt-1">
+          Failed or timed-out test events use the real ingestion path and may create incidents or alert behavior. Use them intentionally
+          while setting up or validating a source.
+        </p>
+      </div>
+
       {latestSource ? (
         <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-5 shadow-panel" data-testid="generic-source-setup-card">
           <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Setup</p>

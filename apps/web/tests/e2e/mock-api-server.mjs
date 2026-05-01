@@ -100,6 +100,214 @@ function tenantSettings() {
   };
 }
 
+function incidentGuidance() {
+  return {
+    incident_type: "failure_rate_spike",
+    likely_causes: ["recent workflow failure"],
+    business_impact: "Payment automation may be delayed until the workflow stabilizes.",
+    recommended_actions: ["Review the failed run and retry after remediation."],
+    confidence: "medium",
+    evidence: ["workflow=wf_1", "severity=high"],
+    generated_by: "rules_v1",
+    summary_text: "Payments Daily is reporting elevated failures."
+  };
+}
+
+function mockIncident() {
+  return {
+    id: "inc-e2e-1",
+    tenant_id: "tenant-e2e",
+    workflow_id: "wf_1",
+    environment: "prod",
+    policy_id: "policy-e2e",
+    status: "open",
+    severity: "high",
+    started_at: "2026-05-01T09:45:00.000Z",
+    last_seen_at: "2026-05-01T09:58:00.000Z",
+    resolved_at: null,
+    summary: "Payments Daily failure spike",
+    details_json: {
+      source: "generic_workflow_event_detection",
+      workflowId: "wf_1",
+      workflowName: "Payments Daily",
+      environment: "prod"
+    },
+    guidance: incidentGuidance()
+  };
+}
+
+function operationalDashboardPayload(activated) {
+  return {
+    generatedAt: "2026-05-01T10:00:00.000Z",
+    globalState: activated ? "failing" : "unknown",
+    activeIncidents: {
+      total: activated ? 1 : 0,
+      bySeverity: {
+        critical: 0,
+        high: activated ? 1 : 0,
+        medium: 0,
+        low: 0,
+        unknown: 0
+      }
+    },
+    recentlyResolved: {
+      total: 0,
+      windowHours: 24
+    },
+    sources: {
+      total: activated ? 1 : 0,
+      fresh: activated ? 1 : 0,
+      stale: 0,
+      unknown: 0,
+      items: activated
+        ? [
+            {
+              id: "wf_1",
+              name: "Payments Daily",
+              type: "workflow",
+              state: "fresh",
+              lastSignalAt: "2026-05-01T09:58:00.000Z"
+            }
+          ]
+        : []
+    },
+    workflows: {
+      total: activated ? 1 : 0,
+      healthy: 0,
+      degraded: 0,
+      failing: activated ? 1 : 0,
+      unknown: 0,
+      items: activated
+        ? [
+            {
+              id: "wf_1",
+              name: "Payments Daily",
+              sourceName: "workflow",
+              environment: "prod",
+              state: "failing",
+              lastSignalAt: "2026-05-01T09:58:00.000Z",
+              activeIncidentCount: 1
+            }
+          ]
+        : []
+    },
+    pipeline: {
+      state: activated ? "fresh" : "unknown",
+      jobs: [
+        {
+          name: "aggregate",
+          state: activated ? "fresh" : "unknown",
+          lastSeenAt: activated ? "2026-05-01T09:59:00.000Z" : null
+        },
+        {
+          name: "anomaly",
+          state: activated ? "fresh" : "unknown",
+          lastSeenAt: activated ? "2026-05-01T09:59:00.000Z" : null
+        },
+        {
+          name: "alerts",
+          state: activated ? "fresh" : "unknown",
+          lastSeenAt: activated ? "2026-05-01T09:59:00.000Z" : null
+        }
+      ]
+    },
+    events: {
+      windowHours: 1,
+      succeeded: activated ? 11 : 0,
+      failed: activated ? 1 : 0,
+      timedOut: 0,
+      unknown: 0
+    }
+  };
+}
+
+function reliabilityWindowsPayload(activated) {
+  return {
+    generatedAt: "2026-05-01T10:00:00.000Z",
+    scope: {
+      tenantId: "tenant-e2e",
+      workflowId: null,
+      sourceId: null,
+      sourceKey: null
+    },
+    windows: [
+      {
+        label: "1h",
+        startAt: "2026-05-01T09:00:00.000Z",
+        endAt: "2026-05-01T10:00:00.000Z",
+        total: activated ? 12 : 0,
+        succeeded: activated ? 11 : 0,
+        failed: activated ? 1 : 0,
+        timedOut: 0,
+        unknown: 0,
+        successRate: activated ? 0.9167 : null,
+        failureRate: activated ? 0.0833 : null,
+        timeoutRate: activated ? 0 : null,
+        lastSignalAt: activated ? "2026-05-01T09:58:00.000Z" : null,
+        state: activated ? "degraded" : "unknown"
+      },
+      {
+        label: "24h",
+        startAt: "2026-04-30T10:00:00.000Z",
+        endAt: "2026-05-01T10:00:00.000Z",
+        total: activated ? 24 : 0,
+        succeeded: activated ? 23 : 0,
+        failed: activated ? 1 : 0,
+        timedOut: 0,
+        unknown: 0,
+        successRate: activated ? 0.9583 : null,
+        failureRate: activated ? 0.0417 : null,
+        timeoutRate: activated ? 0 : null,
+        lastSignalAt: activated ? "2026-05-01T09:58:00.000Z" : null,
+        state: activated ? "degraded" : "unknown"
+      },
+      {
+        label: "7d",
+        startAt: "2026-04-24T10:00:00.000Z",
+        endAt: "2026-05-01T10:00:00.000Z",
+        total: activated ? 50 : 0,
+        succeeded: activated ? 49 : 0,
+        failed: activated ? 1 : 0,
+        timedOut: 0,
+        unknown: 0,
+        successRate: activated ? 0.98 : null,
+        failureRate: activated ? 0.02 : null,
+        timeoutRate: activated ? 0 : null,
+        lastSignalAt: activated ? "2026-05-01T09:58:00.000Z" : null,
+        state: activated ? "degraded" : "unknown"
+      }
+    ]
+  };
+}
+
+function attentionGroupsPayload(activated) {
+  return {
+    generatedAt: "2026-05-01T10:00:00.000Z",
+    groups: activated
+      ? [
+          {
+            id: "attn_e2e_payments",
+            label: "Payments Daily / prod",
+            attention: "elevated",
+            incidentCount: 1,
+            highestSeverity: "high",
+            lastSeenAt: "2026-05-01T09:58:00.000Z",
+            alertFailureCount: 0,
+            activeStatuses: {
+              open: 1,
+              acked: 0
+            },
+            groupKey: {
+              workflowId: "wf_1",
+              workflowName: "Payments Daily",
+              environment: "prod"
+            }
+          }
+        ]
+      : []
+  };
+}
+
 let apiKeyCounter = 1;
 let githubCounter = 1;
 let alertChannelCounter = 1;
@@ -303,6 +511,24 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "GET" && pathname === "/v1/metrics/operational-dashboard") {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    sendJson(res, 200, operationalDashboardPayload(persona === "activated"));
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/v1/metrics/reliability-windows") {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    sendJson(res, 200, reliabilityWindowsPayload(persona === "activated"));
+    return;
+  }
+
   if (req.method === "GET" && pathname === "/v1/settings/tenant") {
     const persona = ensureAuth(req, res);
     if (!persona) {
@@ -335,10 +561,95 @@ const server = http.createServer(async (req, res) => {
     if (!persona) {
       return;
     }
+    const activated = persona === "activated";
     sendJson(res, 200, {
-      incidents: [],
-      pagination: { page: 1, page_size: 25, total: 0, has_next: false },
+      incidents: activated ? [mockIncident()] : [],
+      pagination: { page: 1, page_size: 25, total: activated ? 1 : 0, has_next: false },
       last_updated: new Date().toISOString()
+    });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/v1/incidents/attention-groups") {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    sendJson(res, 200, attentionGroupsPayload(persona === "activated"));
+    return;
+  }
+
+  if (req.method === "GET" && pathname.match(/^\/v1\/incidents\/[^/]+\/timeline$/)) {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const id = pathname.split("/")[3];
+    if (persona !== "activated" || id !== "inc-e2e-1") {
+      sendJson(res, 404, { error: "Incident not found" });
+      return;
+    }
+    sendJson(res, 200, {
+      incident_id: id,
+      timeline: [
+        {
+          id: "incident:inc-e2e-1:created",
+          at: "2026-05-01T09:45:00.000Z",
+          type: "incident_created",
+          title: "Incident opened",
+          description: "Payments Daily failure spike",
+          severity: "high",
+          workflow: "Payments Daily",
+          environment: "prod"
+        },
+        {
+          id: "incident_event:1",
+          at: "2026-05-01T09:46:00.000Z",
+          type: "alert_pending",
+          title: "Alert queued",
+          description: "An alert dispatch was queued for this incident.",
+          severity: "high",
+          workflow: "Payments Daily",
+          environment: "prod"
+        }
+      ]
+    });
+    return;
+  }
+
+  if (req.method === "GET" && pathname.match(/^\/v1\/incidents\/[^/]+$/)) {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const id = pathname.split("/")[3];
+    if (persona !== "activated" || id !== "inc-e2e-1") {
+      sendJson(res, 404, { error: "Incident not found" });
+      return;
+    }
+    sendJson(res, 200, {
+      incident: mockIncident(),
+      recent_events: [
+        {
+          id: 1,
+          event_type: "ALERT_PENDING",
+          at_time: "2026-05-01T09:46:00.000Z",
+          summary: "Alert dispatch was queued.",
+          metadata: {
+            source: "generic_workflow_event_detection"
+          }
+        },
+        {
+          id: 2,
+          event_type: "DETECTED",
+          at_time: "2026-05-01T09:58:00.000Z",
+          summary: "Detection condition was observed again.",
+          metadata: {
+            metric: "failure_rate",
+            severity: "high"
+          }
+        }
+      ]
     });
     return;
   }
