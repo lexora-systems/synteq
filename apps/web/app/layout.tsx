@@ -26,14 +26,13 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${bodyFont.variable} ${headingFont.variable}`}>
         {children}
+        <Script
+          defer
+          src="https://static.cloudflareinsights.com/beacon.min.js"
+          data-cf-beacon='{"token":"b5ab86f723ca4aeeab42435236c5e4a"}'
+          strategy="afterInteractive"
+        />
         <ThemeModeSwitch />
-        {process.env.NODE_ENV === "production" ? (
-          <Script
-            src="https://static.cloudflareinsights.com/beacon.min.js"
-            strategy="afterInteractive"
-            data-cf-beacon='{"token":"b5ab86f723ca4aeeab42435236c5e4a"}'
-          />
-        ) : null}
       </body>
     </html>
   );
