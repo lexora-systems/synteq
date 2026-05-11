@@ -4,6 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 import type {
   GenericWorkflowSourceSetup,
   GenericWorkflowSourceType,
+  ManualSilentCheckResponse,
   WorkflowSourceTestEventResponse,
   WorkflowSourceTestStatus
 } from "../lib/api";
@@ -17,6 +18,7 @@ export type GenericWorkflowSourceOnboardingState = {
   message: string | null;
   latest_source: CreatedWorkflowSourceSetup | null;
   last_test: WorkflowSourceTestEventResponse | null;
+  last_silent_check: ManualSilentCheckResponse | null;
 };
 
 type GenericWorkflowSourceAction = (
@@ -41,6 +43,18 @@ function sourceTypeLabel(value: string) {
   return SOURCE_TYPE_OPTIONS.find((option) => option.value === value)?.label ?? value;
 }
 
+function silentCheckResultClasses(status: ManualSilentCheckResponse["status"]) {
+  if (status === "ok") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  }
+
+  if (status === "warning") {
+    return "border-amber-200 bg-amber-50 text-amber-900";
+  }
+
+  return "border-rose-200 bg-rose-50 text-rose-900";
+}
+
 export function GenericWorkflowSourceOnboarding({
   canManage,
   action
@@ -52,7 +66,8 @@ export function GenericWorkflowSourceOnboarding({
     ok: true,
     message: null,
     latest_source: null,
-    last_test: null
+    last_test: null,
+    last_silent_check: null
   });
   const [copiedTarget, setCopiedTarget] = useState<string | null>(null);
   const latestSource = state.latest_source;
@@ -160,7 +175,8 @@ export function GenericWorkflowSourceOnboarding({
       >
         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Validation mode</p>
         <p className="mt-2">
-          Manual test events help validate that a source is connected. They are not scheduled synthetic monitors.
+          Run silent check validates source readiness without writing operational records. Manual test events validate the real ingestion path
+          and are not scheduled synthetic monitors.
         </p>
         <p className="mt-1">
           Failed or timed-out test events use the real ingestion path and may create incidents or alert behavior. Use them intentionally
@@ -253,6 +269,17 @@ export function GenericWorkflowSourceOnboarding({
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
+            <form action={formAction}>
+              <input type="hidden" name="intent" value="silent_check" />
+              <input type="hidden" name="source_id" value={latestSource.id} />
+              <button
+                className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 disabled:opacity-70"
+                disabled={pending}
+                data-testid="generic-source-silent-check-submit"
+              >
+                {pending ? "Running silent check..." : "Run silent check"}
+              </button>
+            </form>
             {TEST_STATUSES.map((status) => (
               <form key={status.value} action={formAction}>
                 <input type="hidden" name="intent" value="test" />
@@ -267,6 +294,31 @@ export function GenericWorkflowSourceOnboarding({
               </form>
             ))}
           </div>
+
+          <p className="mt-2 text-xs text-slate-600">
+            Run silent check is dry-run validation only. Send test event uses the live ingestion lifecycle and may create operational signals.
+          </p>
+
+          {state.last_silent_check ? (
+            <div
+              className={`mt-4 rounded-lg border px-3 py-2 text-sm ${silentCheckResultClasses(state.last_silent_check.status)}`}
+              data-testid="generic-source-silent-check-result"
+            >
+              <p className="font-semibold">
+                Silent check {state.last_silent_check.status}. No operational writes were performed.
+              </p>
+              <p className="mt-1 text-xs">
+                Checked at {new Date(state.last_silent_check.checkedAt).toLocaleString()} in {state.last_silent_check.mode} mode.
+              </p>
+              <ul className="mt-2 grid gap-1 text-xs">
+                {state.last_silent_check.checks.map((check) => (
+                  <li key={check.key}>
+                    <strong>{check.status}</strong> {check.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           {state.last_test ? (
             <div className="mt-4 rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-700" data-testid="generic-source-test-result">

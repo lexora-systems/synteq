@@ -99,6 +99,40 @@ test("control plane lifecycle surfaces are usable", async ({ page }) => {
   await expect(page.getByTestId("alerts-feedback")).toBeVisible();
 });
 
+test("generic workflow source onboarding separates silent checks from mutative test events", async ({ page, request }) => {
+  await setSession(page);
+
+  await page.goto("/sources");
+  await expect(page.getByTestId("generic-source-silent-check-submit")).toHaveCount(0);
+  await expect(page.getByTestId("synthetic-readiness-note")).toContainText(
+    "Run silent check validates source readiness without writing operational records"
+  );
+
+  await page.getByTestId("generic-source-name-input").fill("Customer Onboarding");
+  await page.getByTestId("generic-source-type-select").selectOption("n8n");
+  await page.getByTestId("generic-source-environment-input").fill("production");
+  await page.getByTestId("generic-source-create-submit").click();
+
+  await expect(page.getByTestId("generic-source-setup-card")).toBeVisible();
+  await expect(page.getByTestId("generic-source-silent-check-submit")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send test failure event" })).toBeVisible();
+  await expect(page.getByText("Run silent check is dry-run validation only.")).toBeVisible();
+  await expect(page.getByText("Send test event uses the live ingestion lifecycle")).toBeVisible();
+
+  await page.getByTestId("generic-source-silent-check-submit").click();
+  const result = page.getByTestId("generic-source-silent-check-result");
+  await expect(result).toContainText("Silent check ok");
+  await expect(result).toContainText("No operational writes were performed");
+  await expect(result).not.toContainText("synteq_mock_workflow_key");
+  await expect(result).not.toContainText("raw_payload");
+
+  await setMockApiBehavior(request, { fail_next_silent_check_unsupported: true });
+  await page.getByTestId("generic-source-silent-check-submit").click();
+  await expect(page.getByTestId("generic-workflow-source-feedback")).toContainText(
+    "Silent checks are only available for generic workflow sources."
+  );
+});
+
 test("control plane index stays usable when setup status fails to load", async ({ page, request }) => {
   await setSession(page);
   await setMockApiBehavior(request, { fail_next_control_plane_sources_get: true });

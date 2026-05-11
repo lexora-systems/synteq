@@ -34,6 +34,11 @@ import {
   isGenericWorkflowSourceType,
   type GenericWorkflowSourceTypeValue
 } from "../services/workflow-event-ingestion-service.js";
+import {
+  ManualSilentCheckNotFoundError,
+  ManualSilentCheckUnsupportedSourceError,
+  runManualSilentCheck
+} from "../services/manual-silent-check-service.js";
 
 const idParamSchema = z.object({
   id: z.string().min(1)
@@ -1542,6 +1547,49 @@ const controlPlaneRoutes: FastifyPluginAsync = async (app) => {
         policy_id: existing.id,
         request_id: request.id
       };
+    }
+  );
+
+  app.post(
+    "/control-plane/sources/:id/silent-check",
+    {
+      preHandler: [app.requireDashboardAuth, app.requirePermissions([Permission.WORKFLOWS_WRITE])]
+    },
+    async (request, reply) => {
+      const tenantId = request.authUser?.tenant_id;
+      if (!tenantId) {
+        return reply.code(401).send({ error: "Unauthorized" });
+      }
+
+      const params = parseWithSchema(idParamSchema, request.params);
+
+      try {
+        const result = await runManualSilentCheck({
+          tenantId,
+          sourceId: params.id
+        });
+
+        return reply.code(200).send({
+          ...result,
+          request_id: request.id
+        });
+      } catch (error) {
+        if (error instanceof ManualSilentCheckUnsupportedSourceError) {
+          return reply.code(400).send({
+            error: error.message,
+            request_id: request.id
+          });
+        }
+
+        if (error instanceof ManualSilentCheckNotFoundError) {
+          return reply.code(404).send({
+            error: error.message,
+            request_id: request.id
+          });
+        }
+
+        throw error;
+      }
     }
   );
 

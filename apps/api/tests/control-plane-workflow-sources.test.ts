@@ -15,6 +15,9 @@ const resolveTenantAccessMock = vi.fn();
 const startTrialIfEligibleMock = vi.fn();
 const ingestOperationalEventsMock = vi.fn();
 const handleGenericWorkflowEventDetectionMock = vi.fn();
+const dispatchPendingAlertEventsMock = vi.fn();
+const enqueueExecutionEventMock = vi.fn();
+const enqueueHeartbeatEventMock = vi.fn();
 
 vi.mock("../src/config.js", () => ({
   config: {
@@ -61,6 +64,16 @@ vi.mock("../src/services/generic-workflow-incident-service.js", () => ({
   handleGenericWorkflowEventDetection: handleGenericWorkflowEventDetectionMock
 }));
 
+vi.mock("../src/services/alert-service.js", () => ({
+  claimPendingAlertEvent: vi.fn(),
+  dispatchPendingAlertEvents: dispatchPendingAlertEventsMock
+}));
+
+vi.mock("../src/services/ingest-queue-service.js", () => ({
+  enqueueExecutionEvent: enqueueExecutionEventMock,
+  enqueueHeartbeatEvent: enqueueHeartbeatEventMock
+}));
+
 vi.mock("../src/lib/prisma.js", () => ({
   prisma: {
     workflow: {
@@ -88,6 +101,8 @@ vi.mock("../src/lib/prisma.js", () => ({
 
 describe("control plane generic workflow sources", () => {
   let app: ReturnType<typeof Fastify>;
+  let authMode: "ok" | "missing_tenant" | "unauthorized";
+  let permissionAllowed: boolean;
 
   beforeEach(async () => {
     workflowCreateMock.mockReset();
@@ -104,6 +119,12 @@ describe("control plane generic workflow sources", () => {
     startTrialIfEligibleMock.mockReset();
     ingestOperationalEventsMock.mockReset();
     handleGenericWorkflowEventDetectionMock.mockReset();
+    dispatchPendingAlertEventsMock.mockReset();
+    enqueueExecutionEventMock.mockReset();
+    enqueueHeartbeatEventMock.mockReset();
+
+    authMode = "ok";
+    permissionAllowed = true;
 
     resolveTenantAccessMock.mockResolvedValue({
       tenantId: "tenant-A",
@@ -165,10 +186,21 @@ describe("control plane generic workflow sources", () => {
     });
     workflowFindFirstMock.mockResolvedValue({
       id: "wf-source-1",
+      tenant_id: "tenant-A",
       display_name: "Customer Onboarding",
       slug: "n8n-customer-onboarding",
       source_type: "n8n",
-      environment: "production"
+      environment: "production",
+      is_active: true,
+      versions: [
+        {
+          config_json: {
+            source: "generic_workflow_source",
+            source_type: "n8n",
+            source_key: "n8n-customer-onboarding"
+          }
+        }
+      ]
     });
     gitHubIntegrationFindFirstMock.mockResolvedValue(null);
     ingestOperationalEventsMock.mockResolvedValue({
@@ -189,12 +221,16 @@ describe("control plane generic workflow sources", () => {
     });
 
     app = Fastify();
-    app.decorate("requireDashboardAuth", async (request: any) => {
+    app.decorate("requireDashboardAuth", async (request: any, reply: any) => {
+      if (authMode === "unauthorized") {
+        return reply.code(401).send({ error: "Unauthorized" });
+      }
+
       request.authUser = {
         user_id: "owner-1",
         email: "owner@synteq.local",
         full_name: "Owner",
-        tenant_id: "tenant-A",
+        tenant_id: authMode === "missing_tenant" ? undefined : "tenant-A",
         role: "owner",
         email_verified_at: null
       };
@@ -202,7 +238,13 @@ describe("control plane generic workflow sources", () => {
     app.decorate("requireRoles", () => async () => undefined);
     app.decorate("requireIngestionKey", async () => undefined);
     app.decorate("requireIngestionSignature", async () => undefined);
-    app.decorate("requirePermissions", () => async () => undefined);
+    app.decorate("requirePermissions", () => {
+      return async (_request: any, reply: any) => {
+        if (!permissionAllowed) {
+          return reply.code(403).send({ error: "Forbidden", code: "FORBIDDEN_PERMISSION" });
+        }
+      };
+    });
     app.setErrorHandler((error: Error, _request: unknown, reply: any) => {
       if (error.name === "ValidationError") {
         return reply.code(400).send({ error: "Bad Request", message: error.message });
@@ -273,6 +315,277 @@ describe("control plane generic workflow sources", () => {
       tenantId: "tenant-A",
       source: "auto_workflow_connect"
     });
+  });
+
+  it("requires dashboard auth for manual silent checks", async () => {
+    authMode = "unauthorized";
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/control-plane/sources/wf-source-1/silent-check"
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(workflowFindFirstMock).not.toHaveBeenCalled();
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+  });
+
+  it("requires workflow write permission for manual silent checks", async () => {
+    permissionAllowed = false;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/control-plane/sources/wf-source-1/silent-check"
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(workflowFindFirstMock).not.toHaveBeenCalled();
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+  });
+
+  it("runs a read-only manual silent check for a generic workflow source", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-11T08:15:00.000Z"));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/control-plane/sources/wf-source-1/silent-check"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      sourceId: "wf-source-1",
+      status: "ok",
+      mode: "silent",
+      writesPerformed: false,
+      checkedAt: "2026-05-11T08:15:00.000Z",
+      checks: expect.arrayContaining([
+        expect.objectContaining({
+          key: "source_access",
+          status: "ok"
+        }),
+        expect.objectContaining({
+          key: "source_compatibility",
+          status: "ok"
+        })
+      ])
+    });
+    expect(workflowFindFirstMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: "wf-source-1",
+          tenant_id: "tenant-A"
+        }
+      })
+    );
+    expect(workflowCreateMock).not.toHaveBeenCalled();
+    expect(workflowVersionCreateMock).not.toHaveBeenCalled();
+    expect(apiKeyCreateMock).not.toHaveBeenCalled();
+    expect(prismaTransactionMock).not.toHaveBeenCalled();
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+    expect(handleGenericWorkflowEventDetectionMock).not.toHaveBeenCalled();
+    expect(dispatchPendingAlertEventsMock).not.toHaveBeenCalled();
+    expect(enqueueExecutionEventMock).not.toHaveBeenCalled();
+    expect(enqueueHeartbeatEventMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["webhook", "make", "zapier"] as const)("supports %s workflow sources for manual silent checks", async (sourceType) => {
+    workflowFindFirstMock.mockResolvedValueOnce({
+      id: `wf-${sourceType}`,
+      tenant_id: "tenant-A",
+      display_name: `${sourceType} Source`,
+      slug: `${sourceType}-source`,
+      source_type: sourceType,
+      environment: "production",
+      is_active: true,
+      versions: [
+        {
+          config_json: {
+            source: "generic_workflow_source",
+            source_type: sourceType,
+            source_key: `${sourceType}-source`
+          }
+        }
+      ]
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/control-plane/sources/wf-${sourceType}/silent-check`
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      sourceId: `wf-${sourceType}`,
+      status: "ok",
+      mode: "silent",
+      writesPerformed: false
+    });
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+    expect(handleGenericWorkflowEventDetectionMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a failed silent readiness state for inactive generic sources without mutating state", async () => {
+    workflowFindFirstMock.mockResolvedValueOnce({
+      id: "wf-source-1",
+      tenant_id: "tenant-A",
+      display_name: "Customer Onboarding",
+      slug: "n8n-customer-onboarding",
+      source_type: "n8n",
+      environment: "production",
+      is_active: false,
+      versions: [
+        {
+          config_json: {
+            source: "generic_workflow_source",
+            source_type: "n8n",
+            source_key: "n8n-customer-onboarding"
+          }
+        }
+      ]
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/control-plane/sources/wf-source-1/silent-check"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      sourceId: "wf-source-1",
+      status: "failed",
+      mode: "silent",
+      writesPerformed: false,
+      checks: expect.arrayContaining([
+        expect.objectContaining({
+          key: "source_activation",
+          status: "failed"
+        })
+      ])
+    });
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+    expect(handleGenericWorkflowEventDetectionMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsupported workflow source types for manual silent checks", async () => {
+    workflowFindFirstMock.mockResolvedValueOnce({
+      id: "wf-github",
+      tenant_id: "tenant-A",
+      display_name: "GitHub Mirror",
+      slug: "github-mirror",
+      source_type: "github",
+      environment: "production",
+      is_active: true,
+      versions: []
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/control-plane/sources/wf-github/silent-check"
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Silent checks are only supported for generic workflow sources"
+    });
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+    expect(dispatchPendingAlertEventsMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects GitHub source ids for manual silent checks", async () => {
+    workflowFindFirstMock.mockResolvedValueOnce(null);
+    gitHubIntegrationFindFirstMock.mockResolvedValueOnce({
+      id: "github-1"
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/control-plane/sources/github-1/silent-check"
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "GitHub sources cannot use generic workflow silent checks"
+    });
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+  });
+
+  it("enforces tenant scope for manual silent checks", async () => {
+    workflowFindFirstMock.mockResolvedValueOnce(null);
+    gitHubIntegrationFindFirstMock.mockResolvedValueOnce(null);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/control-plane/sources/wf-other-tenant/silent-check"
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({
+      error: "Workflow source not found"
+    });
+    expect(workflowFindFirstMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: "wf-other-tenant",
+          tenant_id: "tenant-A"
+        }
+      })
+    );
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps manual silent check responses sanitized even when stored setup config has unsafe keys", async () => {
+    workflowFindFirstMock.mockResolvedValueOnce({
+      id: "wf-source-1",
+      tenant_id: "tenant-A",
+      display_name: "Customer Onboarding",
+      slug: "n8n-customer-onboarding",
+      source_type: "n8n",
+      environment: "production",
+      is_active: true,
+      versions: [
+        {
+          config_json: {
+            source: "generic_workflow_source",
+            source_type: "n8n",
+            source_key: "n8n-customer-onboarding",
+            webhook_secret: "super-secret-should-not-render",
+            nested: {
+              access_token: "token-should-not-render",
+              raw_payload: {
+                customer: "hidden"
+              }
+            }
+          }
+        }
+      ]
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/control-plane/sources/wf-source-1/silent-check"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      sourceId: "wf-source-1",
+      status: "warning",
+      mode: "silent",
+      writesPerformed: false,
+      checks: expect.arrayContaining([
+        expect.objectContaining({
+          key: "configuration_integrity",
+          status: "warning"
+        })
+      ])
+    });
+    expect(response.body).not.toContain("super-secret-should-not-render");
+    expect(response.body).not.toContain("token-should-not-render");
+    expect(response.body).not.toContain("raw_payload");
+    expect(response.body).not.toContain("webhook_secret");
+    expect(response.body).not.toContain("access_token");
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+    expect(handleGenericWorkflowEventDetectionMock).not.toHaveBeenCalled();
   });
 
   it("sends a valid synthetic workflow test event through operational ingestion", async () => {

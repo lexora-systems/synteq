@@ -5,20 +5,20 @@ import { resolveActivationState } from "../lib/activation";
 
 const capabilityItems = [
   {
-    title: "Continuously analyzes your systems",
-    description: "Tracks execution signals across CI/CD, workflows, automations, and deployments to maintain a real-time view of system behavior."
+    title: "Continuously monitors workflow activity",
+    description: "Tracks execution signals across automations, webhooks, deployments, and workflow systems to maintain operational visibility across connected sources."
   },
   {
-    title: "Detects abnormal behavior early",
-    description: "Identifies drift in failures, latency, retries, and cost patterns before instability becomes a production issue."
+    title: "Detects abnormal operational behavior",
+    description: "Identifies failures, retry patterns, latency spikes, missing heartbeats, duplicate events, and workflow drift before instability escalates."
   },
   {
-    title: "Simulates risk before it happens",
-    description: "Run controlled scenarios to understand how your system behaves under stress and validate response readiness."
+    title: "Validates workflow readiness safely",
+    description: "Run silent checks for supported workflow sources without creating incidents, alerts, operational events, or reliability noise."
   },
   {
-    title: "Surfaces incidents before escalation",
-    description: "Transforms weak signals into actionable incidents with clear severity, risk context, and response direction."
+    title: "Surfaces incidents with context",
+    description: "Transforms weak operational signals into actionable incidents with severity, timeline context, and investigation visibility."
   }
 ];
 
@@ -286,10 +286,10 @@ export default async function PublicLandingPage() {
       >
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">What Synteq Does</p>
-            <h2 className="mt-2 text-3xl font-semibold text-slate-50 sm:text-4xl">Always-on detection and prevention for operational risk</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">WHAT SYNTEQ DOES</p>
+            <h2 className="mt-2 text-3xl font-semibold text-slate-50 sm:text-4xl">Operational intelligence for workflow reliability</h2>
             <p className="mt-3 text-sm leading-6 text-slate-300">
-              Synteq continuously analyzes execution signals across your systems, detects abnormal behavior in real time, and turns weak signals into actionable incidents.
+              Synteq monitors execution signals across workflows, automations, webhooks, and connected systems, then turns abnormal behavior into actionable incidents and reliability context.
             </p>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-2">

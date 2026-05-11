@@ -5,6 +5,7 @@ import {
   createGenericWorkflowSource,
   fetchConnectedSources,
   fetchMe,
+  runGenericWorkflowSourceSilentCheck,
   sendGenericWorkflowSourceTestEvent,
   type ConnectedSourceRow,
   type GenericWorkflowSourceType,
@@ -126,6 +127,14 @@ function toWorkflowSourceFailureMessage(error: unknown): string {
     return "Owner/admin role is required to create workflow sources.";
   }
 
+  if (error.message.includes("generic workflow silent checks") || error.message.includes("generic workflow sources")) {
+    return "Silent checks are only available for generic workflow sources.";
+  }
+
+  if (error.message.includes("404")) {
+    return "Workflow source was not found for this workspace.";
+  }
+
   return "Unable to process workflow source action right now.";
 }
 
@@ -157,7 +166,8 @@ async function manageGenericWorkflowSourceAction(
           ...state,
           ok: false,
           message: "Source name is required.",
-          last_test: null
+          last_test: null,
+          last_silent_check: null
         };
       }
 
@@ -166,7 +176,8 @@ async function manageGenericWorkflowSourceAction(
           ...state,
           ok: false,
           message: "Choose a supported workflow source type.",
-          last_test: null
+          last_test: null,
+          last_silent_check: null
         };
       }
 
@@ -184,7 +195,8 @@ async function manageGenericWorkflowSourceAction(
           ...created.workflow_source,
           ingestion_key: created.ingestion_key
         },
-        last_test: null
+        last_test: null,
+        last_silent_check: null
       };
     }
 
@@ -197,7 +209,8 @@ async function manageGenericWorkflowSourceAction(
           ...state,
           ok: false,
           message: "Choose a valid test event.",
-          last_test: null
+          last_test: null,
+          last_silent_check: null
         };
       }
 
@@ -208,7 +221,36 @@ async function manageGenericWorkflowSourceAction(
         ...state,
         ok: result.ok,
         message: result.message,
-        last_test: result
+        last_test: result,
+        last_silent_check: null
+      };
+    }
+
+    if (intent === "silent_check") {
+      const sourceId = String(formData.get("source_id") ?? "").trim();
+
+      if (!sourceId) {
+        return {
+          ...state,
+          ok: false,
+          message: "Choose a workflow source before running a silent check.",
+          last_test: null,
+          last_silent_check: null
+        };
+      }
+
+      const result = await runGenericWorkflowSourceSilentCheck(token, sourceId);
+
+      return {
+        ...state,
+        ok: result.status !== "failed",
+        message:
+          result.status === "ok"
+            ? "Silent check passed. No operational writes were performed."
+            : result.status === "warning"
+              ? "Silent check completed with warnings. No operational writes were performed."
+              : "Silent check failed. No operational writes were performed.",
+        last_silent_check: result
       };
     }
 
@@ -216,14 +258,16 @@ async function manageGenericWorkflowSourceAction(
       ...state,
       ok: false,
       message: "Unknown workflow source action.",
-      last_test: null
+      last_test: null,
+      last_silent_check: null
     };
   } catch (error) {
     return {
       ...state,
       ok: false,
       message: toWorkflowSourceFailureMessage(error),
-      last_test: null
+      last_test: null,
+      last_silent_check: null
     };
   }
 }

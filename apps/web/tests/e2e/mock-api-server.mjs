@@ -310,6 +310,7 @@ function attentionGroupsPayload(activated) {
 
 let apiKeyCounter = 1;
 let githubCounter = 1;
+let workflowSourceCounter = 1;
 let alertChannelCounter = 1;
 let alertPolicyCounter = 1;
 let failNextGitHubIntegrationsList = false;
@@ -317,9 +318,11 @@ let failNextGitHubRotate = false;
 let omitNextGitHubRotateSecret = false;
 let failNextGitHubDeactivateAfterMutation = false;
 let failNextControlPlaneSources = false;
+let failNextSilentCheckUnsupported = false;
 
 const API_KEYS = [];
 
+const WORKFLOW_SOURCES = [];
 const GITHUB_INTEGRATIONS = [];
 const ALERT_CHANNELS = [];
 const ALERT_POLICIES = [];
@@ -327,6 +330,7 @@ const ALERT_POLICIES = [];
 function resetState() {
   apiKeyCounter = 1;
   githubCounter = 1;
+  workflowSourceCounter = 1;
   alertChannelCounter = 1;
   alertPolicyCounter = 1;
   failNextGitHubIntegrationsList = false;
@@ -334,6 +338,7 @@ function resetState() {
   omitNextGitHubRotateSecret = false;
   failNextGitHubDeactivateAfterMutation = false;
   failNextControlPlaneSources = false;
+  failNextSilentCheckUnsupported = false;
 
   API_KEYS.length = 0;
   API_KEYS.push({
@@ -344,6 +349,7 @@ function resetState() {
     last_used_at: null,
     revoked_at: null
   });
+  WORKFLOW_SOURCES.length = 0;
   GITHUB_INTEGRATIONS.length = 0;
   ALERT_CHANNELS.length = 0;
   ALERT_POLICIES.length = 0;
@@ -354,6 +360,21 @@ resetState();
 function currentWebhookUrl(req) {
   const host = req.headers.host ?? `127.0.0.1:${PORT}`;
   return `http://${host}/v1/integrations/github/webhook`;
+}
+
+function currentWorkflowEventIngestUrl(req) {
+  const host = req.headers.host ?? `127.0.0.1:${PORT}`;
+  return `http://${host}/v1/ingest/workflow-event`;
+}
+
+function slugify(value) {
+  const slug = String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
+  return slug || "workflow-source";
 }
 
 const server = http.createServer(async (req, res) => {
@@ -388,13 +409,17 @@ const server = http.createServer(async (req, res) => {
     if (typeof body.fail_next_control_plane_sources_get === "boolean") {
       failNextControlPlaneSources = body.fail_next_control_plane_sources_get;
     }
+    if (typeof body.fail_next_silent_check_unsupported === "boolean") {
+      failNextSilentCheckUnsupported = body.fail_next_silent_check_unsupported;
+    }
     sendJson(res, 200, {
       ok: true,
       fail_next_github_integrations_get: failNextGitHubIntegrationsList,
       fail_next_github_rotate_post: failNextGitHubRotate,
       omit_next_github_rotate_secret: omitNextGitHubRotateSecret,
       fail_next_github_deactivate_after_mutation: failNextGitHubDeactivateAfterMutation,
-      fail_next_control_plane_sources_get: failNextControlPlaneSources
+      fail_next_control_plane_sources_get: failNextControlPlaneSources,
+      fail_next_silent_check_unsupported: failNextSilentCheckUnsupported
     });
     return;
   }
@@ -1009,6 +1034,149 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "POST" && pathname === "/v1/control-plane/workflow-sources") {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const body = await parseJsonBody(req);
+    const sourceType = typeof body.source_type === "string" ? body.source_type : "webhook";
+    const displayName = typeof body.display_name === "string" && body.display_name.trim() ? body.display_name.trim() : "Workflow Source";
+    const environment = typeof body.environment === "string" && body.environment.trim() ? body.environment.trim() : "production";
+    const id = `wf_generic_${workflowSourceCounter++}`;
+    const sourceKey = `${sourceType}-${slugify(displayName)}`;
+    const createdAt = new Date().toISOString();
+    const apiKey = {
+      id: `key-${++apiKeyCounter}`,
+      name: `${displayName} workflow source`,
+      key_preview: `synteq_****${String(apiKeyCounter).padStart(6, "0")}`,
+      created_at: createdAt,
+      last_used_at: null,
+      revoked_at: null
+    };
+    const workflowSource = {
+      id,
+      display_name: displayName,
+      source_type: sourceType,
+      source_key: sourceKey,
+      environment,
+      created_at: createdAt,
+      ingest_endpoint_path: "/v1/ingest/workflow-event",
+      ingest_endpoint_url: currentWorkflowEventIngestUrl(req),
+      api_key: apiKey
+    };
+
+    API_KEYS.push(apiKey);
+    WORKFLOW_SOURCES.unshift(workflowSource);
+
+    sendJson(res, 201, {
+      workflow_source: workflowSource,
+      source_id: id,
+      source_key: sourceKey,
+      ingestion_key: `synteq_mock_workflow_key_${id}`,
+      ingest_endpoint_path: "/v1/ingest/workflow-event",
+      ingest_endpoint_url: currentWorkflowEventIngestUrl(req)
+    });
+    return;
+  }
+
+  if (req.method === "POST" && pathname.match(/^\/v1\/control-plane\/sources\/[^/]+\/silent-check$/)) {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const id = pathname.split("/")[4];
+    const source = WORKFLOW_SOURCES.find((item) => item.id === id);
+
+    if (failNextSilentCheckUnsupported) {
+      failNextSilentCheckUnsupported = false;
+      sendJson(res, 400, { error: "Silent checks are only supported for generic workflow sources" });
+      return;
+    }
+
+    if (!source) {
+      sendJson(res, id.startsWith("gh_") ? 400 : 404, {
+        error: id.startsWith("gh_") ? "GitHub sources cannot use generic workflow silent checks" : "Workflow source not found"
+      });
+      return;
+    }
+
+    sendJson(res, 200, {
+      sourceId: source.id,
+      status: "ok",
+      mode: "silent",
+      writesPerformed: false,
+      checkedAt: new Date().toISOString(),
+      checks: [
+        {
+          key: "source_access",
+          status: "ok",
+          message: "Source belongs to this workspace and is readable."
+        },
+        {
+          key: "source_activation",
+          status: "ok",
+          message: "Source is active for manual validation."
+        },
+        {
+          key: "source_compatibility",
+          status: "ok",
+          message: "Source uses the generic workflow event contract."
+        }
+      ]
+    });
+    return;
+  }
+
+  if (req.method === "POST" && pathname.match(/^\/v1\/control-plane\/sources\/[^/]+\/test-workflow-event$/)) {
+    const persona = ensureAuth(req, res);
+    if (!persona) {
+      return;
+    }
+    const id = pathname.split("/")[4];
+    const source = WORKFLOW_SOURCES.find((item) => item.id === id);
+    if (!source) {
+      sendJson(res, 404, { error: "Workflow source not found" });
+      return;
+    }
+
+    const body = await parseJsonBody(req);
+    const status = typeof body.status === "string" ? body.status : "succeeded";
+    sendJson(res, 200, {
+      ok: true,
+      message: `Synthetic ${status} workflow event sent for ${source.display_name}.`,
+      ingest: {
+        accepted: 1,
+        ingested: 1,
+        duplicates: 0,
+        skipped: 0,
+        failed: 0,
+        persisted: 1,
+        normalized_status: status,
+        source_type: source.source_type,
+        analysis_handoff: {}
+      },
+      event: {
+        source_id: source.id,
+        source_key: source.source_key,
+        workflow_id: `synteq-test-${source.source_type}`,
+        workflow_name: `Synteq Test ${source.display_name}`,
+        execution_id: `exec-${Date.now()}`,
+        status,
+        started_at: new Date().toISOString(),
+        finished_at: new Date().toISOString(),
+        duration_ms: 1000,
+        environment: source.environment,
+        metadata: {
+          synthetic: true,
+          test: true,
+          platform: source.source_type
+        }
+      }
+    });
+    return;
+  }
+
   if (req.method === "GET" && pathname === "/v1/control-plane/sources") {
     const persona = ensureAuth(req, res);
     if (!persona) {
@@ -1020,7 +1188,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const workflows =
+    const activatedWorkflows =
       persona === "activated"
         ? [
             {
@@ -1035,6 +1203,24 @@ const server = http.createServer(async (req, res) => {
             }
           ]
         : [];
+
+    const workflows = [
+      ...activatedWorkflows,
+      ...WORKFLOW_SOURCES.map((source) => ({
+        id: source.id,
+        type: "workflow",
+        name: source.display_name,
+        status: "active",
+        powers: "Generic workflow execution events",
+        details: {
+          slug: source.source_key,
+          source_type: source.source_type,
+          environment: source.environment
+        },
+        last_activity_at: null,
+        connected_at: source.created_at
+      }))
+    ];
 
     const githubSources = GITHUB_INTEGRATIONS.map((integration) => ({
       id: integration.id,

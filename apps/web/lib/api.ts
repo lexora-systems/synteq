@@ -383,6 +383,21 @@ export type WorkflowSourceTestEventResponse = {
   };
 };
 
+export type ManualSilentCheckStatus = "ok" | "warning" | "failed";
+
+export type ManualSilentCheckResponse = {
+  sourceId: string;
+  status: ManualSilentCheckStatus;
+  mode: "silent";
+  writesPerformed: false;
+  checkedAt: string;
+  checks: Array<{
+    key: string;
+    status: ManualSilentCheckStatus;
+    message: string;
+  }>;
+};
+
 export type AlertChannelRow = {
   id: string;
   name: string;
@@ -1168,5 +1183,12 @@ export async function sendGenericWorkflowSourceTestEvent(
     body: {
       status
     }
+  });
+}
+
+export async function runGenericWorkflowSourceSilentCheck(token: string, sourceId: string) {
+  return request<ManualSilentCheckResponse>(`/v1/control-plane/sources/${sourceId}/silent-check`, {
+    token,
+    method: "POST"
   });
 }
