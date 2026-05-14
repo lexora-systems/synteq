@@ -125,6 +125,10 @@ export function GenericWorkflowSourceOnboarding({
           <p className="mt-2 text-sm text-slate-600">
             Use this with any automation tool that can send HTTP requests.
           </p>
+          <p className="mt-1 text-xs text-slate-500">
+            GoHighLevel Phase 1 uses the Webhook source type with <code>provider: "gohighlevel"</code>. Send operational IDs,
+            status, and timestamps only; do not send raw contact or customer data.
+          </p>
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_160px_150px_auto]">
             <input
               name="display_name"

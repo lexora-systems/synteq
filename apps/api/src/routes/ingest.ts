@@ -22,6 +22,7 @@ import {
   assertWorkflowSourceOwnership,
   isIngestSourceOwnershipError
 } from "../services/ingest-source-ownership-service.js";
+import { normalizeGoHighLevelWebhookPayload } from "../services/gohighlevel-adapter-service.js";
 
 function getIngestionRateLimitKey(request: { apiKeyId?: string; ip: string }) {
   return request.apiKeyId ? `api_key:${request.apiKeyId}` : `ip:${request.ip}`;
@@ -194,7 +195,8 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(401).send({ error: "Unauthorized" });
       }
 
-      const body = parseWithSchema(ingestWorkflowEventSchema, request.body);
+      const adaptedBody = normalizeGoHighLevelWebhookPayload(request.body);
+      const body = parseWithSchema(ingestWorkflowEventSchema, adaptedBody);
 
       try {
         const result = await ingestWorkflowExecutionEvent(body, {

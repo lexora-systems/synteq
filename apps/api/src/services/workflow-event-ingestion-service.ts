@@ -93,6 +93,23 @@ export function isSimulationWorkflowEvent(body: { metadata?: Record<string, unkn
   return looksSynthetic(body.metadata);
 }
 
+function metadataObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function isGoHighLevelStableExecution(body: IngestWorkflowEventInput) {
+  const metadata = metadataObject(body.metadata);
+  return (
+    body.source_type === "webhook" &&
+    metadata.provider === "gohighlevel" &&
+    metadata.adapter_version === "ghl_webhook_v1" &&
+    (body.execution_id.startsWith("ghl_") || typeof metadata.delivery_id === "string")
+  );
+}
+
 export async function ingestWorkflowExecutionEvent(
   body: IngestWorkflowEventInput,
   context: {
@@ -106,6 +123,22 @@ export async function ingestWorkflowExecutionEvent(
   const occurredAt = body.timestamp ?? body.started_at ?? new Date();
   const sourceIdentity = body.source_key ?? body.source_id ?? "source";
   const source = operationalSourceForWorkflowSourceType(body.source_type);
+  const idempotencyUpstreamKey = isGoHighLevelStableExecution(body)
+    ? [
+        body.source_type,
+        sourceIdentity,
+        body.workflow_id,
+        body.execution_id,
+        normalizedStatus
+      ].join("|")
+    : workflowEventIdempotencyKey({
+        sourceType: body.source_type,
+        sourceIdentity,
+        workflowId: body.workflow_id,
+        executionId: body.execution_id,
+        status: normalizedStatus,
+        occurredAt
+      });
 
   const mapped = ingestOperationalEventsRequestSchema.parse({
     event: {
@@ -144,14 +177,7 @@ export async function ingestWorkflowExecutionEvent(
     idempotencyHints: [
       {
         namespace: "workflow_execution_event",
-        upstreamKey: workflowEventIdempotencyKey({
-          sourceType: body.source_type,
-          sourceIdentity,
-          workflowId: body.workflow_id,
-          executionId: body.execution_id,
-          status: normalizedStatus,
-          occurredAt
-        })
+        upstreamKey: idempotencyUpstreamKey
       }
     ],
     sourceOwner: context.sourceOwner

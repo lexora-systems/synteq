@@ -342,6 +342,51 @@ describe("reliability windows service", () => {
     });
   });
 
+  it("includes GoHighLevel webhook provider metadata in generic workflow reliability windows", async () => {
+    const result = await readReliability([
+      event({
+        id: "evt-ghl-success",
+        source: "webhook",
+        event_type: "workflow_execution_succeeded",
+        system: "webhook:ghl-workflow-1",
+        metadata_json: {
+          provider: "webhook",
+          source_type: "webhook",
+          workflow_id: "ghl-workflow-1",
+          source_key: "webhook-ghl-production",
+          status: "succeeded",
+          metadata: {
+            provider: "gohighlevel",
+            adapter_version: "ghl_webhook_v1"
+          }
+        }
+      }),
+      event({
+        id: "evt-ghl-timeout",
+        source: "webhook",
+        event_type: "workflow_execution_timed_out",
+        system: "webhook:ghl-workflow-1",
+        metadata_json: {
+          provider: "webhook",
+          source_type: "webhook",
+          workflow_id: "ghl-workflow-1",
+          source_key: "webhook-ghl-production",
+          status: "timed_out",
+          metadata: {
+            provider: "gohighlevel",
+            adapter_version: "ghl_webhook_v1"
+          }
+        }
+      })
+    ]);
+
+    expect(result.windows.find((window) => window.label === "1h")).toMatchObject({
+      total: 2,
+      succeeded: 1,
+      timedOut: 1
+    });
+  });
+
   it("does not return raw metadata or sensitive operational payload fields", async () => {
     const result = await readReliability([
       event({

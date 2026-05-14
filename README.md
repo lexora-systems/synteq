@@ -291,6 +291,19 @@ Example generic workflow event:
 
 For failed or timed-out generic workflow events, Synteq can open or refresh incidents. A later `succeeded` event for the same source/workflow can resolve matching active generic workflow incidents.
 
+GoHighLevel Phase 1 uses the generic `webhook` source type. Native GHL webhook payloads must include an explicit
+`provider: "gohighlevel"` marker or `metadata.provider: "gohighlevel"` so Synteq can normalize them safely. Send only
+operational IDs, status, and timestamps; do not send raw contact/customer payloads, notes, email addresses, phone
+numbers, custom field values, headers, tokens, or secrets.
+
+Manual GoHighLevel Phase 1 smoke test:
+
+1. Create a generic `webhook` workflow source and copy its `X-Synteq-Key` value.
+2. Send a representative GHL success payload with `provider: "gohighlevel"` and operational IDs only.
+3. Send a representative failed payload, then resend the same failed payload to confirm duplicate handling.
+4. Send a succeeded payload for the same source and workflow to confirm the active incident resolves.
+5. Verify operational events, incident open/refresh/resolve behavior, reliability-window counts, and that metadata and incident details contain no contact name, email, phone, notes, raw payload, headers, tokens, API keys, or secrets.
+
 ## Simulation and Reliability Tools
 
 Reliability Scan:

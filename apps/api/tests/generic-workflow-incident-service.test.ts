@@ -351,6 +351,55 @@ describe("generic workflow incident detection", () => {
     expect(state.events.map((event) => event.event_type)).not.toContain("BRIDGE_RESOLVED");
   });
 
+  it("opens and resolves GoHighLevel generic webhook incidents without special source handling", async () => {
+    await detect({
+      normalizedStatus: "failed",
+      body: {
+        source_type: "webhook",
+        source_key: "webhook-ghl-production",
+        workflow_id: "ghl-workflow-1",
+        workflow_name: "Lead Nurture",
+        execution_id: "ghl-failed-1",
+        metadata: {
+          provider: "gohighlevel",
+          adapter_version: "ghl_webhook_v1",
+          object_type: "opportunity",
+          object_id: "opp-1"
+        }
+      }
+    });
+    const incidentId = state.incidents[0].id;
+
+    const recovery = await detect({
+      normalizedStatus: "succeeded",
+      body: {
+        source_type: "webhook",
+        source_key: "webhook-ghl-production",
+        workflow_id: "ghl-workflow-1",
+        workflow_name: "Lead Nurture",
+        execution_id: "ghl-recovered-1",
+        status: "succeeded",
+        metadata: {
+          provider: "gohighlevel",
+          adapter_version: "ghl_webhook_v1",
+          object_type: "opportunity",
+          object_id: "opp-1"
+        }
+      }
+    });
+
+    expect(recovery).toMatchObject({
+      action: "incident_resolved",
+      incidentId
+    });
+    expect(state.incidents).toHaveLength(1);
+    expect(state.incidents[0]).toMatchObject({
+      id: incidentId,
+      status: "resolved"
+    });
+    expect(JSON.stringify(state.incidents[0].details_json)).toContain("gohighlevel");
+  });
+
   it("reuses an acknowledged incident using the existing bridge refresh lifecycle", async () => {
     await detect({
       normalizedStatus: "failed"

@@ -462,6 +462,259 @@ describe("ingest events api", () => {
     });
   });
 
+  it("accepts explicit GoHighLevel provider payloads through the existing workflow ingestion path", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/ingest/workflow-event",
+      headers: {
+        "x-synteq-key": "key-tenant-a"
+      },
+      payload: {
+        provider: "gohighlevel",
+        source_key: "webhook-ghl-production",
+        eventType: "WorkflowCompleted",
+        workflowId: "ghl-workflow-1",
+        workflowName: "Lead Nurture",
+        executionId: "ghl-exec-1",
+        status: "completed",
+        timestamp: "2026-05-14T09:58:00.000Z",
+        locationId: "loc-1",
+        contact: {
+          id: "contact-1",
+          name: "Ada Lovelace",
+          email: "ada@example.invalid",
+          phone: "+1 555 111 2222"
+        },
+        notes: "private note"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      normalized_status: "succeeded",
+      source_type: "webhook"
+    });
+
+    expect(ingestOperationalEventsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        events: [
+          expect.objectContaining({
+            source: "webhook",
+            event_type: "workflow_execution_succeeded",
+            service: "Lead Nurture",
+            system: "webhook:ghl-workflow-1",
+            correlation_key: "webhook:ghl-workflow-1:ghl-exec-1",
+            metadata: expect.objectContaining({
+              event_kind: "workflow_execution",
+              provider: "webhook",
+              source_type: "webhook",
+              workflow_id: "ghl-workflow-1",
+              execution_id: "ghl-exec-1",
+              metadata: expect.objectContaining({
+                provider: "gohighlevel",
+                adapter_version: "ghl_webhook_v1",
+                ghl_event_type: "WorkflowCompleted",
+                location_id: "loc-1"
+              })
+            })
+          })
+        ]
+      }),
+      expect.objectContaining({
+        tenantId: "tenant-A",
+        sourceOwner: expect.objectContaining({
+          kind: "api_key"
+        }),
+        idempotencyHints: [
+          expect.objectContaining({
+            namespace: "workflow_execution_event",
+            upstreamKey: "webhook|webhook-ghl-production|ghl-workflow-1|ghl-exec-1|succeeded|2026-05-14T09:58:00.000Z"
+          })
+        ]
+      })
+    );
+
+    const [mapped] = ingestOperationalEventsMock.mock.calls.at(-1) as [
+      { events: Array<{ metadata: Record<string, unknown> }> },
+      unknown
+    ];
+    const serialized = JSON.stringify(mapped);
+    expect(serialized).not.toContain("ada@example.invalid");
+    expect(serialized).not.toContain("+1 555");
+    expect(serialized).not.toContain("Ada Lovelace");
+    expect(serialized).not.toContain("private note");
+
+    expect(handleGenericWorkflowEventDetectionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({
+          metadata: expect.objectContaining({
+            provider: "gohighlevel",
+            adapter_version: "ghl_webhook_v1",
+            ghl_event_type: "WorkflowCompleted",
+            location_id: "loc-1"
+          })
+        }),
+        normalizedStatus: "succeeded"
+      })
+    );
+    const [detectionContext] = handleGenericWorkflowEventDetectionMock.mock.calls.at(-1) as [
+      { body: Record<string, unknown> }
+    ];
+    const detectionSerialized = JSON.stringify(detectionContext.body);
+    expect(detectionSerialized).not.toContain("ada@example.invalid");
+    expect(detectionSerialized).not.toContain("+1 555");
+    expect(detectionSerialized).not.toContain("Ada Lovelace");
+    expect(detectionSerialized).not.toContain("private note");
+  });
+
+  it("rejects GoHighLevel workflow ingestion without the Synteq ingestion key", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/ingest/workflow-event",
+      payload: {
+        provider: "gohighlevel",
+        source_key: "webhook-ghl-production",
+        eventType: "WorkflowCompleted",
+        workflowId: "ghl-workflow-1",
+        status: "completed"
+      }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(ingestOperationalEventsMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps GoHighLevel duplicate delivery idempotency stable", async () => {
+    const seen = new Set<string>();
+    ingestOperationalEventsMock.mockImplementationOnce(async (_body: unknown, context: { idempotencyHints?: Array<{ upstreamKey?: string }> }) => {
+      const key = context.idempotencyHints?.[0]?.upstreamKey ?? "";
+      seen.add(key);
+      return {
+        accepted: 1,
+        ingested: 1,
+        duplicates: 0,
+        skipped: 0,
+        failed: 0,
+        persisted: 1,
+        analysis_handoff: {
+          mode: "operational_events_table",
+          queued: 1,
+          next_stage: "pending_worker"
+        }
+      };
+    });
+    ingestOperationalEventsMock.mockImplementationOnce(async (_body: unknown, context: { idempotencyHints?: Array<{ upstreamKey?: string }> }) => {
+      const key = context.idempotencyHints?.[0]?.upstreamKey ?? "";
+      expect(seen.has(key)).toBe(true);
+      return {
+        accepted: 1,
+        ingested: 0,
+        duplicates: 1,
+        skipped: 0,
+        failed: 0,
+        persisted: 0,
+        analysis_handoff: {
+          mode: "operational_events_table",
+          queued: 0,
+          next_stage: "pending_worker"
+        }
+      };
+    });
+
+    const payload = {
+      provider: "gohighlevel",
+      source_key: "webhook-ghl-production",
+      eventType: "OpportunityStatusChanged",
+      workflowId: "opportunity-events",
+      status: "completed",
+      opportunityId: "opp-1",
+      pipelineId: "pipe-1"
+    };
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/v1/ingest/workflow-event",
+      headers: {
+        "x-synteq-key": "key-tenant-a"
+      },
+      payload
+    });
+    const second = await app.inject({
+      method: "POST",
+      url: "/v1/ingest/workflow-event",
+      headers: {
+        "x-synteq-key": "key-tenant-a"
+      },
+      payload
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({
+      ingested: 1,
+      duplicates: 0
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({
+      ingested: 0,
+      duplicates: 1
+    });
+  });
+
+  it("keeps GoHighLevel provider delivery ids idempotent when timestamp is missing", async () => {
+    const keys: string[] = [];
+    ingestOperationalEventsMock.mockImplementation(async (_body: unknown, context: { idempotencyHints?: Array<{ upstreamKey?: string }> }) => {
+      keys.push(context.idempotencyHints?.[0]?.upstreamKey ?? "");
+      return {
+        accepted: 1,
+        ingested: keys.length === 1 ? 1 : 0,
+        duplicates: keys.length === 1 ? 0 : 1,
+        skipped: 0,
+        failed: 0,
+        persisted: keys.length === 1 ? 1 : 0,
+        analysis_handoff: {
+          mode: "operational_events_table",
+          queued: keys.length === 1 ? 1 : 0,
+          next_stage: "pending_worker"
+        }
+      };
+    });
+
+    const payload = {
+      provider: "gohighlevel",
+      source_key: "webhook-ghl-production",
+      eventType: "OpportunityStatusChanged",
+      workflowId: "opportunity-events",
+      deliveryId: "delivery-1",
+      status: "completed",
+      opportunityId: "opp-1"
+    };
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/v1/ingest/workflow-event",
+      headers: {
+        "x-synteq-key": "key-tenant-a"
+      },
+      payload
+    });
+    const second = await app.inject({
+      method: "POST",
+      url: "/v1/ingest/workflow-event",
+      headers: {
+        "x-synteq-key": "key-tenant-a"
+      },
+      payload
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(keys).toEqual([
+      "webhook|webhook-ghl-production|opportunity-events|delivery-1|succeeded",
+      "webhook|webhook-ghl-production|opportunity-events|delivery-1|succeeded"
+    ]);
+  });
+
   it("supports small batch ingestion", async () => {
     ingestOperationalEventsMock.mockResolvedValueOnce({
       accepted: 2,
