@@ -1,6 +1,17 @@
 import { config } from "../config.js";
 
 const BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email";
+const LOCAL_DEV_SENDER = "no-reply@synteq.local";
+const UNSAFE_SENDER_FRAGMENTS = [
+  "replace-with",
+  "change-me",
+  "changeme",
+  "example",
+  "your-",
+  "placeholder",
+  "dev-only",
+  "synteq.local"
+];
 
 function webBaseUrl(): string {
   if (config.WEB_BASE_URL) {
@@ -12,6 +23,40 @@ function webBaseUrl(): string {
   }
 
   return "http://localhost:3000";
+}
+
+function sender() {
+  const email = config.EMAIL_FROM_ADDRESS;
+  if (email) {
+    if (config.NODE_ENV === "production" && !config.EMAIL_DEV_MODE && isUnsafeProductionSender(email)) {
+      throw new Error("EMAIL_FROM_ADDRESS must be a real verified sender in production delivery mode");
+    }
+
+    return {
+      email,
+      name: config.EMAIL_FROM_NAME
+    };
+  }
+
+  if (config.NODE_ENV === "production" && !config.EMAIL_DEV_MODE) {
+    throw new Error("EMAIL_FROM_ADDRESS must be configured with a verified sender when EMAIL_DEV_MODE=false in production");
+  }
+
+  return {
+    email: LOCAL_DEV_SENDER,
+    name: config.EMAIL_FROM_NAME
+  };
+}
+
+function isUnsafeProductionSender(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.endsWith(".local") ||
+    normalized.includes("@localhost") ||
+    normalized.includes("@example.") ||
+    normalized.includes("@example.com") ||
+    UNSAFE_SENDER_FRAGMENTS.some((fragment) => normalized.includes(fragment))
+  );
 }
 
 async function sendBrevoEmail(input: {
@@ -36,10 +81,7 @@ async function sendBrevoEmail(input: {
       "api-key": config.BREVO_API_KEY
     },
     body: JSON.stringify({
-      sender: {
-        email: "no-reply@synteq.local",
-        name: "Synteq"
-      },
+      sender: sender(),
       to: [{ email: input.to }],
       subject: input.subject,
       textContent: input.textContent,

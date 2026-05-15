@@ -176,7 +176,7 @@ export default async function WelcomePage({
               Understand risk clearly before it becomes an incident
             </h1>
             <p className="mt-4 max-w-[760px] text-base text-cyan-50/85 sm:text-lg">
-              Immediate value: continuous awareness and proactive alerts with minimal access required.
+              Operational awareness with minimal access. Alert delivery depends on verified scheduler and email/webhook infrastructure.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2.5">
@@ -327,7 +327,7 @@ export default async function WelcomePage({
           ) : null}
           {params.workflow === "connected" ? (
             <div className="rounded-2xl border border-emerald-300/70 bg-emerald-50/95 px-4 py-3 text-sm text-emerald-800 shadow-panel">
-              Workflow connected. Synteq is now watching this source once telemetry arrives, and you&apos;ll be alerted when reliability risks are detected.
+              Workflow connected. Synteq watches this source once telemetry arrives; configured alert delivery can notify teams about reliability risks.
             </div>
           ) : null}
           {params.workflow === "invalid" ? (
@@ -351,7 +351,7 @@ export default async function WelcomePage({
               Active coverage: {activeWorkflowSources} workflow source{activeWorkflowSources === 1 ? "" : "s"}, {activeGitHubSources} GitHub integration{activeGitHubSources === 1 ? "" : "s"}.
             </p>
             <p className="mt-1">
-              You&apos;ll be alerted when failure spikes, retry storms, missing heartbeats, or latency-related risks are detected.
+              Configured alert delivery can notify teams when failure spikes, retry storms, missing heartbeats, or latency-related risks are detected.
             </p>
           </div>
         ) : (
@@ -410,7 +410,7 @@ export default async function WelcomePage({
               <p className="syn-app-kicker text-[11px] font-medium uppercase tracking-[0.18em]">Signal Ingestion</p>
               <h3 className="syn-app-title mt-2 text-lg font-semibold">Configure control plane</h3>
               <p className="syn-app-copy mt-2 text-sm">
-                Create API keys, set up GitHub webhook integrations, and configure alert dispatch channels.
+                Create API keys, set up GitHub webhook integrations, and prepare alert dispatch channels.
               </p>
               <div className="mt-4">
                 <Link href="/settings/control-plane" className="syn-cta-lift syn-btn-secondary syn-btn-secondary-soft text-sm">

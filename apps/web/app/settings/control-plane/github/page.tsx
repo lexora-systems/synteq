@@ -418,7 +418,7 @@ export default async function GitHubIntegrationsControlPlanePage() {
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Control Plane / GitHub</p>
           <h2 className="mt-1 text-2xl font-semibold text-ink">GitHub integrations</h2>
           <p className="mt-2 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-slate-700">
-            Immediate value: GitHub workflow signals feed earlier anomaly detection and proactive incident alerts.
+            GitHub workflow signals feed anomaly detection and can support alerts once delivery infrastructure is verified.
           </p>
           <p className="mt-2 text-sm text-slate-600">
             Register tenant-scoped webhook integrations to ingest supported GitHub Actions operational events.

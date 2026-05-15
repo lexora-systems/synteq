@@ -83,6 +83,13 @@ async function resolveUserForTenantScopedAuth(input: {
 
 const authRoutes: FastifyPluginAsync = async (app) => {
   app.post("/auth/signup", async (request, reply) => {
+    if (!config.ALLOW_PUBLIC_SIGNUP) {
+      return reply.code(403).send({
+        error: "Synteq is currently in a guarded early-access phase.",
+        code: "AUTH_PUBLIC_SIGNUP_DISABLED"
+      });
+    }
+
     const body = parseWithSchema(signupSchema, request.body);
     const email = body.email.toLowerCase();
     const workspaceName = body.workspace_name.trim();

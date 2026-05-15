@@ -92,11 +92,13 @@ test("control plane lifecycle surfaces are usable", async ({ page }) => {
   await expectGitHubSecretClearedAfterReloads(page);
 
   await page.goto("/settings/control-plane/alerts");
+  await expect(page.getByTestId("alerts-readiness-state")).toContainText("Alert delivery not yet active");
+  await expect(page.getByTestId("alerts-readiness-state")).toContainText("Alert delivery depends on configured scheduler/email infrastructure");
   await page.getByTestId("alerts-channel-name-input").fill("Ops Email");
   await page.getByTestId("alerts-channel-type-select").selectOption("email");
   await page.getByTestId("alerts-channel-target-input").fill("ops@synteq.local");
   await page.getByTestId("alerts-channel-create-submit").click();
-  await expect(page.getByTestId("alerts-feedback")).toBeVisible();
+  await expect(page.getByTestId("alerts-feedback")).toContainText("Delivery depends on configured scheduler and email/webhook infrastructure");
 });
 
 test("generic workflow source onboarding separates silent checks from mutative test events", async ({ page, request }) => {
@@ -104,6 +106,9 @@ test("generic workflow source onboarding separates silent checks from mutative t
 
   await page.goto("/sources");
   await expect(page.getByTestId("generic-source-silent-check-submit")).toHaveCount(0);
+  await expect(page.getByTestId("gohighlevel-webhook-guidance")).toContainText("GoHighLevel is supported through outbound webhooks");
+  await expect(page.getByTestId("gohighlevel-webhook-guidance")).toContainText("X-Synteq-Key: <your_ingestion_key>");
+  await expect(page.getByTestId("gohighlevel-webhook-guidance")).toContainText("Content-Type: application/json");
   await expect(page.getByTestId("synthetic-readiness-note")).toContainText(
     "Run silent check validates source readiness without writing operational records"
   );
@@ -131,6 +136,43 @@ test("generic workflow source onboarding separates silent checks from mutative t
   await expect(page.getByTestId("generic-workflow-source-feedback")).toContainText(
     "Silent checks are only available for generic workflow sources."
   );
+});
+
+test("GoHighLevel webhook onboarding shows a safe operational sample", async ({ page }) => {
+  await setSession(page);
+
+  await page.goto("/sources");
+  await expect(page.getByTestId("generic-workflow-source-create-form")).toBeVisible();
+  await expect(page.getByTestId("gohighlevel-webhook-guidance")).toContainText("The Synteq source type remains webhook");
+  await expect(page.getByTestId("gohighlevel-webhook-guidance")).toContainText(
+    "Send workflow execution signals, not customer records"
+  );
+  await expect(page.getByTestId("gohighlevel-webhook-guidance")).toContainText("Designed to monitor systems - not access them");
+
+  await page.getByTestId("generic-source-name-input").fill("GHL Follow Up");
+  await page.getByTestId("generic-source-type-select").selectOption("webhook");
+  await page.getByTestId("generic-source-environment-input").fill("production");
+  await page.getByTestId("generic-source-create-submit").click();
+
+  await expect(page.getByTestId("generic-source-setup-card")).toBeVisible();
+  await expect(page.getByTestId("gohighlevel-sample-section")).toBeVisible();
+  const sampleText = (await page.getByTestId("gohighlevel-sample-payload").textContent()) ?? "";
+  const sample = JSON.parse(sampleText) as Record<string, unknown>;
+
+  expect(sample.provider).toBe("gohighlevel");
+  expect(sample.source_key).toBe("webhook-ghl-follow-up");
+  expect(sample.workflowId).toBe("ghl_workflow_123");
+  expect(sample.deliveryId).toBe("ghl_delivery_123");
+  expect(sample.locationId).toBe("ghl_location_123");
+  expect(sample.actionId).toBe("ghl_action_123");
+  expect(sample.objectId).toBe("opp_123");
+  expect(sample.pipelineId).toBe("pipeline_123");
+  expect(sample.opportunityId).toBe("opp_123");
+
+  const keys = new Set(Object.keys(sample).map((key) => key.toLowerCase()));
+  for (const field of ["name", "email", "phone", "address", "notes", "message", "raw_payload", "rawpayload"]) {
+    expect(keys.has(field)).toBe(false);
+  }
 });
 
 test("control plane index stays usable when setup status fails to load", async ({ page, request }) => {

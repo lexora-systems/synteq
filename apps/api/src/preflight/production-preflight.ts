@@ -58,6 +58,17 @@ function validateSecret(
   }
 }
 
+function isUnsafeSenderEmail(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return (
+    isPlaceholderGrade(normalized) ||
+    normalized.endsWith(".local") ||
+    normalized.includes("@localhost") ||
+    normalized.includes("@example.") ||
+    normalized.includes("@example.com")
+  );
+}
+
 function collectCorsOriginIssues(corsOrigin: string): string[] {
   const issues: string[] = [];
   const origins = corsOrigin
@@ -172,6 +183,14 @@ export function validateProductionPreflight(config: AppConfig): PreflightResult 
     warnings.push("EMAIL_DEV_MODE is true in production; emails are logged and not delivered.");
   }
 
+  if (config.ALLOW_PUBLIC_SIGNUP) {
+    warnings.push("ALLOW_PUBLIC_SIGNUP is true in production; guarded launch should set it false unless public signup is intentional.");
+  }
+
+  if (!config.SCHEDULER_JOBS_CONFIGURED) {
+    warnings.push("SCHEDULER_JOBS_CONFIGURED is false in production; verify aggregate, anomaly, and alert scheduler jobs before promising live alert delivery.");
+  }
+
   const corsIssues = collectCorsOriginIssues(config.CORS_ORIGIN);
   if (config.STRICT_CORS) {
     errors.push(...corsIssues.map((issue) => `[STRICT_CORS] ${issue}`));
@@ -208,6 +227,13 @@ export function validateProductionPreflight(config: AppConfig): PreflightResult 
 
   if (!config.EMAIL_DEV_MODE) {
     validateSecret(errors, "BREVO_API_KEY", config.BREVO_API_KEY, { minLength: 20 });
+    if (!config.EMAIL_FROM_ADDRESS) {
+      errors.push("EMAIL_FROM_ADDRESS must be set to a verified sender when EMAIL_DEV_MODE=false in production.");
+    } else if (isUnsafeSenderEmail(config.EMAIL_FROM_ADDRESS)) {
+      errors.push("EMAIL_FROM_ADDRESS must be a real verified sender, not a local, example, or placeholder address.");
+    }
+  } else if (config.EMAIL_FROM_ADDRESS && isUnsafeSenderEmail(config.EMAIL_FROM_ADDRESS)) {
+    warnings.push("EMAIL_FROM_ADDRESS looks local or placeholder-grade; use a verified sender before enabling production email delivery.");
   }
 
   if (config.ENFORCE_PUBSUB_ONLY) {

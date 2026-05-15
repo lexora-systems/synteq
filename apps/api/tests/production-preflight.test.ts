@@ -35,10 +35,13 @@ function buildConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     REFRESH_TOKEN_TTL: "30d",
     BREVO_API_KEY: "xkeysib-realistic-production-key-value",
     EMAIL_DEV_MODE: false,
+    EMAIL_FROM_ADDRESS: "alerts@synteq.com",
+    EMAIL_FROM_NAME: "Synteq",
     DASHBOARD_ADMIN_EMAIL: "admin@example.com",
     DASHBOARD_ADMIN_PASSWORD: "StrongAdminPassword123!",
     DEFAULT_TENANT_ID: undefined,
-    ALLOW_PUBLIC_SIGNUP: true,
+    ALLOW_PUBLIC_SIGNUP: false,
+    SCHEDULER_JOBS_CONFIGURED: true,
     CORS_ORIGIN: "https://app.example.com",
     WEB_BASE_URL: "https://app.example.com",
     INVITE_RATE_LIMIT_PER_HOUR: 20,
@@ -98,7 +101,10 @@ describe("production preflight", () => {
         PUBSUB_PROJECT_ID: undefined,
         PUBSUB_TOPIC_INGEST: undefined,
         EMAIL_DEV_MODE: true,
+        EMAIL_FROM_ADDRESS: "no-reply@synteq.local",
         BREVO_API_KEY: undefined,
+        ALLOW_PUBLIC_SIGNUP: true,
+        SCHEDULER_JOBS_CONFIGURED: false,
         DASHBOARD_ADMIN_PASSWORD: "ChangeMe123!"
       })
     );
@@ -117,6 +123,9 @@ describe("production preflight", () => {
         "REDIS_URL is not set in production; distributed limits/dedupe/cache are disabled.",
         "INGEST_HMAC_REQUIRED is false in production; ingestion endpoint accepts unsigned payloads.",
         "EMAIL_DEV_MODE is true in production; emails are logged and not delivered.",
+        "EMAIL_FROM_ADDRESS looks local or placeholder-grade; use a verified sender before enabling production email delivery.",
+        "ALLOW_PUBLIC_SIGNUP is true in production; guarded launch should set it false unless public signup is intentional.",
+        "SCHEDULER_JOBS_CONFIGURED is false in production; verify aggregate, anomaly, and alert scheduler jobs before promising live alert delivery.",
         "CORS_ORIGIN is '*' in production; set explicit origins to reduce cross-origin exposure.",
         "PUBSUB_PROJECT_ID is not set in production.",
         "PUBSUB_TOPIC_INGEST is not set in production; ingestion uses direct BigQuery fallback."
@@ -155,7 +164,8 @@ describe("production preflight", () => {
       INGEST_HMAC_REQUIRED: false,
       INGEST_HMAC_SECRET: undefined,
       PUBSUB_PROJECT_ID: undefined,
-      PUBSUB_TOPIC_INGEST: undefined
+      PUBSUB_TOPIC_INGEST: undefined,
+      SCHEDULER_JOBS_CONFIGURED: false
     });
 
     expect(() => assertProductionPreflight(config)).not.toThrow();
@@ -185,6 +195,30 @@ describe("production preflight", () => {
         "[ENFORCE_PUBSUB_ONLY] PUBSUB_PROJECT_ID must be set in production.",
         "[ENFORCE_PUBSUB_ONLY] PUBSUB_TOPIC_INGEST must be set in production."
       ])
+    );
+  });
+
+  it("fails production preflight when sender email is missing or local", () => {
+    const missing = validateProductionPreflight(
+      buildConfig({
+        NODE_ENV: "production",
+        EMAIL_FROM_ADDRESS: undefined
+      })
+    );
+    expect(missing.ok).toBe(false);
+    expect(missing.errors).toEqual(
+      expect.arrayContaining(["EMAIL_FROM_ADDRESS must be set to a verified sender when EMAIL_DEV_MODE=false in production."])
+    );
+
+    const local = validateProductionPreflight(
+      buildConfig({
+        NODE_ENV: "production",
+        EMAIL_FROM_ADDRESS: "no-reply@synteq.local"
+      })
+    );
+    expect(local.ok).toBe(false);
+    expect(local.errors).toEqual(
+      expect.arrayContaining(["EMAIL_FROM_ADDRESS must be a real verified sender, not a local, example, or placeholder address."])
     );
   });
 });

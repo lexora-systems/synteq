@@ -243,7 +243,50 @@ describe("GoHighLevel adapter service", () => {
     ]);
   });
 
+  // Official GoHighLevel payload samples are not currently committed; add official fixtures here once available.
   describe("representative non-official GHL payload fixtures", () => {
+    it("normalizes the onboarding safe sample payload", () => {
+      const normalized = normalize({
+        provider: "gohighlevel",
+        source_key: "webhook-ghl-production",
+        workflowId: "ghl_workflow_123",
+        workflowName: "Lead follow-up automation",
+        eventType: "workflow.action.completed",
+        status: "completed",
+        deliveryId: "ghl_delivery_123",
+        timestamp: "2026-01-01T10:00:00.000Z",
+        locationId: "ghl_location_123",
+        actionId: "ghl_action_123",
+        objectType: "opportunity",
+        objectId: "opp_123",
+        pipelineId: "pipeline_123",
+        opportunityId: "opp_123"
+      });
+
+      expect(normalized).toMatchObject({
+        source_type: "webhook",
+        source_key: "webhook-ghl-production",
+        workflow_id: "ghl_workflow_123",
+        workflow_name: "Lead follow-up automation",
+        execution_id: "ghl_delivery_123",
+        status: "succeeded",
+        metadata: {
+          provider: "gohighlevel",
+          adapter_version: "ghl_webhook_v1",
+          ghl_event_type: "workflow.action.completed",
+          location_id: "ghl_location_123",
+          action_id: "ghl_action_123",
+          object_type: "opportunity",
+          object_id: "opp_123",
+          pipeline_id: "pipeline_123",
+          opportunity_id: "opp_123",
+          delivery_id: "ghl_delivery_123"
+        }
+      });
+      expect(normalized.timestamp.toISOString()).toBe("2026-01-01T10:00:00.000Z");
+      expectSerializedToExclude(normalized, ["email", "phone", "notes", "raw_payload"]);
+    });
+
     it("normalizes a workflow action webhook shape", () => {
       const normalized = normalize({
         metadata: {

@@ -31,7 +31,7 @@ export default async function SettingsIndexPage() {
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Control Plane</p>
             <h3 className="mt-1 text-lg font-semibold text-ink">Sources, keys, integrations, alerts</h3>
             <p className="mt-2 text-sm text-slate-600">
-              Configure how Synteq receives signals and dispatches proactive notifications.
+              Configure how Synteq receives signals and prepares alert delivery.
             </p>
           </Link>
 

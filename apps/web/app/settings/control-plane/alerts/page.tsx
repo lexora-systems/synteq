@@ -9,9 +9,11 @@ import {
   deleteAlertPolicy,
   extractApiErrorCode,
   fetchAlertChannels,
+  fetchOperationalDashboard,
   fetchAlertPolicies,
   fetchMe,
   fetchWorkflows,
+  type OperationalDashboard,
   updateAlertChannel,
   updateAlertPolicy
 } from "../../../../lib/api";
@@ -30,13 +32,13 @@ type PageStatus =
 function toStatusMessage(status?: string): { ok: boolean; text: string } | null {
   switch (status as PageStatus | undefined) {
     case "channel-created":
-      return { ok: true, text: "Alert channel created. You'll be alerted when configured risk conditions are met." };
+      return { ok: true, text: "Alert channel created. Delivery depends on configured scheduler and email/webhook infrastructure." };
     case "channel-updated":
       return { ok: true, text: "Alert channel updated." };
     case "channel-deactivated":
       return { ok: true, text: "Alert channel deactivated." };
     case "policy-created":
-      return { ok: true, text: "Alert policy created. Synteq is continuously monitoring this condition now." };
+      return { ok: true, text: "Alert policy created. Alert delivery becomes active once scheduler delivery is verified." };
     case "policy-updated":
       return { ok: true, text: "Alert policy updated." };
     case "policy-deleted":
@@ -44,7 +46,7 @@ function toStatusMessage(status?: string): { ok: boolean; text: string } | null 
     case "upgrade":
       return {
         ok: false,
-        text: "Alert channels are available on Pro because Synteq continuously dispatches proactive risk notifications."
+        text: "Alert channels are available on Pro. Delivery also depends on configured scheduler and email/webhook infrastructure."
       };
     case "error":
       return { ok: false, text: "Unable to process alert configuration action right now." };
@@ -61,6 +63,50 @@ function outcomeFromError(error: unknown): "upgrade" | "error" {
   return "error";
 }
 
+function alertReadiness(
+  dashboard: OperationalDashboard | null,
+  enabledChannels: number,
+  enabledPolicies: number
+): { title: string; detail: string; tone: "ok" | "warn" | "muted"; scheduler: string } {
+  const alertJob = dashboard?.pipeline.jobs.find((job) => job.name === "alerts") ?? null;
+  const schedulerFresh = alertJob?.state === "fresh";
+  const deliveryActive = schedulerFresh && enabledChannels > 0 && enabledPolicies > 0;
+
+  if (deliveryActive) {
+    return {
+      title: "Alert delivery active",
+      detail: "Enabled channels and policies are present, and the alerts scheduler has recent activity.",
+      tone: "ok",
+      scheduler: "Scheduler verified"
+    };
+  }
+
+  if (!dashboard) {
+    return {
+      title: "Scheduler not verified",
+      detail: "Alert delivery depends on enabled channels, enabled policies, and the alerts scheduler running on cadence.",
+      tone: "warn",
+      scheduler: "Scheduler not verified"
+    };
+  }
+
+  if (!alertJob?.lastSeenAt) {
+    return {
+      title: "Awaiting scheduler activity",
+      detail: "Alerting can be enabled once scheduler delivery is configured and at least one enabled channel and policy exist.",
+      tone: "warn",
+      scheduler: "Awaiting scheduler activity"
+    };
+  }
+
+  return {
+    title: "Alert delivery not yet active",
+    detail: "Alert delivery depends on configured scheduler/email infrastructure, enabled channels, and enabled policies.",
+    tone: schedulerFresh ? "muted" : "warn",
+    scheduler: schedulerFresh ? "Scheduler verified" : "Scheduler stale"
+  };
+}
+
 async function createAlertChannelAction(formData: FormData) {
   "use server";
 
@@ -68,6 +114,7 @@ async function createAlertChannelAction(formData: FormData) {
   const type = String(formData.get("type") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const target = String(formData.get("target") ?? "").trim();
+  let status: PageStatus = "error";
 
   try {
     if (type === "slack") {
@@ -77,15 +124,17 @@ async function createAlertChannelAction(formData: FormData) {
     } else if (type === "email") {
       await createAlertChannel(token, { type: "email", name, config: { email: target } });
     } else {
-      redirect("/settings/control-plane/alerts?status=error");
+      throw new Error("Unsupported alert channel type");
     }
 
     revalidatePath("/settings/control-plane/alerts");
     revalidatePath("/sources");
-    redirect("/settings/control-plane/alerts?status=channel-created");
+    status = "channel-created";
   } catch (error) {
-    redirect(`/settings/control-plane/alerts?status=${outcomeFromError(error)}`);
+    status = outcomeFromError(error);
   }
+
+  redirect(`/settings/control-plane/alerts?status=${status}`);
 }
 
 async function toggleAlertChannelAction(formData: FormData) {
@@ -94,15 +143,18 @@ async function toggleAlertChannelAction(formData: FormData) {
   const token = await requireToken();
   const channelId = String(formData.get("channel_id") ?? "");
   const nextEnabled = String(formData.get("next_enabled") ?? "") === "1";
+  let status: PageStatus = "error";
 
   try {
     await updateAlertChannel(token, channelId, { is_enabled: nextEnabled });
     revalidatePath("/settings/control-plane/alerts");
     revalidatePath("/sources");
-    redirect("/settings/control-plane/alerts?status=channel-updated");
+    status = "channel-updated";
   } catch (error) {
-    redirect(`/settings/control-plane/alerts?status=${outcomeFromError(error)}`);
+    status = outcomeFromError(error);
   }
+
+  redirect(`/settings/control-plane/alerts?status=${status}`);
 }
 
 async function deactivateAlertChannelAction(formData: FormData) {
@@ -110,15 +162,18 @@ async function deactivateAlertChannelAction(formData: FormData) {
 
   const token = await requireToken();
   const channelId = String(formData.get("channel_id") ?? "");
+  let status: PageStatus = "error";
 
   try {
     await deleteAlertChannel(token, channelId);
     revalidatePath("/settings/control-plane/alerts");
     revalidatePath("/sources");
-    redirect("/settings/control-plane/alerts?status=channel-deactivated");
+    status = "channel-deactivated";
   } catch (error) {
-    redirect(`/settings/control-plane/alerts?status=${outcomeFromError(error)}`);
+    status = outcomeFromError(error);
   }
+
+  redirect(`/settings/control-plane/alerts?status=${status}`);
 }
 
 async function createAlertPolicyAction(formData: FormData) {
@@ -129,6 +184,7 @@ async function createAlertPolicyAction(formData: FormData) {
     .getAll("channel_ids")
     .map((value) => String(value))
     .filter((value) => value.length > 0);
+  let status: PageStatus = "error";
 
   try {
     await createAlertPolicy(token, {
@@ -145,10 +201,12 @@ async function createAlertPolicyAction(formData: FormData) {
       channel_ids: channelIds
     });
     revalidatePath("/settings/control-plane/alerts");
-    redirect("/settings/control-plane/alerts?status=policy-created");
+    status = "policy-created";
   } catch (error) {
-    redirect(`/settings/control-plane/alerts?status=${outcomeFromError(error)}`);
+    status = outcomeFromError(error);
   }
+
+  redirect(`/settings/control-plane/alerts?status=${status}`);
 }
 
 async function toggleAlertPolicyAction(formData: FormData) {
@@ -157,14 +215,17 @@ async function toggleAlertPolicyAction(formData: FormData) {
   const token = await requireToken();
   const policyId = String(formData.get("policy_id") ?? "");
   const nextEnabled = String(formData.get("next_enabled") ?? "") === "1";
+  let status: PageStatus = "error";
 
   try {
     await updateAlertPolicy(token, policyId, { is_enabled: nextEnabled });
     revalidatePath("/settings/control-plane/alerts");
-    redirect("/settings/control-plane/alerts?status=policy-updated");
+    status = "policy-updated";
   } catch (error) {
-    redirect(`/settings/control-plane/alerts?status=${outcomeFromError(error)}`);
+    status = outcomeFromError(error);
   }
+
+  redirect(`/settings/control-plane/alerts?status=${status}`);
 }
 
 async function deleteAlertPolicyAction(formData: FormData) {
@@ -172,14 +233,17 @@ async function deleteAlertPolicyAction(formData: FormData) {
 
   const token = await requireToken();
   const policyId = String(formData.get("policy_id") ?? "");
+  let status: PageStatus = "error";
 
   try {
     await deleteAlertPolicy(token, policyId);
     revalidatePath("/settings/control-plane/alerts");
-    redirect("/settings/control-plane/alerts?status=policy-deleted");
+    status = "policy-deleted";
   } catch (error) {
-    redirect(`/settings/control-plane/alerts?status=${outcomeFromError(error)}`);
+    status = outcomeFromError(error);
   }
+
+  redirect(`/settings/control-plane/alerts?status=${status}`);
 }
 
 export default async function AlertControlPlanePage({
@@ -189,14 +253,24 @@ export default async function AlertControlPlanePage({
 }) {
   const params = await searchParams;
   const token = await requireToken();
-  const [me, channelsPayload, policiesPayload, workflowsPayload] = await Promise.all([
+  const [me, channelsPayload, policiesPayload, workflowsPayload, dashboardPayload] = await Promise.all([
     fetchMe(token),
     fetchAlertChannels(token),
     fetchAlertPolicies(token),
-    fetchWorkflows(token)
+    fetchWorkflows(token),
+    fetchOperationalDashboard(token).catch(() => null)
   ]);
   const canManage = ["owner", "admin"].includes(me.user.role);
   const statusMessage = toStatusMessage(params.status);
+  const enabledChannels = channelsPayload.channels.filter((channel) => channel.is_enabled).length;
+  const enabledPolicies = policiesPayload.policies.filter((policy) => policy.is_enabled).length;
+  const readiness = alertReadiness(dashboardPayload, enabledChannels, enabledPolicies);
+  const readinessTone =
+    readiness.tone === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      : readiness.tone === "warn"
+        ? "border-amber-200 bg-amber-50 text-amber-900"
+        : "border-slate-200 bg-slate-50 text-slate-700";
 
   return (
     <main className="min-h-screen syn-app-shell pb-12">
@@ -206,10 +280,10 @@ export default async function AlertControlPlanePage({
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Control Plane / Alerts</p>
           <h2 className="mt-1 text-2xl font-semibold text-ink">Alert channels and policies</h2>
           <p className="mt-2 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-slate-700">
-            Immediate value: policy-driven alerts reduce manual checking and notify teams quickly when risk patterns appear.
+            Alerting can be enabled once scheduler delivery is configured and real workflow events are arriving.
           </p>
           <p className="mt-2 text-sm text-slate-600">
-            Configure proactive risk notifications for anomalous behavior and operational incidents.
+            Configure notification destinations and policies for anomalous behavior and operational incidents.
           </p>
           <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 md:grid-cols-3">
             <div>
@@ -222,8 +296,18 @@ export default async function AlertControlPlanePage({
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Access model</p>
-              <p className="mt-1">Event-based dispatch with signal-level context. Disable alerts anytime.</p>
+              <p className="mt-1">Delivery uses signal-level context and depends on scheduler/email infrastructure. Disable alerts anytime.</p>
             </div>
+          </div>
+          <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${readinessTone}`} data-testid="alerts-readiness-state">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-semibold">{readiness.title}</p>
+              <p className="text-xs uppercase tracking-[0.18em]">{readiness.scheduler}</p>
+            </div>
+            <p className="mt-1">{readiness.detail}</p>
+            <p className="mt-2 text-xs">
+              Enabled channels: {enabledChannels} | enabled policies: {enabledPolicies}
+            </p>
           </div>
           <div className="mt-3">
             <Link href="/settings/control-plane" className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">
@@ -246,7 +330,8 @@ export default async function AlertControlPlanePage({
         <div className="mt-4 grid gap-4 xl:grid-cols-2">
           <div className="rounded-2xl bg-white p-5 shadow-panel">
             <h3 className="text-lg font-semibold text-ink">Alert channels</h3>
-            <p className="mt-1 text-sm text-slate-600">Channel types supported in this MVP: email, webhook, slack.</p>
+            <p className="mt-1 text-sm text-slate-600">Configured channel types: email, webhook, slack.</p>
+            <p className="mt-1 text-sm text-slate-600">Email delivery requires verified production sender configuration.</p>
             <p className="mt-1 text-sm text-slate-600">Disable or deactivate anytime from the right-side actions.</p>
 
             {canManage ? (
@@ -328,7 +413,7 @@ export default async function AlertControlPlanePage({
 
           <div className="rounded-2xl bg-white p-5 shadow-panel">
             <h3 className="text-lg font-semibold text-ink">Alert policies</h3>
-            <p className="mt-1 text-sm text-slate-600">Attach channels to anomaly thresholds already supported by Synteq.</p>
+            <p className="mt-1 text-sm text-slate-600">Attach channels to anomaly thresholds once scheduler delivery is verified.</p>
             <p className="mt-1 text-sm text-slate-600">
               Missing-heartbeat policies use observed heartbeat cadence when available, then fall back to configured window thresholds.
             </p>

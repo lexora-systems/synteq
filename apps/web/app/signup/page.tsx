@@ -6,6 +6,7 @@ import { useState } from "react";
 
 export default function SignupPage() {
   const router = useRouter();
+  const publicSignupEnabled = process.env.NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP !== "false";
   const [workspaceName, setWorkspaceName] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -17,6 +18,11 @@ export default function SignupPage() {
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+
+    if (!publicSignupEnabled) {
+      setError("Synteq is currently in a guarded early-access phase.");
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
@@ -40,7 +46,11 @@ export default function SignupPage() {
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({ error: "Signup failed" }));
-      setError(body.error ?? "Signup failed");
+      setError(
+        body.code === "AUTH_PUBLIC_SIGNUP_DISABLED"
+          ? "Synteq is currently in a guarded early-access phase."
+          : body.error ?? "Signup failed"
+      );
       return;
     }
 
@@ -52,63 +62,73 @@ export default function SignupPage() {
       <div className="login-card">
         <p className="eyebrow">Synteq by Lexora</p>
         <h1 className="login-title">Create your account</h1>
-        <p className="login-subtitle">Create a new workspace owner account, continue onboarding, and invite your team later.</p>
-        <form className="login-form" onSubmit={onSubmit}>
-          <label>
-            Workspace Name
-            <input
-              type="text"
-              value={workspaceName}
-              onChange={(event) => setWorkspaceName(event.target.value)}
-              placeholder="Lexora Engineering"
-              required
-            />
-          </label>
-          <label>
-            Full Name
-            <input
-              type="text"
-              value={fullName}
-              onChange={(event) => setFullName(event.target.value)}
-              placeholder="Alexis Marie"
-              required
-            />
-          </label>
-          <label>
-            Email
-            <input
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@company.com"
-              required
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="At least 8 characters"
-              minLength={8}
-              required
-            />
-          </label>
-          <label>
-            Confirm Password
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              placeholder="Re-enter password"
-              minLength={8}
-              required
-            />
-          </label>
-          {error ? <p className="login-error">{error}</p> : null}
-          <button type="submit" disabled={loading}>{loading ? "Creating account..." : "Get Started"}</button>
-        </form>
+        <p className="login-subtitle">
+          {publicSignupEnabled
+            ? "Create a new workspace owner account, continue onboarding, and invite your team later."
+            : "Synteq is currently in a guarded early-access phase. Existing users can log in, and invited teammates can use their invite link."}
+        </p>
+        {publicSignupEnabled ? (
+          <form className="login-form" onSubmit={onSubmit}>
+            <label>
+              Workspace Name
+              <input
+                type="text"
+                value={workspaceName}
+                onChange={(event) => setWorkspaceName(event.target.value)}
+                placeholder="Lexora Engineering"
+                required
+              />
+            </label>
+            <label>
+              Full Name
+              <input
+                type="text"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                placeholder="Alexis Marie"
+                required
+              />
+            </label>
+            <label>
+              Email
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@company.com"
+                required
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="At least 8 characters"
+                minLength={8}
+                required
+              />
+            </label>
+            <label>
+              Confirm Password
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                placeholder="Re-enter password"
+                minLength={8}
+                required
+              />
+            </label>
+            {error ? <p className="login-error">{error}</p> : null}
+            <button type="submit" disabled={loading}>{loading ? "Creating account..." : "Get Started"}</button>
+          </form>
+        ) : (
+          <div className="mt-5 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-slate-700">
+            Public workspace creation is invite-only for this launch window.
+          </div>
+        )}
         <p className="mt-4 text-sm text-slate-600">
           Already have an account?{" "}
           <Link href="/login" className="font-semibold text-ocean hover:text-ink">

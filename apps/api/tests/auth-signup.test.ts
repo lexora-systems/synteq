@@ -6,6 +6,10 @@ const createAuthSession = vi.fn();
 const hashPassword = vi.fn();
 const findFirstUser = vi.fn();
 const transactionMock = vi.fn();
+const configMock = vi.hoisted(() => ({
+  LOGOUT_ALL_ENABLED: true,
+  ALLOW_PUBLIC_SIGNUP: true
+}));
 
 vi.mock("../src/services/auth-service.js", () => ({
   asAuthUser,
@@ -51,9 +55,7 @@ vi.mock("../src/services/auth-abuse-service.js", () => ({
 }));
 
 vi.mock("../src/config.js", () => ({
-  config: {
-    LOGOUT_ALL_ENABLED: true
-  }
+  config: configMock
 }));
 
 describe("auth signup route", () => {
@@ -65,6 +67,7 @@ describe("auth signup route", () => {
     hashPassword.mockReset();
     findFirstUser.mockReset();
     transactionMock.mockReset();
+    configMock.ALLOW_PUBLIC_SIGNUP = true;
 
     app = Fastify();
     app.decorate("requireDashboardAuth", async () => undefined);
@@ -154,6 +157,29 @@ describe("auth signup route", () => {
     expect(response.json()).toMatchObject({
       code: "AUTH_SIGNUP_EMAIL_EXISTS"
     });
+    expect(createAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("blocks public signup when guarded launch disables self-service signup", async () => {
+    configMock.ALLOW_PUBLIC_SIGNUP = false;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/auth/signup",
+      payload: {
+        workspace_name: "Lexora Engineering",
+        full_name: "Owner User",
+        email: "owner@lexora.ltd",
+        password: "StrongPass123!"
+      }
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      code: "AUTH_PUBLIC_SIGNUP_DISABLED",
+      error: "Synteq is currently in a guarded early-access phase."
+    });
+    expect(findFirstUser).not.toHaveBeenCalled();
     expect(createAuthSession).not.toHaveBeenCalled();
   });
 });

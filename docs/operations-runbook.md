@@ -44,6 +44,16 @@ Always-on workers:
 1. `worker:operational-events`
 2. `worker:incident-bridge`
 
+For guarded launch, keep `SCHEDULER_JOBS_CONFIGURED=false` until aggregate, anomaly, and alerts scheduler jobs are deployed and freshness checks pass. Alert delivery should be treated as unverified when the alerts scheduler is stale or has no recent heartbeat.
+
+## 2A) Guarded Signup and Email Sender
+
+- Set `ALLOW_PUBLIC_SIGNUP=false` in guarded production launches.
+- Set `NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP=false` for the web app so signup copy matches API behavior.
+- Invite acceptance through `/invite/:token` remains the approved path for new teammates.
+- When `EMAIL_DEV_MODE=false`, configure `BREVO_API_KEY` and a verified `EMAIL_FROM_ADDRESS`.
+- Do not use `no-reply@synteq.local`, localhost, example, or placeholder senders in production delivery mode.
+
 ## 3) Operator Checks
 
 Readiness check (dependencies and data-source prerequisites):

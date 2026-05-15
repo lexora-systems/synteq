@@ -88,8 +88,9 @@ export default async function PublicLandingPage() {
   const token = await getToken();
   const activation = token ? await resolveActivationState(token) : null;
   const isActivated = Boolean(activation?.activated && !activation?.metricsUnavailable);
-  const startHref = token ? (isActivated ? "/overview" : "/welcome") : "/signup";
-  const startLabel = isActivated ? "Open Dashboard" : "Create Workspace";
+  const publicSignupEnabled = process.env.NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP !== "false";
+  const startHref = token ? (isActivated ? "/overview" : "/welcome") : publicSignupEnabled ? "/signup" : "/login";
+  const startLabel = token ? (isActivated ? "Open Dashboard" : "Create Workspace") : publicSignupEnabled ? "Create Workspace" : "Log In";
   const loginHref = token ? "/overview" : "/login";
   const simulationHref = token ? "/overview#investigation-tools" : "/login";
 
@@ -534,8 +535,11 @@ export default async function PublicLandingPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Company</p>
               <div className="mt-3 flex flex-col gap-2 text-sm text-slate-300">
                 <a href="#problem" className="hover:text-cyan-100">Why Synteq</a>
-                <Link href="/signup" className="hover:text-cyan-100">Sign Up</Link>
+                <Link href="/signup" className="hover:text-cyan-100">{publicSignupEnabled ? "Sign Up" : "Early Access"}</Link>
                 <Link href={loginHref} className="hover:text-cyan-100">Open App</Link>
+                <Link href="/privacy" className="hover:text-cyan-100">Privacy</Link>
+                <Link href="/terms" className="hover:text-cyan-100">Terms</Link>
+                <Link href="/trust" className="hover:text-cyan-100">Trust</Link>
               </div>
             </div>
           </div>

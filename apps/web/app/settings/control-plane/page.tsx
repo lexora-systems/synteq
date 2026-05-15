@@ -85,7 +85,7 @@ export default async function ControlPlaneIndexPage() {
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Control Plane</p>
           <h2 className="mt-1 text-2xl font-semibold text-ink">Continuous signal and alert setup</h2>
           <p className="mt-2 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-slate-700">
-            Immediate value: Synteq continuously detects abnormal behavior and sends proactive alerts so teams can stop constant dashboard checking.
+            Synteq monitors operational signals and can dispatch alerts once scheduler and email/webhook delivery are configured.
           </p>
           <p className="mt-2 text-sm text-slate-600">
             Connected sources feed Synteq with operational signals using minimal access.

@@ -31,6 +31,7 @@ Implemented today:
 - Optional Pub/Sub ingestion buffering for execution and heartbeat events.
 - GitHub Actions webhook integration using manual webhook setup and `X-Hub-Signature-256` verification.
 - Generic workflow source onboarding for `webhook`, `n8n`, `make`, and `zapier`.
+- GoHighLevel Phase 1 outbound webhook support through the generic `webhook` source path.
 - Generic workflow-event ingestion through `POST /v1/ingest/workflow-event`.
 - Source inventory and control-plane setup flows.
 - Mutative test-event simulation for generic workflow sources.
@@ -38,7 +39,7 @@ Implemented today:
 - Incident lifecycle: open, acknowledged, resolved.
 - Generic workflow incident create, refresh, reopen, and resolution behavior.
 - Missing heartbeat detection.
-- Alert policies, alert channels, alert dispatch claim/retry basics, and free/basic email behavior.
+- Alert policies, alert channels, alert dispatch claim/retry basics, and free/basic email behavior when scheduler and sender infrastructure are configured.
 - Operational dashboard: `GET /v1/metrics/operational-dashboard`.
 - Incident timeline/RCA foundation: `GET /v1/incidents/:id/timeline`.
 - Incident attention groups: `GET /v1/incidents/attention-groups`.
@@ -65,7 +66,21 @@ Synteq currently supports these source paths:
 - Normalized operational events:
   - `POST /v1/ingest/events`
 
-Generic n8n, Make, and Zapier support is HTTP/event-contract based. Synteq does not yet provide native OAuth/provider-specific setup flows for n8n, Make, or Zapier.
+Generic n8n, Make, Zapier, and GoHighLevel support is HTTP/event-contract based. Synteq does not yet provide native OAuth/provider-specific setup flows for these providers.
+
+## Guarded Launch Posture
+
+For a guarded early-user launch:
+
+- Set API `ALLOW_PUBLIC_SIGNUP=false` to block self-service workspace creation.
+- Set web `NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP=false` so the signup page shows the guarded early-access message.
+- Existing login remains available.
+- Invite acceptance remains available through `/invite/:token`.
+- Do not add waitlist, CRM, approval, OAuth, or marketplace flows for this launch posture.
+
+Production email delivery must use a verified sender. When `NODE_ENV=production` and `EMAIL_DEV_MODE=false`, configure `BREVO_API_KEY` and `EMAIL_FROM_ADDRESS`. Production preflight fails if `EMAIL_FROM_ADDRESS` is missing or looks local/example/placeholder-grade.
+
+Alert readiness depends on configured scheduler and delivery infrastructure. Only set `SCHEDULER_JOBS_CONFIGURED=true` after aggregate, anomaly, and alert scheduler jobs are deployed and verified. The UI should not imply alert delivery is active when scheduler freshness or email/webhook delivery is not verified.
 
 ## Architecture Overview
 
@@ -291,10 +306,51 @@ Example generic workflow event:
 
 For failed or timed-out generic workflow events, Synteq can open or refresh incidents. A later `succeeded` event for the same source/workflow can resolve matching active generic workflow incidents.
 
-GoHighLevel Phase 1 uses the generic `webhook` source type. Native GHL webhook payloads must include an explicit
-`provider: "gohighlevel"` marker or `metadata.provider: "gohighlevel"` so Synteq can normalize them safely. Send only
-operational IDs, status, and timestamps; do not send raw contact/customer payloads, notes, email addresses, phone
-numbers, custom field values, headers, tokens, or secrets.
+### GoHighLevel Phase 1 Outbound Webhooks
+
+GoHighLevel Phase 1 uses outbound webhooks through the existing generic `webhook` source type. Create a generic `webhook` workflow source in Synteq, copy the endpoint and one-time ingestion key, then configure the GoHighLevel workflow action to send JSON to `POST /v1/ingest/workflow-event`.
+
+Required headers:
+
+```http
+X-Synteq-Key: <your_ingestion_key>
+Content-Type: application/json
+```
+
+GHL payloads must include an explicit `provider: "gohighlevel"` marker or `metadata.provider: "gohighlevel"` so Synteq can normalize them safely.
+
+Advanced production hardening can enforce existing ingest HMAC when `INGEST_HMAC_REQUIRED=true`. In that mode, also send `X-Synteq-Timestamp` and `X-Synteq-Signature` using the configured ingest HMAC secret. This phase does not add a new GHL-specific HMAC model.
+
+Safe sample payload:
+
+```json
+{
+  "provider": "gohighlevel",
+  "source_key": "<your_source_key>",
+  "workflowId": "ghl_workflow_123",
+  "workflowName": "Lead follow-up automation",
+  "eventType": "workflow.action.completed",
+  "status": "completed",
+  "deliveryId": "ghl_delivery_123",
+  "timestamp": "2026-01-01T10:00:00.000Z",
+  "locationId": "ghl_location_123",
+  "actionId": "ghl_action_123",
+  "objectType": "opportunity",
+  "objectId": "opp_123",
+  "pipelineId": "pipeline_123",
+  "opportunityId": "opp_123"
+}
+```
+
+Privacy boundary: Send workflow execution signals, not customer records. Avoid forwarding names, emails, phone numbers, notes, message bodies, custom field values, or full CRM payloads. Synteq is designed to monitor systems - not access them.
+
+Current limitations:
+
+- GHL is not yet a first-class source type.
+- No OAuth/API enrichment yet.
+- No marketplace app yet.
+- The generic `webhook` source path is used.
+- Official GHL payload validation should be added once available. Current adapter fixtures are representative and non-official.
 
 Manual GoHighLevel Phase 1 smoke test:
 
@@ -421,10 +477,13 @@ API configuration is validated in `apps/api/src/config.ts`. Main API variables i
 - `REFRESH_TOKEN_TTL`
 - `BREVO_API_KEY`
 - `EMAIL_DEV_MODE`
+- `EMAIL_FROM_ADDRESS`
+- `EMAIL_FROM_NAME`
 - `DASHBOARD_ADMIN_EMAIL`
 - `DASHBOARD_ADMIN_PASSWORD`
 - `DEFAULT_TENANT_ID`
 - `ALLOW_PUBLIC_SIGNUP`
+- `SCHEDULER_JOBS_CONFIGURED`
 - `CORS_ORIGIN`
 - `WEB_BASE_URL`
 - `INVITE_RATE_LIMIT_PER_HOUR`
@@ -453,6 +512,11 @@ Web API origin resolution:
 2. `API_BASE_URL`
 3. `NEXT_PUBLIC_API_BASE_URL`
 4. `http://localhost:8080`
+
+Web guarded-launch posture:
+
+- `NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP=false` mirrors the API signup gate in the UI.
+- The API remains authoritative; `ALLOW_PUBLIC_SIGNUP=false` blocks self-service signup even if the web flag is misconfigured.
 
 Example env files:
 
@@ -571,6 +635,9 @@ Production runtime expectations:
   - aggregate job
   - anomaly job
   - alert dispatch job
+- `SCHEDULER_JOBS_CONFIGURED=true` is set only after those jobs are deployed and verified.
+- `EMAIL_DEV_MODE=false` uses a real provider API key and verified `EMAIL_FROM_ADDRESS`.
+- Alert delivery is not considered launch-ready until scheduler freshness and email/webhook delivery are verified.
 - Operational workers run where enabled:
   - `worker:operational-events`
   - `worker:incident-bridge`
@@ -605,6 +672,8 @@ Synteq is built around tenant isolation and cautious payload handling:
 - Generic workflow silent checks do not echo raw source config, API keys, webhook secrets, tokens, or payloads.
 - Secret Manager references are supported for sensitive runtime values.
 - Production hardening flags exist for Redis, HMAC, CORS, web base URL, and Pub/Sub-only ingestion.
+- Public Privacy Policy, Terms of Service, and Trust pages describe the current monitoring and data-boundary posture.
+- Customers should send operational metadata only, not raw CRM/contact/customer payloads.
 
 Local secret handling:
 

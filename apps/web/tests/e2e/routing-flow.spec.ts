@@ -49,6 +49,20 @@ test("public landing page renders", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("public trust and legal pages render", async ({ page }) => {
+  await page.goto("/privacy");
+  await expect(page.getByTestId("privacy-page-title")).toHaveText("Privacy Policy");
+  await expect(page.getByText("Designed to monitor systems - not access them")).toBeVisible();
+
+  await page.goto("/terms");
+  await expect(page.getByTestId("terms-page-title")).toHaveText("Terms of Service");
+  await expect(page.getByText("Alert delivery depends on configured scheduler and email/webhook infrastructure.")).toBeVisible();
+
+  await page.goto("/trust");
+  await expect(page.getByTestId("trust-page-title")).toHaveText("Security and Trust");
+  await expect(page.getByText("Do not send raw CRM/contact records")).toBeVisible();
+});
+
 test("/login renders and invalid login is handled", async ({ page }) => {
   await page.goto("/login");
   await expect(page.getByRole("heading", { name: "Sign in to Synteq risk detection" })).toBeVisible();

@@ -39,6 +39,25 @@ const TEST_STATUSES: Array<{ value: WorkflowSourceTestStatus; label: string }> =
   { value: "timed_out", label: "Send test timeout event" }
 ];
 
+function goHighLevelSamplePayload(sourceKey = "<your_source_key>") {
+  return {
+    provider: "gohighlevel",
+    source_key: sourceKey,
+    workflowId: "ghl_workflow_123",
+    workflowName: "Lead follow-up automation",
+    eventType: "workflow.action.completed",
+    status: "completed",
+    deliveryId: "ghl_delivery_123",
+    timestamp: "2026-01-01T10:00:00.000Z",
+    locationId: "ghl_location_123",
+    actionId: "ghl_action_123",
+    objectType: "opportunity",
+    objectId: "opp_123",
+    pipelineId: "pipeline_123",
+    opportunityId: "opp_123"
+  };
+}
+
 function sourceTypeLabel(value: string) {
   return SOURCE_TYPE_OPTIONS.find((option) => option.value === value)?.label ?? value;
 }
@@ -97,6 +116,10 @@ export function GenericWorkflowSourceOnboarding({
       2
     );
   }, [latestSource]);
+  const goHighLevelPayload = useMemo(
+    () => JSON.stringify(goHighLevelSamplePayload(latestSource?.source_key), null, 2),
+    [latestSource?.source_key]
+  );
 
   async function copyText(label: string, value: string) {
     await navigator.clipboard.writeText(value);
@@ -126,8 +149,8 @@ export function GenericWorkflowSourceOnboarding({
             Use this with any automation tool that can send HTTP requests.
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            GoHighLevel Phase 1 uses the Webhook source type with <code>provider: "gohighlevel"</code>. Send operational IDs,
-            status, and timestamps only; do not send raw contact or customer data.
+            GoHighLevel Phase 1 uses the Webhook source type with <code>provider: "gohighlevel"</code>. Send workflow
+            execution signals, not customer records.
           </p>
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_160px_150px_auto]">
             <input
@@ -172,6 +195,37 @@ export function GenericWorkflowSourceOnboarding({
           Owner/admin role is required to create workflow sources and display one-time ingestion keys.
         </div>
       )}
+
+      <div
+        className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-panel"
+        data-testid="gohighlevel-webhook-guidance"
+      >
+        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">GoHighLevel outbound webhook</p>
+        <h3 className="mt-1 text-lg font-semibold text-ink">Use the generic Webhook source</h3>
+        <p className="mt-2">
+          GoHighLevel is supported through outbound webhooks. The Synteq source type remains <code>webhook</code>; include{" "}
+          <code>provider: "gohighlevel"</code> or <code>metadata.provider: "gohighlevel"</code> in the JSON body.
+        </p>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Required headers</p>
+            <p className="mt-2 font-mono text-xs text-ink">X-Synteq-Key: &lt;your_ingestion_key&gt;</p>
+            <p className="mt-1 font-mono text-xs text-ink">Content-Type: application/json</p>
+            <p className="mt-2 text-xs text-slate-500">
+              Advanced: if your production environment enforces ingest HMAC, also send <code>X-Synteq-Timestamp</code>{" "}
+              and <code>X-Synteq-Signature</code> using the configured ingest HMAC secret.
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Privacy boundary</p>
+            <p className="mt-2">
+              Send workflow execution signals, not customer records. Avoid forwarding names, emails, phone numbers, notes,
+              message bodies, or full CRM payloads.
+            </p>
+            <p className="mt-2 font-semibold text-ink">Designed to monitor systems - not access them.</p>
+          </div>
+        </div>
+      </div>
 
       <div
         className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-panel"
@@ -271,6 +325,29 @@ export function GenericWorkflowSourceOnboarding({
               Copy payload
             </button>
           </div>
+
+          {latestSource.source_type === "webhook" ? (
+            <div className="mt-4" data-testid="gohighlevel-sample-section">
+              <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">GoHighLevel safe sample JSON</p>
+              <p className="mt-1 text-xs text-slate-600">
+                Send workflow execution signals, not customer records. Avoid forwarding names, emails, phone numbers, notes,
+                message bodies, or full CRM payloads.
+              </p>
+              <pre
+                className="mt-2 max-h-[360px] overflow-auto rounded-lg border border-cyan-200 bg-white p-3 text-xs text-slate-800"
+                data-testid="gohighlevel-sample-payload"
+              >
+                {goHighLevelPayload}
+              </pre>
+              <button
+                type="button"
+                className="mt-2 rounded-lg border border-cyan-300 px-3 py-1.5 text-xs font-semibold text-cyan-800"
+                onClick={() => copyText("GoHighLevel payload", goHighLevelPayload)}
+              >
+                Copy GoHighLevel payload
+              </button>
+            </div>
+          ) : null}
 
           <div className="mt-4 flex flex-wrap gap-2">
             <form action={formAction}>

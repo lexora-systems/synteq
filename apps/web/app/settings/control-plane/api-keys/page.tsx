@@ -115,7 +115,7 @@ export default async function ApiKeysControlPlanePage() {
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Control Plane / API Keys</p>
           <h2 className="mt-1 text-2xl font-semibold text-ink">Ingestion API keys</h2>
           <p className="mt-2 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-slate-700">
-            Immediate value: stable ingestion keys keep detection and alerting continuous, even as your pipelines scale.
+            Stable ingestion keys let Synteq verify operational signal senders without expanding system access.
           </p>
           <p className="mt-2 text-sm text-slate-600">
             API keys authenticate execution, heartbeat, and operational event ingestion into Synteq.

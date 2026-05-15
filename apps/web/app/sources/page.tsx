@@ -345,7 +345,7 @@ export default async function ConnectedSourcesPage() {
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Connected Sources</p>
           <h2 className="mt-1 text-2xl font-semibold text-ink">Operational signal connectivity</h2>
           <p className="mt-2 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-slate-700">
-            Immediate value: connected sources let Synteq continuously detect abnormal behavior and alert earlier.
+            Connected sources let Synteq detect abnormal behavior and support alerting once delivery infrastructure is configured.
           </p>
           <p className="mt-2 text-sm text-slate-600">
             Connected sources are how Synteq continuously receives operational signals.
@@ -374,7 +374,7 @@ export default async function ConnectedSourcesPage() {
                 ? "Configured sources are currently inactive, so Synteq is not monitoring live signals right now."
                 : "Connect and activate your first source to start live monitoring."}
             </p>
-            <p className="mt-1">Synteq is continuously monitoring once active signal flow begins, and you&apos;ll be alerted when risk patterns are detected.</p>
+            <p className="mt-1">Monitoring becomes active after real workflow events arrive. Alert delivery depends on configured scheduler/email infrastructure.</p>
             <div className="mt-3">
               <Link href="/settings/control-plane" className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">
                 Open control plane
@@ -388,7 +388,7 @@ export default async function ConnectedSourcesPage() {
               Active signal coverage: {workflowCount} workflow source{workflowCount === 1 ? "" : "s"}, {githubCount} GitHub integration{githubCount === 1 ? "" : "s"}.
             </p>
             <p className="mt-1">
-              You&apos;ll be alerted when failure spikes, retry storms, missing heartbeats, or latency-related risks are detected.
+              Configured alert delivery can notify teams when failure spikes, retry storms, missing heartbeats, or latency-related risks are detected.
             </p>
           </div>
         )}
