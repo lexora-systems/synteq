@@ -844,6 +844,7 @@ a[class*="inline-flex"]:active {
   stroke-width: 2.2;
   stroke-linecap: round;
   stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }
 
 .syn-problem-flow-path {
@@ -856,6 +857,7 @@ a[class*="inline-flex"]:active {
   animation-timing-function: linear;
   animation-iteration-count: infinite;
   filter: drop-shadow(0 0 7px rgba(124, 58, 237, 0.74));
+  vector-effect: non-scaling-stroke;
 }
 
 .syn-problem-flow-a {

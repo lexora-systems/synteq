@@ -106,6 +106,28 @@ const problemProcessItems = [
   "Track reliability & alert status"
 ];
 
+const problemSourceSignalRows = [
+  { id: "github", sourceY: 43, coreY: 190, gradientId: "problemBlue", flowClass: "syn-problem-flow-a", nodeClass: "syn-problem-node-a" },
+  { id: "webhooks", sourceY: 141, coreY: 224, gradientId: "problemViolet", flowClass: "syn-problem-flow-b", nodeClass: "syn-problem-node-b" },
+  { id: "gohighlevel", sourceY: 239, coreY: 239, gradientId: "problemTeal", flowClass: "syn-problem-flow-c", nodeClass: "syn-problem-node-c" },
+  { id: "automation", sourceY: 337, coreY: 254, gradientId: "problemOrange", flowClass: "syn-problem-flow-d", nodeClass: "syn-problem-node-d" },
+  { id: "systems", sourceY: 435, coreY: 288, gradientId: "problemSlate", flowClass: "syn-problem-flow-e", nodeClass: "syn-problem-node-e" }
+] as const;
+
+const problemOperationalSignalRows = [
+  { id: "overview", coreY: 190, panelY: 80, flowClass: "syn-problem-flow-f", nodeClass: "syn-problem-node-f" },
+  { id: "visibility", coreY: 239, panelY: 239, flowClass: "syn-problem-flow-g", nodeClass: "syn-problem-node-a" },
+  { id: "incidents", coreY: 288, panelY: 376, flowClass: "syn-problem-flow-h", nodeClass: "syn-problem-node-b" }
+] as const;
+
+function problemSourceSignalPath(sourceY: number, coreY: number) {
+  return `M0 ${sourceY}H44C112 ${sourceY} 104 ${coreY} 172 ${coreY}`;
+}
+
+function problemOperationalSignalPath(coreY: number, panelY: number) {
+  return `M348 ${coreY}H376C444 ${coreY} 436 ${panelY} 520 ${panelY}`;
+}
+
 const problemIncidentItems = [
   {
     title: "Payment workflow failing",
@@ -474,14 +496,14 @@ export default async function PublicLandingPage() {
 
         <div className="relative mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
           <h2 className="sr-only">The Problem: disconnected operational signals create workflow reliability blind spots</h2>
-          <div className="grid gap-5 lg:grid-cols-[270px_minmax(300px,1fr)_minmax(410px,1.15fr)] lg:items-start xl:grid-cols-[300px_minmax(340px,1fr)_minmax(460px,1.2fr)]">
+          <div className="grid gap-5 lg:grid-cols-[minmax(250px,300px)_minmax(340px,430px)_minmax(310px,400px)] lg:items-start lg:justify-center xl:gap-6">
             <div className="relative z-10">
-              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.24em] text-sky-300">Your Sources</p>
+              <p className="mb-4 text-xs font-semibold uppercase leading-4 tracking-[0.24em] text-sky-300">Your Sources</p>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
                 {problemSourceItems.map((source) => (
                   <article
                     key={source.title}
-                    className="group flex min-h-[86px] items-center gap-3 rounded-2xl border border-cyan-300/15 bg-slate-950/60 p-3.5 shadow-[0_18px_42px_rgba(2,6,23,0.35)] backdrop-blur-sm transition duration-200 hover:-translate-y-0.5 hover:border-cyan-300/35 hover:bg-slate-950/75"
+                    className="group flex min-h-[86px] items-center gap-3 rounded-2xl border border-cyan-300/15 bg-slate-950/60 p-3.5 shadow-[0_18px_42px_rgba(2,6,23,0.35)] backdrop-blur-sm transition duration-200 hover:-translate-y-0.5 hover:border-cyan-300/35 hover:bg-slate-950/75 lg:h-[86px] lg:p-3"
                   >
                     <div
                       className={[
@@ -512,18 +534,24 @@ export default async function PublicLandingPage() {
                     </div>
                     <div className="min-w-0">
                       <h3 className="text-sm font-semibold leading-5 text-slate-50">{source.title}</h3>
-                      <p className="mt-1 text-xs leading-5 text-slate-300">{source.description}</p>
+                      <p className="mt-1 text-xs leading-4 text-slate-300">{source.description}</p>
                     </div>
                   </article>
                 ))}
               </div>
             </div>
 
-            <div className="relative z-10 min-h-[430px] overflow-hidden rounded-[1.75rem] border border-cyan-300/10 bg-slate-950/20 p-5 lg:min-h-[520px] lg:overflow-visible lg:border-0 lg:bg-transparent lg:p-0">
-              <p className="absolute left-5 top-5 z-20 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300 lg:left-4 lg:top-0">
+            <div className="relative z-10 min-h-[430px] overflow-hidden rounded-[1.75rem] border border-cyan-300/10 bg-slate-950/20 p-5 lg:h-[510px] lg:min-h-0 lg:overflow-visible lg:border-0 lg:bg-transparent lg:p-0">
+              <p className="absolute left-5 top-5 z-20 text-xs font-semibold uppercase leading-4 tracking-[0.24em] text-cyan-300 lg:left-0 lg:top-0">
                 Signals In
               </p>
-              <svg viewBox="-42 0 644 620" className="syn-problem-flow absolute inset-0 hidden h-full w-full lg:block" aria-hidden>
+              <div className="pointer-events-none absolute left-1/2 top-12 h-16 w-px -translate-x-1/2 bg-gradient-to-b from-cyan-300/0 via-cyan-300/70 to-violet-300/0 lg:hidden" aria-hidden />
+              <svg
+                viewBox="0 0 520 478"
+                preserveAspectRatio="none"
+                className="syn-problem-flow absolute -left-6 top-8 hidden h-[478px] w-[calc(100%+3rem)] lg:block"
+                aria-hidden
+              >
                 <defs>
                   <linearGradient id="problemBlue" x1="0%" y1="0%" x2="100%" y2="0%">
                     <stop offset="0%" stopColor="#2563eb" />
@@ -556,49 +584,53 @@ export default async function PublicLandingPage() {
                   </radialGradient>
                 </defs>
 
-                <circle cx="280" cy="305" r="150" fill="url(#problemCenterGlow)" />
+                <circle cx="260" cy="239" r="150" fill="url(#problemCenterGlow)" />
                 <g className="syn-problem-flow-base">
-                  <path d="M-38 76H92C154 76 146 220 220 220H250" />
-                  <path d="M-38 184H82C152 184 140 278 220 278H250" />
-                  <path d="M-38 294H98C156 294 154 306 220 306H250" />
-                  <path d="M-38 404H94C156 404 144 336 220 336H250" />
-                  <path d="M-38 514H96C158 514 150 384 220 384H250" />
-                  <path d="M350 220H374C438 220 424 100 492 100H602" />
-                  <path d="M350 306H378C436 306 426 310 492 310H602" />
-                  <path d="M350 384H376C438 384 426 502 492 502H602" />
+                  {problemSourceSignalRows.map((row) => (
+                    <path key={`source-base-${row.id}`} d={problemSourceSignalPath(row.sourceY, row.coreY)} />
+                  ))}
+                  {problemOperationalSignalRows.map((row) => (
+                    <path key={`operational-base-${row.id}`} d={problemOperationalSignalPath(row.coreY, row.panelY)} />
+                  ))}
                 </g>
                 <g>
-                  <path className="syn-problem-flow-path syn-problem-flow-a" pathLength="100" stroke="url(#problemBlue)" d="M-38 76H92C154 76 146 220 220 220H250" />
-                  <path className="syn-problem-flow-path syn-problem-flow-b" pathLength="100" stroke="url(#problemViolet)" d="M-38 184H82C152 184 140 278 220 278H250" />
-                  <path className="syn-problem-flow-path syn-problem-flow-c" pathLength="100" stroke="url(#problemTeal)" d="M-38 294H98C156 294 154 306 220 306H250" />
-                  <path className="syn-problem-flow-path syn-problem-flow-d" pathLength="100" stroke="url(#problemOrange)" d="M-38 404H94C156 404 144 336 220 336H250" />
-                  <path className="syn-problem-flow-path syn-problem-flow-e" pathLength="100" stroke="url(#problemSlate)" d="M-38 514H96C158 514 150 384 220 384H250" />
-                  <path className="syn-problem-flow-path syn-problem-flow-f" pathLength="100" stroke="url(#problemPurpleOut)" d="M350 220H374C438 220 424 100 492 100H602" />
-                  <path className="syn-problem-flow-path syn-problem-flow-g" pathLength="100" stroke="url(#problemPurpleOut)" d="M350 306H378C436 306 426 310 492 310H602" />
-                  <path className="syn-problem-flow-path syn-problem-flow-h" pathLength="100" stroke="url(#problemPurpleOut)" d="M350 384H376C438 384 426 502 492 502H602" />
+                  {problemSourceSignalRows.map((row) => (
+                    <path
+                      key={`source-flow-${row.id}`}
+                      className={`syn-problem-flow-path ${row.flowClass}`}
+                      pathLength="100"
+                      stroke={`url(#${row.gradientId})`}
+                      d={problemSourceSignalPath(row.sourceY, row.coreY)}
+                    />
+                  ))}
+                  {problemOperationalSignalRows.map((row) => (
+                    <path
+                      key={`operational-flow-${row.id}`}
+                      className={`syn-problem-flow-path ${row.flowClass}`}
+                      pathLength="100"
+                      stroke="url(#problemPurpleOut)"
+                      d={problemOperationalSignalPath(row.coreY, row.panelY)}
+                    />
+                  ))}
                 </g>
                 <g>
-                  <circle className="syn-problem-node syn-problem-node-a" cx="-38" cy="76" r="5" />
-                  <circle className="syn-problem-node syn-problem-node-b" cx="-38" cy="184" r="5" />
-                  <circle className="syn-problem-node syn-problem-node-c" cx="-38" cy="294" r="5" />
-                  <circle className="syn-problem-node syn-problem-node-d" cx="-38" cy="404" r="5" />
-                  <circle className="syn-problem-node syn-problem-node-e" cx="-38" cy="514" r="5" />
-                  <circle className="syn-problem-node syn-problem-node-f" cx="250" cy="220" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-a" cx="250" cy="278" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-b" cx="250" cy="306" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-c" cx="250" cy="336" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-d" cx="250" cy="384" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-e" cx="350" cy="220" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-f" cx="350" cy="306" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-a" cx="350" cy="384" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-b" cx="602" cy="100" r="5" />
-                  <circle className="syn-problem-node syn-problem-node-c" cx="602" cy="310" r="5" />
-                  <circle className="syn-problem-node syn-problem-node-d" cx="602" cy="502" r="5" />
+                  {problemSourceSignalRows.map((row) => (
+                    <circle key={`source-node-${row.id}`} className={`syn-problem-node ${row.nodeClass}`} cx="0" cy={row.sourceY} r="5" />
+                  ))}
+                  {problemSourceSignalRows.map((row) => (
+                    <circle key={`core-in-node-${row.id}`} className={`syn-problem-node ${row.nodeClass}`} cx="172" cy={row.coreY} r="4.5" />
+                  ))}
+                  {problemOperationalSignalRows.map((row) => (
+                    <circle key={`core-out-node-${row.id}`} className={`syn-problem-node ${row.nodeClass}`} cx="348" cy={row.coreY} r="4.5" />
+                  ))}
+                  {problemOperationalSignalRows.map((row) => (
+                    <circle key={`panel-node-${row.id}`} className={`syn-problem-node ${row.nodeClass}`} cx="520" cy={row.panelY} r="5" />
+                  ))}
                 </g>
               </svg>
 
-              <div className="absolute inset-x-0 top-20 mx-auto hidden h-[340px] w-[340px] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.2),transparent_68%)] blur-sm lg:block" aria-hidden />
-              <div className="relative z-20 mx-auto mt-20 max-w-[300px] text-center lg:absolute lg:left-1/2 lg:top-[54%] lg:mt-0 lg:-translate-x-1/2 lg:-translate-y-1/2">
+              <div className="absolute left-1/2 top-[271px] hidden h-[340px] w-[340px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.2),transparent_68%)] blur-sm lg:block" aria-hidden />
+              <div className="relative z-20 mx-auto mt-20 max-w-[300px] text-center lg:absolute lg:left-1/2 lg:top-[271px] lg:mt-0 lg:-translate-x-1/2 lg:-translate-y-1/2">
                 <div className="syn-problem-core mx-auto flex h-36 w-36 items-center justify-center rounded-[2.25rem] border border-violet-300/35 bg-[linear-gradient(145deg,rgba(34,23,84,0.96),rgba(8,14,34,0.96))] shadow-[0_0_58px_rgba(124,58,237,0.36)] lg:h-44 lg:w-44 lg:rounded-[2.75rem]">
                   <Image
                     src="/syn-logo.png"
@@ -626,10 +658,10 @@ export default async function PublicLandingPage() {
               </div>
             </div>
 
-            <div className="relative z-10 space-y-4">
-              <article className="rounded-2xl border border-violet-400/45 bg-slate-950/68 p-4 shadow-[0_24px_70px_rgba(12,5,40,0.42)] backdrop-blur-md">
+            <div className="relative z-10 space-y-3 xl:space-y-4">
+              <article className="rounded-2xl border border-violet-400/35 bg-slate-950/62 p-3.5 shadow-[0_20px_54px_rgba(12,5,40,0.32)] backdrop-blur-md xl:p-4">
                 <h3 className="text-base font-semibold text-slate-50">Operational Overview</h3>
-                <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                <div className="mt-3 grid grid-cols-2 gap-2 xl:grid-cols-4">
                   <div className="rounded-xl border border-slate-700/60 bg-slate-900/60 p-2.5">
                     <p className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Active Incidents</p>
                     <div className="mt-1.5 flex items-end gap-2">
@@ -656,7 +688,7 @@ export default async function PublicLandingPage() {
                   </div>
                 </div>
 
-                <div className="mt-3 grid gap-3 md:grid-cols-[1.25fr_0.75fr]">
+                <div className="mt-3 grid gap-3 xl:grid-cols-[1.15fr_0.85fr]">
                   <div className="rounded-xl border border-slate-700/55 bg-slate-900/45 p-2.5">
                     <svg viewBox="0 0 360 132" className="h-[112px] w-full" aria-label="Incident trend chart">
                       <g stroke="rgba(148,163,184,0.14)" strokeWidth="1">
@@ -705,12 +737,12 @@ export default async function PublicLandingPage() {
                 </div>
               </article>
 
-              <article className="rounded-2xl border border-violet-400/45 bg-slate-950/68 p-4 shadow-[0_24px_70px_rgba(12,5,40,0.42)] backdrop-blur-md">
+              <article className="rounded-2xl border border-violet-400/35 bg-slate-950/62 p-3.5 shadow-[0_20px_54px_rgba(12,5,40,0.32)] backdrop-blur-md xl:p-4">
                 <h3 className="text-base font-semibold text-slate-50">Active Incidents</h3>
                 <div className="mt-3 divide-y divide-slate-700/45 rounded-xl border border-slate-700/55 bg-slate-900/35">
                   {problemIncidentItems.map((incident) => (
-                    <div key={incident.title} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 px-3 py-2.5">
-                      <div className="flex min-w-0 items-center gap-3">
+                    <div key={incident.title} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                      <div className="col-span-2 flex min-w-0 items-center gap-3 sm:col-span-1">
                         <span
                           className={[
                             "h-3 w-3 shrink-0 rounded-full",
