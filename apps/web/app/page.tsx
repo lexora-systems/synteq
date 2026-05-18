@@ -81,6 +81,33 @@ const heroFeatureItems = [
   }
 ] as const;
 
+const heroTrustItems = [
+  {
+    title: "Designed to monitor systems — not access them.",
+    description: "No source code, customer data, secrets, or full logs required.",
+    icon: "shield",
+    tone: "violet"
+  },
+  {
+    title: "Secure by default",
+    description: "Encrypted in transit and at rest. Fine-grained access controls.",
+    icon: "lock",
+    tone: "indigo"
+  },
+  {
+    title: "Built for automation teams",
+    description: "From solo operators to agencies, Synteq scales with your automation stack.",
+    icon: "check",
+    tone: "emerald"
+  },
+  {
+    title: "Open & extensible",
+    description: "Use our API and event contract to connect any tool or workflow.",
+    icon: "globe",
+    tone: "cyan"
+  }
+] as const;
+
 const timelineItems = [
   { time: "09:42", label: "Retry storm trend detected", severity: "watch" },
   { time: "09:47", label: "Latency drift crossed threshold", severity: "high" },
@@ -126,6 +153,43 @@ function HeroFeatureIcon({ type }: { type: (typeof heroFeatureItems)[number]["ic
         strokeLinejoin="round"
         strokeWidth="3"
       />
+    </svg>
+  );
+}
+
+function HeroTrustIcon({ type }: { type: (typeof heroTrustItems)[number]["icon"] }) {
+  if (type === "lock") {
+    return (
+      <svg viewBox="0 0 40 40" aria-hidden className="h-6 w-6">
+        <path d="M12 18v-4c0-5 3.2-8 8-8s8 3 8 8v4" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2.5" />
+        <path d="M10 18h20v16H10V18Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="2.5" />
+        <path d="M20 25v4" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2.5" />
+      </svg>
+    );
+  }
+
+  if (type === "check") {
+    return (
+      <svg viewBox="0 0 40 40" aria-hidden className="h-6 w-6">
+        <circle cx="20" cy="20" r="12" fill="none" stroke="currentColor" strokeWidth="2.5" />
+        <path d="m14 20 4 4 8-9" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" />
+      </svg>
+    );
+  }
+
+  if (type === "globe") {
+    return (
+      <svg viewBox="0 0 40 40" aria-hidden className="h-6 w-6">
+        <circle cx="20" cy="20" r="13" fill="none" stroke="currentColor" strokeWidth="2.5" />
+        <path d="M7 20h26M20 7c4 4.4 6 8.7 6 13s-2 8.6-6 13M20 7c-4 4.4-6 8.7-6 13s2 8.6 6 13" fill="none" stroke="currentColor" strokeWidth="2.5" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 40 40" aria-hidden className="h-6 w-6">
+      <path d="M20 5 31 9v9c0 7.3-4 12.7-11 17-7-4.3-11-9.7-11-17V9l11-4Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="2.5" />
+      <path d="M16 20.5 19 23l6-7" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" />
     </svg>
   );
 }
@@ -297,21 +361,21 @@ export default async function PublicLandingPage() {
           </div>
         </header>
 
-        <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-4 pb-14 pt-8 sm:px-6 lg:grid-cols-12 lg:px-8 lg:pb-24 lg:pt-14">
+        <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-4 pb-10 pt-7 sm:px-6 lg:grid-cols-12 lg:px-8 lg:pb-16 lg:pt-10">
           <div className="lg:col-span-10">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/90">WORKFLOW RELIABILITY INFRASTRUCTURE</p>
-            <h1 className="mt-4 max-w-[820px] text-4xl font-semibold leading-[1.06] text-slate-50 sm:text-6xl lg:text-7xl">
+            <h1 className="mt-3 max-w-[820px] text-4xl font-semibold leading-[1.06] text-slate-50 sm:text-6xl lg:text-7xl">
               Monitor Reliability Across Your Workflow and Automation Signals
             </h1>
-            <p className="mt-6 max-w-[680px] text-base leading-7 text-slate-200/90 sm:text-2xl sm:leading-9">
+            <p className="mt-5 max-w-[680px] text-base leading-7 text-slate-200/90 sm:text-xl sm:leading-8">
               Synteq helps teams detect failures, retries, latency drift, missing signals, and operational risk from connected workflow, webhook, and GitHub Actions events.
             </p>
-            <div className="mt-10 grid max-w-5xl gap-6 sm:grid-cols-3">
+            <div className="mt-8 grid max-w-5xl gap-5 sm:grid-cols-3">
               {heroFeatureItems.map((item) => (
                 <article key={item.title} className="min-w-0">
                   <div
                     className={[
-                      "flex h-14 w-14 items-center justify-center rounded-2xl border shadow-[0_18px_42px_rgba(2,6,23,0.28)]",
+                      "flex h-12 w-12 items-center justify-center rounded-2xl border shadow-[0_18px_42px_rgba(2,6,23,0.28)]",
                       item.tone === "violet"
                         ? "border-violet-400/15 bg-violet-500/15 text-violet-400"
                         : item.tone === "cyan"
@@ -321,12 +385,12 @@ export default async function PublicLandingPage() {
                   >
                     <HeroFeatureIcon type={item.icon} />
                   </div>
-                  <h2 className="mt-5 text-base font-semibold text-slate-50 sm:text-lg">{item.title}</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-300 sm:text-base">{item.description}</p>
+                  <h2 className="mt-4 text-base font-semibold text-slate-50">{item.title}</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">{item.description}</p>
                 </article>
               ))}
             </div>
-            <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
                 href={startHref}
                 className="syn-cta-lift inline-flex h-12 items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 px-7 text-sm font-semibold text-white shadow-[0_14px_40px_rgba(56,189,248,0.3)]"
@@ -339,6 +403,30 @@ export default async function PublicLandingPage() {
               >
                 {token ? "Open Dashboard" : "Log in"}
               </Link>
+            </div>
+            <div className="mt-6 grid max-w-6xl gap-4 rounded-2xl border border-cyan-300/10 bg-slate-950/45 p-4 shadow-[0_20px_55px_rgba(2,6,23,0.34)] backdrop-blur-sm sm:grid-cols-2 lg:grid-cols-4 lg:p-5">
+              {heroTrustItems.map((item) => (
+                <article key={item.title} className="flex min-w-0 gap-3">
+                  <div
+                    className={[
+                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border",
+                      item.tone === "violet"
+                        ? "border-violet-400/15 bg-violet-500/15 text-violet-300"
+                        : item.tone === "indigo"
+                          ? "border-indigo-400/15 bg-indigo-500/15 text-indigo-300"
+                          : item.tone === "emerald"
+                            ? "border-emerald-400/15 bg-emerald-500/15 text-emerald-300"
+                            : "border-cyan-400/15 bg-cyan-500/15 text-cyan-300"
+                    ].join(" ")}
+                  >
+                    <HeroTrustIcon type={item.icon} />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-semibold leading-5 text-slate-50">{item.title}</h2>
+                    <p className="mt-1 text-xs leading-5 text-slate-300">{item.description}</p>
+                  </div>
+                </article>
+              ))}
             </div>
           </div>
         </div>
