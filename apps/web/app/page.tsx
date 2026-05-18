@@ -60,12 +60,75 @@ const supportedSourceItems = [
   }
 ];
 
+const heroFeatureItems = [
+  {
+    title: "Detect risk earlier",
+    description: "Catch failures, retries, latency drift, and missing signals.",
+    icon: "pulse",
+    tone: "violet"
+  },
+  {
+    title: "Investigate with context",
+    description: "See timelines, root patterns, and impacted workflows in one place.",
+    icon: "users",
+    tone: "cyan"
+  },
+  {
+    title: "Get the right alerts",
+    description: "Notify the right people through email, webhook, and more.",
+    icon: "bell",
+    tone: "emerald"
+  }
+] as const;
+
 const timelineItems = [
   { time: "09:42", label: "Retry storm trend detected", severity: "watch" },
   { time: "09:47", label: "Latency drift crossed threshold", severity: "high" },
   { time: "09:55", label: "Incident guidance generated", severity: "open" },
   { time: "10:02", label: "Mitigation confirmed", severity: "resolved" }
 ];
+
+function HeroFeatureIcon({ type }: { type: (typeof heroFeatureItems)[number]["icon"] }) {
+  if (type === "users") {
+    return (
+      <svg viewBox="0 0 48 48" aria-hidden className="h-8 w-8">
+        <path d="M17 22a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z" fill="none" stroke="currentColor" strokeWidth="3" />
+        <path d="M7 36c1.6-6.2 5.1-9 10-9s8.4 2.8 10 9" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+        <path d="M31 21a5 5 0 1 0-1.7-9.7" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+        <path d="M30 28c5.2.4 8.7 3.2 10 8" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+      </svg>
+    );
+  }
+
+  if (type === "bell") {
+    return (
+      <svg viewBox="0 0 48 48" aria-hidden className="h-8 w-8">
+        <path
+          d="M15 22c0-6.1 3.6-10 9-10s9 3.9 9 10v6l4 6H11l4-6v-6Z"
+          fill="none"
+          stroke="currentColor"
+          strokeLinejoin="round"
+          strokeWidth="3"
+        />
+        <path d="M21 38c.8 1.6 1.8 2.4 3 2.4s2.2-.8 3-2.4" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+        <path d="M24 8v3" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden className="h-8 w-8">
+      <path
+        d="M6 25h9l4-13 8 26 4-17h11"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="3"
+      />
+    </svg>
+  );
+}
 
 function CircuitDivider({ reverse = false }: { reverse?: boolean }) {
   return (
@@ -243,9 +306,26 @@ export default async function PublicLandingPage() {
             <p className="mt-6 max-w-[680px] text-base leading-7 text-slate-200/90 sm:text-2xl sm:leading-9">
               Synteq helps teams detect failures, retries, latency drift, missing signals, and operational risk from connected workflow, webhook, and GitHub Actions events.
             </p>
-            <p className="mt-4 max-w-[620px] text-sm leading-6 text-cyan-100/90">
-              Designed to monitor systems — not access them. Synteq works from operational signals and does not require source code, customer records, secrets, or full logs by default.
-            </p>
+            <div className="mt-10 grid max-w-5xl gap-6 sm:grid-cols-3">
+              {heroFeatureItems.map((item) => (
+                <article key={item.title} className="min-w-0">
+                  <div
+                    className={[
+                      "flex h-14 w-14 items-center justify-center rounded-2xl border shadow-[0_18px_42px_rgba(2,6,23,0.28)]",
+                      item.tone === "violet"
+                        ? "border-violet-400/15 bg-violet-500/15 text-violet-400"
+                        : item.tone === "cyan"
+                          ? "border-cyan-400/15 bg-cyan-500/15 text-cyan-300"
+                          : "border-emerald-400/15 bg-emerald-500/15 text-emerald-300"
+                    ].join(" ")}
+                  >
+                    <HeroFeatureIcon type={item.icon} />
+                  </div>
+                  <h2 className="mt-5 text-base font-semibold text-slate-50 sm:text-lg">{item.title}</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-300 sm:text-base">{item.description}</p>
+                </article>
+              ))}
+            </div>
             <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
                 href={startHref}
@@ -260,11 +340,6 @@ export default async function PublicLandingPage() {
                 {token ? "Open Dashboard" : "Log in"}
               </Link>
             </div>
-            <ul className="mt-8 grid gap-3 text-sm text-cyan-50/95 sm:grid-cols-3">
-              <li className="rounded-xl border border-cyan-300/30 bg-slate-900/40 px-3 py-3 backdrop-blur">Detect workflow risk earlier</li>
-              <li className="rounded-xl border border-cyan-300/30 bg-slate-900/40 px-3 py-3 backdrop-blur">Validate webhook readiness</li>
-              <li className="rounded-xl border border-cyan-300/30 bg-slate-900/40 px-3 py-3 backdrop-blur">Investigate before escalation</li>
-            </ul>
           </div>
         </div>
       </section>
