@@ -685,30 +685,21 @@ export default async function PublicLandingPage() {
                 </g>
               </svg>
 
-              <div className="absolute left-1/2 top-[271px] hidden h-[340px] w-[340px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.2),transparent_68%)] blur-sm lg:block" aria-hidden />
-              <div className="relative z-20 mx-auto mt-20 max-w-[300px] text-center lg:absolute lg:left-1/2 lg:top-[271px] lg:mt-0 lg:-translate-x-1/2 lg:-translate-y-1/2">
-                <div className="syn-problem-core mx-auto flex h-36 w-36 items-center justify-center rounded-[2.25rem] border border-violet-300/35 bg-[linear-gradient(145deg,rgba(34,23,84,0.96),rgba(8,14,34,0.96))] shadow-[0_0_58px_rgba(124,58,237,0.36)] lg:h-44 lg:w-44 lg:rounded-[2.75rem]">
-                  <Image
-                    src="/syn-logo.png"
-                    alt="Synteq logo"
-                    width={1024}
-                    height={1024}
-                    className="h-28 w-28 object-contain drop-shadow-[0_0_24px_rgba(96,165,250,0.52)] lg:h-36 lg:w-36"
-                    sizes="(max-width: 1023px) 112px, 144px"
-                  />
-                </div>
+              <div className="absolute left-1/2 top-[250px] hidden h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(124,58,237,0.3),rgba(59,130,246,0.18)_42%,transparent_70%)] blur-md lg:block" aria-hidden />
+              <div className="relative z-20 mx-auto mt-20 max-w-[300px] text-center lg:absolute lg:left-1/2 lg:top-[263px] lg:mt-0 lg:-translate-x-1/2 lg:-translate-y-1/2">
                 <Image
                   src="/syn-logo.png"
-                  alt=""
+                  alt="Synteq logo"
                   width={1024}
                   height={1024}
-                  className="mx-auto mt-4 h-11 w-11 object-contain drop-shadow-[0_0_18px_rgba(96,165,250,0.45)]"
-                  sizes="44px"
+                  className="syn-problem-logo mx-auto h-36 w-36 object-contain sm:h-40 sm:w-40 lg:h-44 lg:w-44"
+                  sizes="(max-width: 640px) 144px, (max-width: 1023px) 160px, 176px"
                 />
-                <p className="mt-2 bg-gradient-to-r from-sky-300 via-blue-300 to-violet-300 bg-clip-text text-sm font-medium text-transparent">
+                <p className="mt-1 text-2xl font-semibold uppercase tracking-[0.18em] text-slate-50">Synteq</p>
+                <p className="mt-1 bg-gradient-to-r from-sky-300 via-blue-300 to-violet-300 bg-clip-text text-sm font-medium text-transparent">
                   Reliability Intelligence
                 </p>
-                <ul className="mt-4 grid gap-2 text-left text-sm leading-5 text-slate-300">
+                <ul className="mt-5 grid gap-2 text-left text-sm leading-5 text-slate-300 lg:mt-6">
                   {problemProcessItems.map((item) => (
                     <li key={item} className="flex items-center gap-2">
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-blue-300">
