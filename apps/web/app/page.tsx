@@ -130,24 +130,6 @@ const problemIncidentItems = [
   }
 ] as const;
 
-const problemAlertItems = [
-  {
-    title: "Email",
-    target: "#ops-alerts@synteq.io",
-    type: "email"
-  },
-  {
-    title: "Webhook",
-    target: "https://hooks.example.com/alerts",
-    type: "webhook"
-  },
-  {
-    title: "Slack",
-    target: "#engineering-alerts",
-    type: "slack"
-  }
-] as const;
-
 const heroFeatureItems = [
   {
     title: "Detect risk earlier",
@@ -297,39 +279,6 @@ function ProblemCheckIcon() {
     <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4">
       <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.8" />
       <path d="m8 12 2.6 2.6L16 9" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function ProblemAlertIcon({ type }: { type: (typeof problemAlertItems)[number]["type"] }) {
-  if (type === "webhook") {
-    return (
-      <svg viewBox="0 0 40 40" aria-hidden className="h-6 w-6">
-        <path d="M14 16a6 6 0 1 1 10 4l-4 4a6 6 0 1 1-8-8" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2.3" />
-        <path d="M26 24a6 6 0 1 1-10-4l4-4a6 6 0 1 1 8 8" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2.3" />
-      </svg>
-    );
-  }
-
-  if (type === "slack") {
-    return (
-      <svg viewBox="0 0 40 40" aria-hidden className="h-6 w-6">
-        <path d="M15 6a4 4 0 0 1 4 4v6h-4a4 4 0 0 1 0-8Z" fill="#36C5F0" />
-        <path d="M34 15a4 4 0 0 1-4 4h-6v-4a4 4 0 0 1 8 0Z" fill="#2EB67D" />
-        <path d="M25 34a4 4 0 0 1-4-4v-6h4a4 4 0 0 1 0 8Z" fill="#ECB22E" />
-        <path d="M6 25a4 4 0 0 1 4-4h6v4a4 4 0 0 1-8 0Z" fill="#E01E5A" />
-        <path d="M24 6h2a4 4 0 0 1 0 8h-2V6Z" fill="#2EB67D" />
-        <path d="M34 24v2a4 4 0 0 1-8 0v-2h8Z" fill="#ECB22E" />
-        <path d="M16 34h-2a4 4 0 0 1 0-8h2v8Z" fill="#E01E5A" />
-        <path d="M6 16v-2a4 4 0 0 1 8 0v2H6Z" fill="#36C5F0" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 40 40" aria-hidden className="h-6 w-6">
-      <path d="M7 12h26v18H7V12Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="2.3" />
-      <path d="m8 13 12 10 12-10" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.3" />
     </svg>
   );
 }
@@ -842,23 +791,31 @@ export default async function PublicLandingPage() {
                 <p className="mt-2 text-right text-xs font-medium text-slate-300">View all incidents -&gt;</p>
               </article>
 
-              <article className="rounded-2xl border border-violet-400/45 bg-slate-950/68 p-4 shadow-[0_24px_70px_rgba(12,5,40,0.42)] backdrop-blur-md">
-                <h3 className="text-base font-semibold text-slate-50">Alert Notifications</h3>
-                <div className="mt-3 divide-y divide-slate-700/45 rounded-xl border border-slate-700/55 bg-slate-900/35">
-                  {problemAlertItems.map((alert) => (
-                    <div key={alert.title} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-3 py-2.5">
-                      <span className={alert.type === "email" ? "text-cyan-200" : alert.type === "webhook" ? "text-slate-200" : ""}>
-                        <ProblemAlertIcon type={alert.type} />
-                      </span>
-                      <div className="min-w-0 sm:grid sm:grid-cols-[74px_1fr] sm:items-center sm:gap-2">
-                        <p className="text-sm font-semibold text-slate-50">{alert.title}</p>
-                        <p className="truncate text-xs text-slate-300">{alert.target}</p>
-                      </div>
-                      <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">Delivered</span>
-                    </div>
-                  ))}
-                </div>
-              </article>
+            </div>
+
+            <div className="relative z-10 grid gap-4 rounded-2xl border border-cyan-300/10 bg-slate-950/52 p-4 shadow-[0_24px_70px_rgba(2,6,23,0.38)] backdrop-blur-md sm:grid-cols-2 lg:col-span-3 lg:grid-cols-4 lg:p-5">
+              {heroTrustItems.map((item) => (
+                <article key={item.title} className="flex min-w-0 gap-3">
+                  <div
+                    className={[
+                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border",
+                      item.tone === "violet"
+                        ? "border-violet-400/15 bg-violet-500/15 text-violet-300"
+                        : item.tone === "indigo"
+                          ? "border-indigo-400/15 bg-indigo-500/15 text-indigo-300"
+                          : item.tone === "emerald"
+                            ? "border-emerald-400/15 bg-emerald-500/15 text-emerald-300"
+                            : "border-cyan-400/15 bg-cyan-500/15 text-cyan-300"
+                    ].join(" ")}
+                  >
+                    <HeroTrustIcon type={item.icon} />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold leading-5 text-slate-50">{item.title}</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-300">{item.description}</p>
+                  </div>
+                </article>
+              ))}
             </div>
           </div>
         </div>
