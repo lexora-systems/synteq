@@ -60,6 +60,94 @@ const supportedSourceItems = [
   }
 ];
 
+const problemSourceItems = [
+  {
+    title: "GitHub Actions",
+    description: "Workflow runs, jobs, statuses",
+    logo: "/github-logo.png",
+    alt: "GitHub logo",
+    tone: "blue"
+  },
+  {
+    title: "Webhooks",
+    description: "Custom events from any system",
+    logo: "/webhook-logo.png",
+    alt: "Webhook logo",
+    tone: "violet"
+  },
+  {
+    title: "GoHighLevel",
+    description: "Outbound webhooks via custom workflow",
+    logo: "/GHL-logo.png",
+    alt: "GoHighLevel logo",
+    tone: "teal"
+  },
+  {
+    title: "n8n / Make / Zapier",
+    description: "Send normalized workflow events",
+    logo: "/n8n-logo.png",
+    alt: "n8n logo",
+    tone: "orange"
+  },
+  {
+    title: "Your Systems",
+    description: "APIs, backend jobs, scheduled tasks",
+    logo: null,
+    alt: "",
+    tone: "slate"
+  }
+] as const;
+
+const problemProcessItems = [
+  "Normalize & enrich events",
+  "Detect anomalies & patterns",
+  "Group related signals",
+  "Open, update & resolve incidents",
+  "Track reliability & alert status"
+];
+
+const problemIncidentItems = [
+  {
+    title: "Payment workflow failing",
+    source: "GoHighLevel - Workflow",
+    severity: "High",
+    time: "3m ago",
+    tone: "rose"
+  },
+  {
+    title: "n8n scenario timeout rate high",
+    source: "n8n - Scenario",
+    severity: "Medium",
+    time: "8m ago",
+    tone: "orange"
+  },
+  {
+    title: "GitHub Actions job failing",
+    source: "acme/api-deploy.yml",
+    severity: "Medium",
+    time: "15m ago",
+    tone: "amber"
+  }
+] as const;
+
+const problemAlertItems = [
+  {
+    title: "Email",
+    target: "#ops-alerts@synteq.io",
+    type: "email"
+  },
+  {
+    title: "Webhook",
+    target: "https://hooks.example.com/alerts",
+    type: "webhook"
+  },
+  {
+    title: "Slack",
+    target: "#engineering-alerts",
+    type: "slack"
+  }
+] as const;
+
 const heroFeatureItems = [
   {
     title: "Detect risk earlier",
@@ -190,6 +278,58 @@ function HeroTrustIcon({ type }: { type: (typeof heroTrustItems)[number]["icon"]
     <svg viewBox="0 0 40 40" aria-hidden className="h-6 w-6">
       <path d="M20 5 31 9v9c0 7.3-4 12.7-11 17-7-4.3-11-9.7-11-17V9l11-4Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="2.5" />
       <path d="M16 20.5 19 23l6-7" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" />
+    </svg>
+  );
+}
+
+function ProblemSystemIcon() {
+  return (
+    <svg viewBox="0 0 40 40" aria-hidden className="h-7 w-7">
+      <path d="m15 13-7 7 7 7" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" />
+      <path d="m25 13 7 7-7 7" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" />
+      <path d="m22 10-4 20" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2.5" />
+    </svg>
+  );
+}
+
+function ProblemCheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="m8 12 2.6 2.6L16 9" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function ProblemAlertIcon({ type }: { type: (typeof problemAlertItems)[number]["type"] }) {
+  if (type === "webhook") {
+    return (
+      <svg viewBox="0 0 40 40" aria-hidden className="h-6 w-6">
+        <path d="M14 16a6 6 0 1 1 10 4l-4 4a6 6 0 1 1-8-8" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2.3" />
+        <path d="M26 24a6 6 0 1 1-10-4l4-4a6 6 0 1 1 8 8" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2.3" />
+      </svg>
+    );
+  }
+
+  if (type === "slack") {
+    return (
+      <svg viewBox="0 0 40 40" aria-hidden className="h-6 w-6">
+        <path d="M15 6a4 4 0 0 1 4 4v6h-4a4 4 0 0 1 0-8Z" fill="#36C5F0" />
+        <path d="M34 15a4 4 0 0 1-4 4h-6v-4a4 4 0 0 1 8 0Z" fill="#2EB67D" />
+        <path d="M25 34a4 4 0 0 1-4-4v-6h4a4 4 0 0 1 0 8Z" fill="#ECB22E" />
+        <path d="M6 25a4 4 0 0 1 4-4h6v4a4 4 0 0 1-8 0Z" fill="#E01E5A" />
+        <path d="M24 6h2a4 4 0 0 1 0 8h-2V6Z" fill="#2EB67D" />
+        <path d="M34 24v2a4 4 0 0 1-8 0v-2h8Z" fill="#ECB22E" />
+        <path d="M16 34h-2a4 4 0 0 1 0-8h2v8Z" fill="#E01E5A" />
+        <path d="M6 16v-2a4 4 0 0 1 8 0v2H6Z" fill="#36C5F0" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 40 40" aria-hidden className="h-6 w-6">
+      <path d="M7 12h26v18H7V12Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="2.3" />
+      <path d="m8 13 12 10 12-10" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.3" />
     </svg>
   );
 }
@@ -436,32 +576,290 @@ export default async function PublicLandingPage() {
 
       <section
         id="problem"
-        className="relative overflow-hidden bg-[radial-gradient(circle_at_14%_24%,rgba(45,212,191,0.15),transparent_34%),radial-gradient(circle_at_88%_75%,rgba(59,130,246,0.16),transparent_38%),linear-gradient(180deg,#050c1d_0%,#081329_54%,#0b1b37_100%)]"
+        className="relative overflow-hidden border-y border-cyan-300/10 bg-[radial-gradient(circle_at_18%_20%,rgba(45,212,191,0.13),transparent_34%),radial-gradient(circle_at_56%_48%,rgba(124,58,237,0.18),transparent_28%),radial-gradient(circle_at_88%_72%,rgba(59,130,246,0.16),transparent_36%),linear-gradient(135deg,#030815_0%,#071123_48%,#0a1730_100%)]"
       >
-        <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">The Problem</p>
-            <h2 className="mt-2 text-3xl font-semibold text-slate-50 sm:text-4xl">Delivery teams are exposed to risk they cannot clearly see</h2>
-          </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            <article className="rounded-2xl border border-cyan-300/20 bg-slate-950/45 p-5 shadow-[0_20px_48px_rgba(1,6,19,0.45)] backdrop-blur-sm">
-              <h3 className="text-lg font-semibold text-cyan-50">Hidden automation risk</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-300">
-                Workflow instability accumulates quietly across retries, queue delays, and partial failures.
+        <div className="syn-problem-field pointer-events-none absolute inset-0" aria-hidden>
+          <div className="syn-problem-grid" />
+          <div className="syn-problem-sparks" />
+        </div>
+        <div className="pointer-events-none absolute left-[32%] top-[36%] h-64 w-64 rounded-full bg-blue-500/20 blur-3xl" aria-hidden />
+        <div className="pointer-events-none absolute right-[28%] top-[30%] h-60 w-60 rounded-full bg-violet-500/20 blur-3xl" aria-hidden />
+
+        <div className="relative mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+          <h2 className="sr-only">The Problem: disconnected operational signals create workflow reliability blind spots</h2>
+          <div className="grid gap-5 lg:grid-cols-[270px_minmax(300px,1fr)_minmax(410px,1.15fr)] lg:items-start xl:grid-cols-[300px_minmax(340px,1fr)_minmax(460px,1.2fr)]">
+            <div className="relative z-10">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.24em] text-sky-300">Your Sources</p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                {problemSourceItems.map((source) => (
+                  <article
+                    key={source.title}
+                    className="group flex min-h-[86px] items-center gap-3 rounded-2xl border border-cyan-300/15 bg-slate-950/60 p-3.5 shadow-[0_18px_42px_rgba(2,6,23,0.35)] backdrop-blur-sm transition duration-200 hover:-translate-y-0.5 hover:border-cyan-300/35 hover:bg-slate-950/75"
+                  >
+                    <div
+                      className={[
+                        "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border shadow-[0_0_28px_rgba(56,189,248,0.16)]",
+                        source.tone === "blue"
+                          ? "border-blue-400/25 bg-blue-500/12 text-blue-200"
+                          : source.tone === "violet"
+                            ? "border-violet-400/25 bg-violet-500/12 text-violet-200"
+                            : source.tone === "teal"
+                              ? "border-teal-300/25 bg-teal-400/12 text-teal-200"
+                              : source.tone === "orange"
+                                ? "border-orange-300/25 bg-orange-400/12 text-orange-200"
+                                : "border-sky-300/20 bg-sky-500/10 text-sky-200"
+                      ].join(" ")}
+                    >
+                      {source.logo ? (
+                        <Image
+                          src={source.logo}
+                          alt={source.alt}
+                          width={48}
+                          height={48}
+                          className="h-8 w-8 object-contain"
+                          sizes="32px"
+                        />
+                      ) : (
+                        <ProblemSystemIcon />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold leading-5 text-slate-50">{source.title}</h3>
+                      <p className="mt-1 text-xs leading-5 text-slate-300">{source.description}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+
+            <div className="relative z-10 min-h-[430px] overflow-hidden rounded-[1.75rem] border border-cyan-300/10 bg-slate-950/20 p-5 lg:min-h-[520px] lg:border-0 lg:bg-transparent lg:p-0">
+              <p className="absolute left-5 top-5 z-20 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300 lg:left-4 lg:top-0">
+                Signals In
               </p>
-            </article>
-            <article className="rounded-2xl border border-cyan-300/20 bg-slate-950/45 p-5 shadow-[0_20px_48px_rgba(1,6,19,0.45)] backdrop-blur-sm">
-              <h3 className="text-lg font-semibold text-cyan-50">Silent failures</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-300">
-                Teams discover failures too late when weak signals were present but never connected.
-              </p>
-            </article>
-            <article className="rounded-2xl border border-cyan-300/20 bg-slate-950/45 p-5 shadow-[0_20px_48px_rgba(1,6,19,0.45)] backdrop-blur-sm">
-              <h3 className="text-lg font-semibold text-cyan-50">Blind spots between changes</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-300">
-                Critical changes move fast, but confidence drops when no clear risk narrative exists across workflows and releases.
-              </p>
-            </article>
+              <svg viewBox="0 0 560 620" className="syn-problem-flow absolute inset-0 hidden h-full w-full lg:block" aria-hidden>
+                <defs>
+                  <linearGradient id="problemBlue" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#2563eb" />
+                    <stop offset="100%" stopColor="#60a5fa" />
+                  </linearGradient>
+                  <linearGradient id="problemViolet" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#7c3aed" />
+                    <stop offset="100%" stopColor="#a78bfa" />
+                  </linearGradient>
+                  <linearGradient id="problemTeal" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#2dd4bf" />
+                    <stop offset="100%" stopColor="#67e8f9" />
+                  </linearGradient>
+                  <linearGradient id="problemOrange" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#fb923c" />
+                    <stop offset="100%" stopColor="#f97316" />
+                  </linearGradient>
+                  <linearGradient id="problemSlate" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#64748b" />
+                    <stop offset="100%" stopColor="#94a3b8" />
+                  </linearGradient>
+                  <linearGradient id="problemPurpleOut" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#a855f7" />
+                    <stop offset="100%" stopColor="#c084fc" />
+                  </linearGradient>
+                  <radialGradient id="problemCenterGlow" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="#7c3aed" stopOpacity="0.42" />
+                    <stop offset="60%" stopColor="#38bdf8" stopOpacity="0.16" />
+                    <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
+                  </radialGradient>
+                </defs>
+
+                <circle cx="280" cy="305" r="150" fill="url(#problemCenterGlow)" />
+                <g className="syn-problem-flow-base">
+                  <path d="M0 76H92C154 76 146 220 220 220H258" />
+                  <path d="M0 184H82C152 184 140 278 220 278H258" />
+                  <path d="M0 294H98C156 294 154 306 220 306H258" />
+                  <path d="M0 404H94C156 404 144 336 220 336H258" />
+                  <path d="M0 514H96C158 514 150 384 220 384H258" />
+                  <path d="M332 220H374C438 220 424 100 492 100H560" />
+                  <path d="M332 306H378C436 306 426 310 492 310H560" />
+                  <path d="M332 384H376C438 384 426 502 492 502H560" />
+                </g>
+                <g>
+                  <path className="syn-problem-flow-path syn-problem-flow-a" pathLength="100" stroke="url(#problemBlue)" d="M0 76H92C154 76 146 220 220 220H258" />
+                  <path className="syn-problem-flow-path syn-problem-flow-b" pathLength="100" stroke="url(#problemViolet)" d="M0 184H82C152 184 140 278 220 278H258" />
+                  <path className="syn-problem-flow-path syn-problem-flow-c" pathLength="100" stroke="url(#problemTeal)" d="M0 294H98C156 294 154 306 220 306H258" />
+                  <path className="syn-problem-flow-path syn-problem-flow-d" pathLength="100" stroke="url(#problemOrange)" d="M0 404H94C156 404 144 336 220 336H258" />
+                  <path className="syn-problem-flow-path syn-problem-flow-e" pathLength="100" stroke="url(#problemSlate)" d="M0 514H96C158 514 150 384 220 384H258" />
+                  <path className="syn-problem-flow-path syn-problem-flow-f" pathLength="100" stroke="url(#problemPurpleOut)" d="M332 220H374C438 220 424 100 492 100H560" />
+                  <path className="syn-problem-flow-path syn-problem-flow-g" pathLength="100" stroke="url(#problemPurpleOut)" d="M332 306H378C436 306 426 310 492 310H560" />
+                  <path className="syn-problem-flow-path syn-problem-flow-h" pathLength="100" stroke="url(#problemPurpleOut)" d="M332 384H376C438 384 426 502 492 502H560" />
+                </g>
+                <g>
+                  <circle className="syn-problem-node syn-problem-node-a" cx="0" cy="76" r="5" />
+                  <circle className="syn-problem-node syn-problem-node-b" cx="0" cy="184" r="5" />
+                  <circle className="syn-problem-node syn-problem-node-c" cx="0" cy="294" r="5" />
+                  <circle className="syn-problem-node syn-problem-node-d" cx="0" cy="404" r="5" />
+                  <circle className="syn-problem-node syn-problem-node-e" cx="0" cy="514" r="5" />
+                  <circle className="syn-problem-node syn-problem-node-f" cx="258" cy="220" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-a" cx="258" cy="278" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-b" cx="258" cy="306" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-c" cx="258" cy="336" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-d" cx="258" cy="384" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-e" cx="332" cy="220" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-f" cx="332" cy="306" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-a" cx="332" cy="384" r="4.5" />
+                </g>
+              </svg>
+
+              <div className="absolute inset-x-0 top-24 mx-auto hidden h-[280px] w-[280px] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.2),transparent_68%)] blur-sm lg:block" aria-hidden />
+              <div className="relative z-20 mx-auto mt-20 max-w-[300px] text-center lg:absolute lg:left-1/2 lg:top-1/2 lg:mt-0 lg:-translate-x-1/2 lg:-translate-y-1/2">
+                <div className="syn-problem-core mx-auto flex h-32 w-32 items-center justify-center rounded-[2rem] border border-violet-300/35 bg-[linear-gradient(145deg,rgba(34,23,84,0.96),rgba(8,14,34,0.96))] shadow-[0_0_58px_rgba(124,58,237,0.36)]">
+                  <Image
+                    src="/syn-logo.png"
+                    alt="Synteq logo"
+                    width={1024}
+                    height={1024}
+                    className="h-24 w-24 object-contain drop-shadow-[0_0_24px_rgba(96,165,250,0.52)]"
+                    sizes="96px"
+                  />
+                </div>
+                <p className="mt-4 text-2xl font-semibold uppercase tracking-[0.18em] text-slate-50">Synteq</p>
+                <p className="mt-1 bg-gradient-to-r from-sky-300 via-blue-300 to-violet-300 bg-clip-text text-sm font-medium text-transparent">
+                  Reliability Intelligence
+                </p>
+                <ul className="mt-5 grid gap-2 text-left text-sm leading-5 text-slate-300">
+                  {problemProcessItems.map((item) => (
+                    <li key={item} className="flex items-center gap-2">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-blue-300">
+                        <ProblemCheckIcon />
+                      </span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="relative z-10 space-y-4">
+              <article className="rounded-2xl border border-violet-400/45 bg-slate-950/68 p-4 shadow-[0_24px_70px_rgba(12,5,40,0.42)] backdrop-blur-md">
+                <h3 className="text-base font-semibold text-slate-50">Operational Overview</h3>
+                <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                  <div className="rounded-xl border border-slate-700/60 bg-slate-900/60 p-2.5">
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Active Incidents</p>
+                    <div className="mt-1.5 flex items-end gap-2">
+                      <span className="text-xl font-semibold text-slate-50">12</span>
+                      <span className="pb-1 text-xs font-semibold text-rose-300">+20%</span>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-700/60 bg-slate-900/60 p-2.5">
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Impacted Workflows</p>
+                    <p className="mt-1.5 text-xl font-semibold text-slate-50">8</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-700/60 bg-slate-900/60 p-2.5">
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Error rate (24h)</p>
+                    <div className="mt-1.5 flex items-end justify-between gap-2">
+                      <span className="text-xl font-semibold text-slate-50">2.7%</span>
+                      <svg viewBox="0 0 74 28" aria-hidden className="h-7 w-16 text-blue-400">
+                        <path d="M2 22 10 18 18 20 26 13 34 15 42 9 50 12 58 5 72 8" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-700/60 bg-slate-900/60 p-2.5">
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-400">MTTR (24h)</p>
+                    <p className="mt-1.5 text-xl font-semibold text-slate-50">28m</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-[1.25fr_0.75fr]">
+                  <div className="rounded-xl border border-slate-700/55 bg-slate-900/45 p-2.5">
+                    <svg viewBox="0 0 360 132" className="h-[112px] w-full" aria-label="Incident trend chart">
+                      <g stroke="rgba(148,163,184,0.14)" strokeWidth="1">
+                        <path d="M0 30H360" />
+                        <path d="M0 70H360" />
+                        <path d="M0 110H360" />
+                        <path d="M45 0V126" />
+                        <path d="M135 0V126" />
+                        <path d="M225 0V126" />
+                        <path d="M315 0V126" />
+                      </g>
+                      <path
+                        d="M8 112 28 96 46 72 64 88 86 58 108 45 126 34 142 43 160 25 176 59 194 75 214 70 232 82 248 52 266 65 284 92 304 86 326 108 350 100"
+                        fill="none"
+                        stroke="#3b82f6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="4"
+                      />
+                      <circle cx="248" cy="52" r="9" fill="#ef4444" />
+                      <text x="248" y="56" textAnchor="middle" fontSize="11" fontWeight="700" fill="#fff">A</text>
+                      <g fill="rgba(203,213,225,0.65)" fontSize="11">
+                        <text x="0" y="128">00:00</text>
+                        <text x="92" y="128">06:00</text>
+                        <text x="182" y="128">12:00</text>
+                        <text x="272" y="128">18:00</text>
+                        <text x="332" y="128">24:00</text>
+                      </g>
+                    </svg>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-700/55 bg-slate-900/45 p-2.5">
+                    <p className="text-xs font-semibold text-slate-200">Events (24h)</p>
+                    <div className="mt-2 grid grid-cols-[70px_1fr] items-center gap-2.5">
+                      <div className="relative h-[68px] w-[68px] rounded-full bg-[conic-gradient(#22c55e_0_68%,#f97316_68%_86%,#ef4444_86%_96%,#64748b_96%_100%)]">
+                        <div className="absolute inset-3 rounded-full bg-slate-950" />
+                      </div>
+                      <div className="space-y-1.5 text-[11px] text-slate-300">
+                        <div className="flex items-center justify-between gap-2"><span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400" />Success</span><span>68%</span></div>
+                        <div className="flex items-center justify-between gap-2"><span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-orange-400" />Failed</span><span>18%</span></div>
+                        <div className="flex items-center justify-between gap-2"><span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-400" />Retry</span><span>10%</span></div>
+                        <div className="flex items-center justify-between gap-2"><span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-500" />Other</span><span>4%</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article className="rounded-2xl border border-violet-400/45 bg-slate-950/68 p-4 shadow-[0_24px_70px_rgba(12,5,40,0.42)] backdrop-blur-md">
+                <h3 className="text-base font-semibold text-slate-50">Active Incidents</h3>
+                <div className="mt-3 divide-y divide-slate-700/45 rounded-xl border border-slate-700/55 bg-slate-900/35">
+                  {problemIncidentItems.map((incident) => (
+                    <div key={incident.title} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 px-3 py-2.5">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span
+                          className={[
+                            "h-3 w-3 shrink-0 rounded-full",
+                            incident.tone === "rose" ? "bg-rose-400" : incident.tone === "orange" ? "bg-orange-400" : "bg-amber-400"
+                          ].join(" ")}
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-50">{incident.title}</p>
+                          <p className="truncate text-xs text-slate-400">{incident.source}</p>
+                        </div>
+                      </div>
+                      <span className={incident.tone === "rose" ? "text-xs font-semibold text-rose-300" : "text-xs font-semibold text-amber-300"}>
+                        {incident.severity}
+                      </span>
+                      <span className="text-xs text-slate-300">{incident.time}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-right text-xs font-medium text-slate-300">View all incidents -&gt;</p>
+              </article>
+
+              <article className="rounded-2xl border border-violet-400/45 bg-slate-950/68 p-4 shadow-[0_24px_70px_rgba(12,5,40,0.42)] backdrop-blur-md">
+                <h3 className="text-base font-semibold text-slate-50">Alert Notifications</h3>
+                <div className="mt-3 divide-y divide-slate-700/45 rounded-xl border border-slate-700/55 bg-slate-900/35">
+                  {problemAlertItems.map((alert) => (
+                    <div key={alert.title} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-3 py-2.5">
+                      <span className={alert.type === "email" ? "text-cyan-200" : alert.type === "webhook" ? "text-slate-200" : ""}>
+                        <ProblemAlertIcon type={alert.type} />
+                      </span>
+                      <div className="min-w-0 sm:grid sm:grid-cols-[74px_1fr] sm:items-center sm:gap-2">
+                        <p className="text-sm font-semibold text-slate-50">{alert.title}</p>
+                        <p className="truncate text-xs text-slate-300">{alert.target}</p>
+                      </div>
+                      <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">Delivered</span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            </div>
           </div>
         </div>
       </section>
