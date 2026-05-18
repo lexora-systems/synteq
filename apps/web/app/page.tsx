@@ -5,12 +5,12 @@ import { resolveActivationState } from "../lib/activation";
 
 const capabilityItems = [
   {
-    title: "Continuously monitors workflow activity",
-    description: "Tracks execution signals across automations, webhooks, deployments, and workflow systems to maintain operational visibility across connected sources."
+    title: "Monitors connected workflow activity",
+    description: "Tracks execution signals from connected automations, webhooks, and GitHub Actions events to maintain operational visibility across configured sources."
   },
   {
     title: "Detects abnormal operational behavior",
-    description: "Identifies failures, retry patterns, latency spikes, missing heartbeats, duplicate events, and workflow drift before instability escalates."
+    description: "Identifies failures, retry patterns, latency drift, missing signals, duplicate events, and workflow drift so teams can investigate risk earlier."
   },
   {
     title: "Validates workflow readiness safely",
@@ -24,20 +24,39 @@ const capabilityItems = [
 
 const benefitItems = [
   {
-    title: "Detect instability early",
-    description: "Catch rising failure and retry patterns while there is still time to prevent incident spread."
+    title: "Detect instability earlier",
+    description: "Catch rising failure and retry patterns while there is still time to investigate before small failures escalate."
   },
   {
-    title: "Prevent failed deployments",
-    description: "Spot risk buildup between releases so high-impact deploy windows are not flying blind."
+    title: "Reduce deployment blind spots",
+    description: "Spot workflow and CI/CD signal changes between releases so high-impact deploy windows are not flying blind."
   },
   {
-    title: "Understand system risk in real time",
-    description: "Give engineering leaders a clear risk signal, not just disconnected logs and dashboard noise."
+    title: "Understand connected workflow risk",
+    description: "Give operators and engineering leaders a clear signal from connected workflow events, not just disconnected logs and dashboard noise."
   },
   {
-    title: "Reduce downtime and regressions",
-    description: "Shorten time-to-detection and focus teams on the highest-risk workflows before escalation."
+    title: "Reduce time-to-detection",
+    description: "Focus teams on the highest-risk workflows with incident context, timelines, and readiness signals."
+  }
+];
+
+const supportedSourceItems = [
+  {
+    title: "GitHub Actions",
+    description: "Supported through signed GitHub webhooks for workflow and job events. No OAuth or source-code access required."
+  },
+  {
+    title: "Custom webhooks",
+    description: "Supported through Synteq's normalized workflow-event contract for webhook-capable systems."
+  },
+  {
+    title: "GoHighLevel",
+    description: "Supported through outbound webhooks using the generic webhook path with a GoHighLevel provider marker. No OAuth/API enrichment yet."
+  },
+  {
+    title: "n8n, Make, Zapier",
+    description: "Supported when configured to send normalized workflow events. These are webhook/event-contract integrations, not native OAuth apps yet."
   }
 ];
 
@@ -45,7 +64,7 @@ const timelineItems = [
   { time: "09:42", label: "Retry storm trend detected", severity: "watch" },
   { time: "09:47", label: "Latency drift crossed threshold", severity: "high" },
   { time: "09:55", label: "Incident guidance generated", severity: "open" },
-  { time: "10:02", label: "Escalation prevented after mitigation", severity: "resolved" }
+  { time: "10:02", label: "Mitigation confirmed", severity: "resolved" }
 ];
 
 function CircuitDivider({ reverse = false }: { reverse?: boolean }) {
@@ -92,7 +111,8 @@ export default async function PublicLandingPage() {
   const startHref = token ? (isActivated ? "/overview" : "/welcome") : publicSignupEnabled ? "/signup" : "/login";
   const startLabel = token ? (isActivated ? "Open Dashboard" : "Create Workspace") : publicSignupEnabled ? "Create Workspace" : "Log In";
   const loginHref = token ? "/overview" : "/login";
-  const simulationHref = token ? "/overview#investigation-tools" : "/login";
+  const githubWebhookHref = token ? "/settings/control-plane/github" : "/login";
+  const readinessHref = token ? "/sources" : "/login";
 
   return (
     <main className="min-h-screen bg-[#040915] text-slate-100">
@@ -192,13 +212,14 @@ export default async function PublicLandingPage() {
               <div>
                 <p className="text-xs uppercase tracking-[0.24em] text-cyan-200/90">Synteq by Lexora</p>
                 <p className="bg-gradient-to-r from-cyan-200 via-sky-300 to-teal-200 bg-clip-text text-sm font-semibold text-transparent">
-                  DevOps Risk Intelligence
+                  Workflow Reliability Intelligence
                 </p>
               </div>
             </div>
             <nav className="hidden items-center gap-6 text-sm font-medium text-slate-200/90 md:flex">
               <a href="#problem" className="syn-nav-lift hover:text-cyan-200">Problem</a>
               <a href="#how-it-works" className="syn-nav-lift hover:text-cyan-200">Capabilities</a>
+              <a href="#sources" className="syn-nav-lift hover:text-cyan-200">Sources</a>
               <a href="#dashboard-preview" className="syn-nav-lift hover:text-cyan-200">Dashboard</a>
               <a href="#benefits" className="syn-nav-lift hover:text-cyan-200">Benefits</a>
             </nav>
@@ -215,12 +236,15 @@ export default async function PublicLandingPage() {
 
         <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-4 pb-14 pt-8 sm:px-6 lg:grid-cols-12 lg:px-8 lg:pb-24 lg:pt-14">
           <div className="lg:col-span-10">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/90">DEVOPS RISK DETECTION</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/90">WORKFLOW RELIABILITY INFRASTRUCTURE</p>
             <h1 className="mt-4 max-w-[820px] text-4xl font-semibold leading-[1.06] text-slate-50 sm:text-6xl lg:text-7xl">
-              Detect Operational Issues Before They Escalate
+              Monitor Reliability Across Your Workflow and Automation Signals
             </h1>
             <p className="mt-6 max-w-[680px] text-base leading-7 text-slate-200/90 sm:text-2xl sm:leading-9">
-              Synteq continuously analyzes execution signals across your systems, detects abnormal behavior, and surfaces incidents before they impact production.
+              Synteq helps teams detect failures, retries, latency drift, missing signals, and operational risk from connected workflow, webhook, and GitHub Actions events.
+            </p>
+            <p className="mt-4 max-w-[620px] text-sm leading-6 text-cyan-100/90">
+              Designed to monitor systems — not access them. Synteq works from operational signals and does not require source code, customer records, secrets, or full logs by default.
             </p>
             <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
@@ -237,9 +261,9 @@ export default async function PublicLandingPage() {
               </Link>
             </div>
             <ul className="mt-8 grid gap-3 text-sm text-cyan-50/95 sm:grid-cols-3">
-              <li className="rounded-xl border border-cyan-300/30 bg-slate-900/40 px-3 py-3 backdrop-blur">Detect instability early</li>
-              <li className="rounded-xl border border-cyan-300/30 bg-slate-900/40 px-3 py-3 backdrop-blur">Simulate operational risk</li>
-              <li className="rounded-xl border border-cyan-300/30 bg-slate-900/40 px-3 py-3 backdrop-blur">Surface incidents before escalation</li>
+              <li className="rounded-xl border border-cyan-300/30 bg-slate-900/40 px-3 py-3 backdrop-blur">Detect workflow risk earlier</li>
+              <li className="rounded-xl border border-cyan-300/30 bg-slate-900/40 px-3 py-3 backdrop-blur">Validate webhook readiness</li>
+              <li className="rounded-xl border border-cyan-300/30 bg-slate-900/40 px-3 py-3 backdrop-blur">Investigate before escalation</li>
             </ul>
           </div>
         </div>
@@ -258,9 +282,9 @@ export default async function PublicLandingPage() {
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-3">
             <article className="rounded-2xl border border-cyan-300/20 bg-slate-950/45 p-5 shadow-[0_20px_48px_rgba(1,6,19,0.45)] backdrop-blur-sm">
-              <h3 className="text-lg font-semibold text-cyan-50">Hidden CI/CD risk</h3>
+              <h3 className="text-lg font-semibold text-cyan-50">Hidden automation risk</h3>
               <p className="mt-2 text-sm leading-6 text-slate-300">
-                Pipeline instability accumulates quietly across retries, queue delays, and partial failures.
+                Workflow instability accumulates quietly across retries, queue delays, and partial failures.
               </p>
             </article>
             <article className="rounded-2xl border border-cyan-300/20 bg-slate-950/45 p-5 shadow-[0_20px_48px_rgba(1,6,19,0.45)] backdrop-blur-sm">
@@ -270,9 +294,9 @@ export default async function PublicLandingPage() {
               </p>
             </article>
             <article className="rounded-2xl border border-cyan-300/20 bg-slate-950/45 p-5 shadow-[0_20px_48px_rgba(1,6,19,0.45)] backdrop-blur-sm">
-              <h3 className="text-lg font-semibold text-cyan-50">Blind spots between deploys</h3>
+              <h3 className="text-lg font-semibold text-cyan-50">Blind spots between changes</h3>
               <p className="mt-2 text-sm leading-6 text-slate-300">
-                Critical changes move fast, but confidence drops when no clear risk narrative exists between releases.
+                Critical changes move fast, but confidence drops when no clear risk narrative exists across workflows and releases.
               </p>
             </article>
           </div>
@@ -290,7 +314,7 @@ export default async function PublicLandingPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">WHAT SYNTEQ DOES</p>
             <h2 className="mt-2 text-3xl font-semibold text-slate-50 sm:text-4xl">Operational intelligence for workflow reliability</h2>
             <p className="mt-3 text-sm leading-6 text-slate-300">
-              Synteq monitors execution signals across workflows, automations, webhooks, and connected systems, then turns abnormal behavior into actionable incidents and reliability context.
+              Synteq monitors connected workflow, webhook, and GitHub Actions signals, then turns abnormal behavior into actionable incidents and reliability context.
             </p>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-2">
@@ -309,18 +333,54 @@ export default async function PublicLandingPage() {
       <CircuitDivider reverse />
 
       <section
+        id="sources"
+        className="relative overflow-hidden bg-[radial-gradient(circle_at_18%_22%,rgba(56,189,248,0.13),transparent_34%),radial-gradient(circle_at_82%_74%,rgba(45,212,191,0.12),transparent_38%),linear-gradient(180deg,#071327_0%,#0a1a33_100%)]"
+      >
+        <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">Current Supported Sources</p>
+            <h2 className="mt-2 text-3xl font-semibold text-slate-50 sm:text-4xl">Connect the signals Synteq supports today</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-300">
+              Synteq supports operational signals from GitHub Actions and webhook-capable automation tools. Some sources are first-class webhooks; others connect by sending Synteq's normalized workflow-event contract.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-4 md:grid-cols-2">
+            {supportedSourceItems.map((item) => (
+              <article
+                key={item.title}
+                className="rounded-2xl border border-cyan-300/20 bg-[linear-gradient(145deg,rgba(2,8,24,0.82)_0%,rgba(9,23,44,0.74)_100%)] p-6 shadow-[0_20px_52px_rgba(1,6,19,0.42)]"
+              >
+                <h3 className="text-lg font-semibold text-cyan-50">{item.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-300">{item.description}</p>
+              </article>
+            ))}
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-5 text-sm leading-6 text-amber-50">
+            <p className="font-semibold">Not currently included</p>
+            <p className="mt-1 text-amber-100/90">
+              Synteq is not currently a full APM, SIEM, log search platform, marketplace app, or native OAuth integration hub.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <CircuitDivider />
+
+      <section
         className="relative overflow-hidden bg-[radial-gradient(circle_at_18%_22%,rgba(56,189,248,0.12),transparent_34%),radial-gradient(circle_at_84%_78%,rgba(45,212,191,0.12),transparent_38%),linear-gradient(180deg,#071327_0%,#0a1a33_100%)]"
       >
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">Built for Trust</p>
             <h2 className="mt-2 text-3xl font-semibold text-slate-50 sm:text-4xl">
-              Designed to monitor systems - not access them
+              Designed to monitor systems — not access them
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-300">
-              Synteq analyzes execution signals across your systems to detect instability early. We do not access your
-              source code, secrets, or full logs by default. Only the minimum operational metadata required for
-              detection is processed.
+              Synteq works from operational signals to help teams investigate risk earlier, before small failures escalate.
+              It does not require source code, customer records, secrets, or full logs by default. Only the minimum
+              operational metadata required for detection is processed.
             </p>
           </div>
 
@@ -338,6 +398,7 @@ export default async function PublicLandingPage() {
               <h3 className="text-lg font-semibold text-cyan-50">What we do not receive by default</h3>
               <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
                 <li>Source code</li>
+                <li>Customer records</li>
                 <li>Secrets</li>
                 <li>Full logs</li>
                 <li>Artifact contents</li>
@@ -397,7 +458,7 @@ export default async function PublicLandingPage() {
               <p className="text-xs uppercase tracking-[0.2em] text-cyan-200/85">Live Risk Surface</p>
               <div className="mt-4 flex items-end justify-between">
                 <div>
-                  <p className="text-sm text-slate-300">Platform Risk Score</p>
+                  <p className="text-sm text-slate-300">Workflow Risk Score</p>
                   <p className="text-5xl font-semibold text-cyan-100">78</p>
                 </div>
                 <span className="rounded-full border border-amber-300/40 bg-amber-300/12 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-200">
@@ -440,7 +501,7 @@ export default async function PublicLandingPage() {
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">Benefits</p>
-            <h2 className="mt-2 text-3xl font-semibold text-slate-50 sm:text-4xl">Built to reduce operational risk, not add observability noise</h2>
+            <h2 className="mt-2 text-3xl font-semibold text-slate-50 sm:text-4xl">Built to reduce operational risk, not add dashboard noise</h2>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-2">
             {benefitItems.map((item) => (
@@ -462,9 +523,9 @@ export default async function PublicLandingPage() {
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
           <div className="rounded-3xl border border-cyan-300/25 bg-gradient-to-r from-[#081127] via-[#0e2954] to-[#0a6f85] p-8 text-white shadow-[0_20px_65px_rgba(1,6,19,0.5)] sm:p-10">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">Get Started</p>
-            <h2 className="mt-2 text-3xl font-semibold sm:text-4xl">Move from blind spots to active risk intelligence</h2>
+            <h2 className="mt-2 text-3xl font-semibold sm:text-4xl">Move from blind spots to connected signal intelligence</h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-100 sm:text-base">
-              Start with the flow your team is ready for, then activate monitoring and simulation in minutes.
+              Start with the source your team is ready for, then connect signals and validate webhook readiness.
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Link
@@ -474,16 +535,16 @@ export default async function PublicLandingPage() {
                 {startLabel}
               </Link>
               <Link
-                href={startHref}
+                href={githubWebhookHref}
                 className="inline-flex h-11 items-center justify-center rounded-xl border border-cyan-200/80 bg-slate-950/20 px-5 text-sm font-semibold text-white transition hover:bg-slate-950/35"
               >
-                Connect GitHub
+                Set up GitHub webhook
               </Link>
               <Link
-                href={simulationHref}
+                href={readinessHref}
                 className="inline-flex h-11 items-center justify-center rounded-xl border border-cyan-200/80 bg-slate-950/20 px-5 text-sm font-semibold text-white transition hover:bg-slate-950/35"
               >
-                Run first simulation
+                Test source readiness
               </Link>
             </div>
           </div>
@@ -506,11 +567,11 @@ export default async function PublicLandingPage() {
               />
               <div>
                 <p className="text-xs uppercase tracking-[0.24em] text-cyan-200">Synteq by Lexora</p>
-                <p className="text-sm font-semibold text-slate-100">DevOps Risk Intelligence</p>
+                <p className="text-sm font-semibold text-slate-100">Workflow Reliability Intelligence</p>
               </div>
             </div>
             <p className="mt-4 max-w-sm text-sm leading-6 text-slate-300">
-              Operational risk intelligence for delivery teams that need clear early warnings before incidents escalate.
+              Operational risk intelligence for teams that need clear signals before small workflow failures escalate.
             </p>
           </div>
 
@@ -519,6 +580,7 @@ export default async function PublicLandingPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Product</p>
               <div className="mt-3 flex flex-col gap-2 text-sm text-slate-300">
                 <a href="#how-it-works" className="hover:text-cyan-100">Capabilities</a>
+                <a href="#sources" className="hover:text-cyan-100">Sources</a>
                 <a href="#dashboard-preview" className="hover:text-cyan-100">Dashboard Preview</a>
                 <a href="#benefits" className="hover:text-cyan-100">Benefits</a>
               </div>
@@ -528,7 +590,7 @@ export default async function PublicLandingPage() {
               <div className="mt-3 flex flex-col gap-2 text-sm text-slate-300">
                 <Link href={startHref} className="hover:text-cyan-100">{startLabel}</Link>
                 <Link href={loginHref} className="hover:text-cyan-100">Login</Link>
-                <Link href={simulationHref} className="hover:text-cyan-100">Run First Simulation</Link>
+                <Link href={readinessHref} className="hover:text-cyan-100">Test Source Readiness</Link>
               </div>
             </div>
             <div>
@@ -547,7 +609,7 @@ export default async function PublicLandingPage() {
         <div className="border-t border-cyan-400/10">
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-4 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
             <p>(c) {new Date().getFullYear()} Synteq. All rights reserved.</p>
-            <p>Built for CI/CD reliability and operational risk clarity.</p>
+            <p>Built for workflow, webhook, and CI/CD reliability clarity.</p>
           </div>
         </div>
       </footer>

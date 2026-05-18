@@ -43,7 +43,7 @@ test("public landing page renders", async ({ page }) => {
   await page.goto("/");
   await expect(
     page.getByRole("heading", {
-      name: /detect operational issues before they escalate/i,
+      name: /monitor reliability across your workflow and automation signals/i,
       level: 1
     })
   ).toBeVisible();

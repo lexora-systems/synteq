@@ -1,6 +1,6 @@
 # Synteq
 
-## DevOps Risk Intelligence for Automation and Workflow Infrastructure
+## Workflow Reliability Intelligence for Automation Infrastructure
 
 Synteq is a multi-tenant SaaS platform for monitoring workflow systems, webhook-based automation, CI/CD-style execution signals, and operational events. It helps teams detect failures, latency spikes, retry storms, missing heartbeats, duplicate events, and incident patterns in automation-heavy environments.
 
@@ -14,7 +14,7 @@ Synteq provides an operator-focused control plane for automation and workflow re
 - Detects workflow failures, timeouts, failure-rate spikes, retry patterns, duplicate-event risk, missing heartbeats, latency risk, and cost-related anomalies.
 - Opens, refreshes, acknowledges, and resolves incidents.
 - Surfaces incident guidance, sanitized timeline context, operational dashboards, reliability windows, and attention groups.
-- Supports source onboarding and validation for GitHub Actions and generic workflow systems such as n8n, Make, Zapier, and custom webhook-based automation.
+- Supports GitHub Actions webhook onboarding and generic workflow systems such as n8n, Make, Zapier, and custom webhook-based automation through normalized workflow-event contracts.
 
 Current incident guidance is deterministic and template-based. Synteq does not currently ship a production AI RCA copilot or automated remediation system.
 
