@@ -107,11 +107,56 @@ const problemProcessItems = [
 ];
 
 const problemSourceSignalRows = [
-  { id: "github", sourceY: 43, coreY: 190, gradientId: "problemBlue", flowClass: "syn-problem-flow-a", nodeClass: "syn-problem-node-a" },
-  { id: "webhooks", sourceY: 141, coreY: 224, gradientId: "problemViolet", flowClass: "syn-problem-flow-b", nodeClass: "syn-problem-node-b" },
-  { id: "gohighlevel", sourceY: 239, coreY: 239, gradientId: "problemTeal", flowClass: "syn-problem-flow-c", nodeClass: "syn-problem-node-c" },
-  { id: "automation", sourceY: 337, coreY: 254, gradientId: "problemOrange", flowClass: "syn-problem-flow-d", nodeClass: "syn-problem-node-d" },
-  { id: "systems", sourceY: 435, coreY: 288, gradientId: "problemSlate", flowClass: "syn-problem-flow-e", nodeClass: "syn-problem-node-e" }
+  {
+    id: "github",
+    sourceY: 43,
+    coreY: 190,
+    gradientId: "problemBlue",
+    flowClass: "syn-problem-flow-a",
+    nodeClass: "syn-problem-node-a",
+    pulseColor: "#60a5fa",
+    pulseDelay: "-0.2s"
+  },
+  {
+    id: "webhooks",
+    sourceY: 141,
+    coreY: 224,
+    gradientId: "problemViolet",
+    flowClass: "syn-problem-flow-b",
+    nodeClass: "syn-problem-node-b",
+    pulseColor: "#a78bfa",
+    pulseDelay: "-0.9s"
+  },
+  {
+    id: "gohighlevel",
+    sourceY: 239,
+    coreY: 239,
+    gradientId: "problemTeal",
+    flowClass: "syn-problem-flow-c",
+    nodeClass: "syn-problem-node-c",
+    pulseColor: "#67e8f9",
+    pulseDelay: "-1.6s"
+  },
+  {
+    id: "automation",
+    sourceY: 337,
+    coreY: 254,
+    gradientId: "problemOrange",
+    flowClass: "syn-problem-flow-d",
+    nodeClass: "syn-problem-node-d",
+    pulseColor: "#fb923c",
+    pulseDelay: "-2.3s"
+  },
+  {
+    id: "systems",
+    sourceY: 435,
+    coreY: 288,
+    gradientId: "problemSlate",
+    flowClass: "syn-problem-flow-e",
+    nodeClass: "syn-problem-node-e",
+    pulseColor: "#94a3b8",
+    pulseDelay: "-3s"
+  }
 ] as const;
 
 const problemOperationalSignalRows = [
@@ -613,15 +658,26 @@ export default async function PublicLandingPage() {
                     />
                   ))}
                 </g>
+                <g className="syn-problem-runner-layer">
+                  {problemSourceSignalRows.map((row) => (
+                    <g key={`source-runner-${row.id}`} className="syn-problem-runner" style={{ color: row.pulseColor }}>
+                      <circle className="syn-problem-runner-halo" r="7" />
+                      <circle className="syn-problem-runner-core" r="3.4" />
+                      <animateMotion
+                        dur="3.8s"
+                        begin={row.pulseDelay}
+                        repeatCount="indefinite"
+                        path={problemSourceSignalPath(row.sourceY, row.coreY)}
+                      />
+                    </g>
+                  ))}
+                </g>
                 <g>
                   {problemSourceSignalRows.map((row) => (
                     <circle key={`source-node-${row.id}`} className={`syn-problem-node ${row.nodeClass}`} cx="0" cy={row.sourceY} r="5" />
                   ))}
                   {problemSourceSignalRows.map((row) => (
                     <circle key={`core-in-node-${row.id}`} className={`syn-problem-node ${row.nodeClass}`} cx="172" cy={row.coreY} r="4.5" />
-                  ))}
-                  {problemOperationalSignalRows.map((row) => (
-                    <circle key={`core-out-node-${row.id}`} className={`syn-problem-node ${row.nodeClass}`} cx="348" cy={row.coreY} r="4.5" />
                   ))}
                   {problemOperationalSignalRows.map((row) => (
                     <circle key={`panel-node-${row.id}`} className={`syn-problem-node ${row.nodeClass}`} cx="520" cy={row.panelY} r="5" />
@@ -641,11 +697,18 @@ export default async function PublicLandingPage() {
                     sizes="(max-width: 1023px) 112px, 144px"
                   />
                 </div>
-                <p className="mt-4 text-2xl font-semibold uppercase tracking-[0.18em] text-slate-50">Synteq</p>
-                <p className="mt-1 bg-gradient-to-r from-sky-300 via-blue-300 to-violet-300 bg-clip-text text-sm font-medium text-transparent">
+                <Image
+                  src="/syn-logo.png"
+                  alt=""
+                  width={1024}
+                  height={1024}
+                  className="mx-auto mt-4 h-11 w-11 object-contain drop-shadow-[0_0_18px_rgba(96,165,250,0.45)]"
+                  sizes="44px"
+                />
+                <p className="mt-2 bg-gradient-to-r from-sky-300 via-blue-300 to-violet-300 bg-clip-text text-sm font-medium text-transparent">
                   Reliability Intelligence
                 </p>
-                <ul className="mt-5 grid gap-2 text-left text-sm leading-5 text-slate-300">
+                <ul className="mt-4 grid gap-2 text-left text-sm leading-5 text-slate-300">
                   {problemProcessItems.map((item) => (
                     <li key={item} className="flex items-center gap-2">
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-blue-300">

@@ -860,6 +860,25 @@ a[class*="inline-flex"]:active {
   vector-effect: non-scaling-stroke;
 }
 
+.syn-problem-runner-layer {
+  pointer-events: none;
+}
+
+.syn-problem-runner {
+  opacity: 0.96;
+  filter: drop-shadow(0 0 9px currentColor);
+}
+
+.syn-problem-runner-halo {
+  fill: currentColor;
+  opacity: 0.16;
+}
+
+.syn-problem-runner-core {
+  fill: currentColor;
+  opacity: 0.98;
+}
+
 .syn-problem-flow-a {
   animation-duration: 3.3s;
   animation-delay: -0.3s;
