@@ -801,75 +801,6 @@ a[class*="inline-flex"]:active {
   animation-delay: 2.4s;
 }
 
-.syn-circuit-divider {
-  position: relative;
-  height: 40px;
-  overflow: hidden;
-}
-
-.syn-circuit-divider-svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0.97;
-}
-
-.syn-divider-flow {
-  fill: none;
-  stroke: #67e8f9;
-  stroke-width: 2.1;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 18 82;
-  animation-name: synteq-trace-run;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-  filter: drop-shadow(0 0 6px rgba(94, 234, 212, 0.68));
-}
-
-.syn-divider-flow-a {
-  animation-duration: 3.5s;
-  animation-delay: -0.4s;
-}
-
-.syn-divider-flow-b {
-  animation-duration: 4.6s;
-  animation-delay: -1.5s;
-}
-
-.syn-divider-flow-c {
-  animation-duration: 4.1s;
-  animation-delay: -2.2s;
-}
-
-.syn-divider-flow-reverse {
-  animation-direction: reverse;
-}
-
-.syn-divider-node {
-  fill: #5eead4;
-  opacity: 0.9;
-  filter: drop-shadow(0 0 5px rgba(94, 234, 212, 0.65));
-  animation: synteq-node-pulse 2.8s ease-in-out infinite;
-}
-
-.syn-divider-node-a {
-  animation-delay: 0s;
-}
-
-.syn-divider-node-b {
-  animation-delay: 0.7s;
-}
-
-.syn-divider-node-c {
-  animation-delay: 1.4s;
-}
-
-.syn-divider-node-d {
-  animation-delay: 2.1s;
-}
-
 .syn-problem-field {
   overflow: hidden;
   opacity: 0.96;
@@ -1048,8 +979,6 @@ a[class*="inline-flex"]:active {
 @media (prefers-reduced-motion: reduce) {
   .syn-hero-trace-flow,
   .syn-hero-node,
-  .syn-divider-flow,
-  .syn-divider-node,
   .syn-problem-flow-path,
   .syn-problem-node,
   .syn-problem-sparks {

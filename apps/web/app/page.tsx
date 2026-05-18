@@ -283,42 +283,6 @@ function ProblemCheckIcon() {
   );
 }
 
-function CircuitDivider({ reverse = false }: { reverse?: boolean }) {
-  return (
-    <div className="syn-circuit-divider" aria-hidden>
-      <svg viewBox="0 0 1600 64" preserveAspectRatio="none" className="syn-circuit-divider-svg">
-        <g>
-          <path
-            className={`syn-divider-flow syn-divider-flow-a${reverse ? " syn-divider-flow-reverse" : ""}`}
-            pathLength="100"
-            d="M0 32 H200 V18 H380 V32 H560 V46 H760 V32 H980 V18 H1180 V32 H1400 V46 H1600"
-          />
-          <path
-            className={`syn-divider-flow syn-divider-flow-b${reverse ? " syn-divider-flow-reverse" : ""}`}
-            pathLength="100"
-            d="M120 32 H300"
-          />
-          <path
-            className={`syn-divider-flow syn-divider-flow-c${reverse ? " syn-divider-flow-reverse" : ""}`}
-            pathLength="100"
-            d="M690 32 H900"
-          />
-        </g>
-
-        <g>
-          <circle className="syn-divider-node syn-divider-node-a" cx="200" cy="32" r="3.8" />
-          <circle className="syn-divider-node syn-divider-node-b" cx="380" cy="32" r="3.8" />
-          <circle className="syn-divider-node syn-divider-node-c" cx="560" cy="46" r="3.8" />
-          <circle className="syn-divider-node syn-divider-node-d" cx="760" cy="32" r="4.2" />
-          <circle className="syn-divider-node syn-divider-node-a" cx="980" cy="18" r="3.8" />
-          <circle className="syn-divider-node syn-divider-node-b" cx="1180" cy="32" r="3.8" />
-          <circle className="syn-divider-node syn-divider-node-c" cx="1400" cy="46" r="3.8" />
-        </g>
-      </svg>
-    </div>
-  );
-}
-
 export default async function PublicLandingPage() {
   const token = await getToken();
   const activation = token ? await resolveActivationState(token) : null;
@@ -497,11 +461,9 @@ export default async function PublicLandingPage() {
         </div>
       </section>
 
-      <CircuitDivider />
-
       <section
         id="problem"
-        className="relative overflow-hidden border-y border-cyan-300/10 bg-[radial-gradient(circle_at_18%_20%,rgba(45,212,191,0.13),transparent_34%),radial-gradient(circle_at_56%_48%,rgba(124,58,237,0.18),transparent_28%),radial-gradient(circle_at_88%_72%,rgba(59,130,246,0.16),transparent_36%),linear-gradient(135deg,#030815_0%,#071123_48%,#0a1730_100%)]"
+        className="relative overflow-hidden bg-[radial-gradient(circle_at_18%_20%,rgba(45,212,191,0.13),transparent_34%),radial-gradient(circle_at_56%_48%,rgba(124,58,237,0.18),transparent_28%),radial-gradient(circle_at_88%_72%,rgba(59,130,246,0.16),transparent_36%),linear-gradient(135deg,#030815_0%,#071123_48%,#0a1730_100%)]"
       >
         <div className="syn-problem-field pointer-events-none absolute inset-0" aria-hidden>
           <div className="syn-problem-grid" />
@@ -557,11 +519,11 @@ export default async function PublicLandingPage() {
               </div>
             </div>
 
-            <div className="relative z-10 min-h-[430px] overflow-hidden rounded-[1.75rem] border border-cyan-300/10 bg-slate-950/20 p-5 lg:min-h-[520px] lg:border-0 lg:bg-transparent lg:p-0">
+            <div className="relative z-10 min-h-[430px] overflow-hidden rounded-[1.75rem] border border-cyan-300/10 bg-slate-950/20 p-5 lg:min-h-[520px] lg:overflow-visible lg:border-0 lg:bg-transparent lg:p-0">
               <p className="absolute left-5 top-5 z-20 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300 lg:left-4 lg:top-0">
                 Signals In
               </p>
-              <svg viewBox="0 0 560 620" className="syn-problem-flow absolute inset-0 hidden h-full w-full lg:block" aria-hidden>
+              <svg viewBox="-42 0 644 620" className="syn-problem-flow absolute inset-0 hidden h-full w-full lg:block" aria-hidden>
                 <defs>
                   <linearGradient id="problemBlue" x1="0%" y1="0%" x2="100%" y2="0%">
                     <stop offset="0%" stopColor="#2563eb" />
@@ -596,52 +558,55 @@ export default async function PublicLandingPage() {
 
                 <circle cx="280" cy="305" r="150" fill="url(#problemCenterGlow)" />
                 <g className="syn-problem-flow-base">
-                  <path d="M0 76H92C154 76 146 220 220 220H258" />
-                  <path d="M0 184H82C152 184 140 278 220 278H258" />
-                  <path d="M0 294H98C156 294 154 306 220 306H258" />
-                  <path d="M0 404H94C156 404 144 336 220 336H258" />
-                  <path d="M0 514H96C158 514 150 384 220 384H258" />
-                  <path d="M332 220H374C438 220 424 100 492 100H560" />
-                  <path d="M332 306H378C436 306 426 310 492 310H560" />
-                  <path d="M332 384H376C438 384 426 502 492 502H560" />
+                  <path d="M-38 76H92C154 76 146 220 220 220H250" />
+                  <path d="M-38 184H82C152 184 140 278 220 278H250" />
+                  <path d="M-38 294H98C156 294 154 306 220 306H250" />
+                  <path d="M-38 404H94C156 404 144 336 220 336H250" />
+                  <path d="M-38 514H96C158 514 150 384 220 384H250" />
+                  <path d="M350 220H374C438 220 424 100 492 100H602" />
+                  <path d="M350 306H378C436 306 426 310 492 310H602" />
+                  <path d="M350 384H376C438 384 426 502 492 502H602" />
                 </g>
                 <g>
-                  <path className="syn-problem-flow-path syn-problem-flow-a" pathLength="100" stroke="url(#problemBlue)" d="M0 76H92C154 76 146 220 220 220H258" />
-                  <path className="syn-problem-flow-path syn-problem-flow-b" pathLength="100" stroke="url(#problemViolet)" d="M0 184H82C152 184 140 278 220 278H258" />
-                  <path className="syn-problem-flow-path syn-problem-flow-c" pathLength="100" stroke="url(#problemTeal)" d="M0 294H98C156 294 154 306 220 306H258" />
-                  <path className="syn-problem-flow-path syn-problem-flow-d" pathLength="100" stroke="url(#problemOrange)" d="M0 404H94C156 404 144 336 220 336H258" />
-                  <path className="syn-problem-flow-path syn-problem-flow-e" pathLength="100" stroke="url(#problemSlate)" d="M0 514H96C158 514 150 384 220 384H258" />
-                  <path className="syn-problem-flow-path syn-problem-flow-f" pathLength="100" stroke="url(#problemPurpleOut)" d="M332 220H374C438 220 424 100 492 100H560" />
-                  <path className="syn-problem-flow-path syn-problem-flow-g" pathLength="100" stroke="url(#problemPurpleOut)" d="M332 306H378C436 306 426 310 492 310H560" />
-                  <path className="syn-problem-flow-path syn-problem-flow-h" pathLength="100" stroke="url(#problemPurpleOut)" d="M332 384H376C438 384 426 502 492 502H560" />
+                  <path className="syn-problem-flow-path syn-problem-flow-a" pathLength="100" stroke="url(#problemBlue)" d="M-38 76H92C154 76 146 220 220 220H250" />
+                  <path className="syn-problem-flow-path syn-problem-flow-b" pathLength="100" stroke="url(#problemViolet)" d="M-38 184H82C152 184 140 278 220 278H250" />
+                  <path className="syn-problem-flow-path syn-problem-flow-c" pathLength="100" stroke="url(#problemTeal)" d="M-38 294H98C156 294 154 306 220 306H250" />
+                  <path className="syn-problem-flow-path syn-problem-flow-d" pathLength="100" stroke="url(#problemOrange)" d="M-38 404H94C156 404 144 336 220 336H250" />
+                  <path className="syn-problem-flow-path syn-problem-flow-e" pathLength="100" stroke="url(#problemSlate)" d="M-38 514H96C158 514 150 384 220 384H250" />
+                  <path className="syn-problem-flow-path syn-problem-flow-f" pathLength="100" stroke="url(#problemPurpleOut)" d="M350 220H374C438 220 424 100 492 100H602" />
+                  <path className="syn-problem-flow-path syn-problem-flow-g" pathLength="100" stroke="url(#problemPurpleOut)" d="M350 306H378C436 306 426 310 492 310H602" />
+                  <path className="syn-problem-flow-path syn-problem-flow-h" pathLength="100" stroke="url(#problemPurpleOut)" d="M350 384H376C438 384 426 502 492 502H602" />
                 </g>
                 <g>
-                  <circle className="syn-problem-node syn-problem-node-a" cx="0" cy="76" r="5" />
-                  <circle className="syn-problem-node syn-problem-node-b" cx="0" cy="184" r="5" />
-                  <circle className="syn-problem-node syn-problem-node-c" cx="0" cy="294" r="5" />
-                  <circle className="syn-problem-node syn-problem-node-d" cx="0" cy="404" r="5" />
-                  <circle className="syn-problem-node syn-problem-node-e" cx="0" cy="514" r="5" />
-                  <circle className="syn-problem-node syn-problem-node-f" cx="258" cy="220" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-a" cx="258" cy="278" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-b" cx="258" cy="306" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-c" cx="258" cy="336" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-d" cx="258" cy="384" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-e" cx="332" cy="220" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-f" cx="332" cy="306" r="4.5" />
-                  <circle className="syn-problem-node syn-problem-node-a" cx="332" cy="384" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-a" cx="-38" cy="76" r="5" />
+                  <circle className="syn-problem-node syn-problem-node-b" cx="-38" cy="184" r="5" />
+                  <circle className="syn-problem-node syn-problem-node-c" cx="-38" cy="294" r="5" />
+                  <circle className="syn-problem-node syn-problem-node-d" cx="-38" cy="404" r="5" />
+                  <circle className="syn-problem-node syn-problem-node-e" cx="-38" cy="514" r="5" />
+                  <circle className="syn-problem-node syn-problem-node-f" cx="250" cy="220" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-a" cx="250" cy="278" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-b" cx="250" cy="306" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-c" cx="250" cy="336" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-d" cx="250" cy="384" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-e" cx="350" cy="220" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-f" cx="350" cy="306" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-a" cx="350" cy="384" r="4.5" />
+                  <circle className="syn-problem-node syn-problem-node-b" cx="602" cy="100" r="5" />
+                  <circle className="syn-problem-node syn-problem-node-c" cx="602" cy="310" r="5" />
+                  <circle className="syn-problem-node syn-problem-node-d" cx="602" cy="502" r="5" />
                 </g>
               </svg>
 
-              <div className="absolute inset-x-0 top-24 mx-auto hidden h-[280px] w-[280px] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.2),transparent_68%)] blur-sm lg:block" aria-hidden />
-              <div className="relative z-20 mx-auto mt-20 max-w-[300px] text-center lg:absolute lg:left-1/2 lg:top-1/2 lg:mt-0 lg:-translate-x-1/2 lg:-translate-y-1/2">
-                <div className="syn-problem-core mx-auto flex h-32 w-32 items-center justify-center rounded-[2rem] border border-violet-300/35 bg-[linear-gradient(145deg,rgba(34,23,84,0.96),rgba(8,14,34,0.96))] shadow-[0_0_58px_rgba(124,58,237,0.36)]">
+              <div className="absolute inset-x-0 top-20 mx-auto hidden h-[340px] w-[340px] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.2),transparent_68%)] blur-sm lg:block" aria-hidden />
+              <div className="relative z-20 mx-auto mt-20 max-w-[300px] text-center lg:absolute lg:left-1/2 lg:top-[54%] lg:mt-0 lg:-translate-x-1/2 lg:-translate-y-1/2">
+                <div className="syn-problem-core mx-auto flex h-36 w-36 items-center justify-center rounded-[2.25rem] border border-violet-300/35 bg-[linear-gradient(145deg,rgba(34,23,84,0.96),rgba(8,14,34,0.96))] shadow-[0_0_58px_rgba(124,58,237,0.36)] lg:h-44 lg:w-44 lg:rounded-[2.75rem]">
                   <Image
                     src="/syn-logo.png"
                     alt="Synteq logo"
                     width={1024}
                     height={1024}
-                    className="h-24 w-24 object-contain drop-shadow-[0_0_24px_rgba(96,165,250,0.52)]"
-                    sizes="96px"
+                    className="h-28 w-28 object-contain drop-shadow-[0_0_24px_rgba(96,165,250,0.52)] lg:h-36 lg:w-36"
+                    sizes="(max-width: 1023px) 112px, 144px"
                   />
                 </div>
                 <p className="mt-4 text-2xl font-semibold uppercase tracking-[0.18em] text-slate-50">Synteq</p>
@@ -797,8 +762,6 @@ export default async function PublicLandingPage() {
         </div>
       </section>
 
-      <CircuitDivider reverse />
-
       <section
         id="how-it-works"
         className="relative overflow-hidden bg-[radial-gradient(circle_at_80%_18%,rgba(56,189,248,0.15),transparent_35%),linear-gradient(180deg,#071327_0%,#0a1a33_100%)]"
@@ -824,8 +787,6 @@ export default async function PublicLandingPage() {
           </div>
         </div>
       </section>
-      <CircuitDivider reverse />
-
       <section
         id="sources"
         className="relative overflow-hidden bg-[radial-gradient(circle_at_18%_22%,rgba(56,189,248,0.13),transparent_34%),radial-gradient(circle_at_82%_74%,rgba(45,212,191,0.12),transparent_38%),linear-gradient(180deg,#071327_0%,#0a1a33_100%)]"
@@ -859,8 +820,6 @@ export default async function PublicLandingPage() {
           </div>
         </div>
       </section>
-
-      <CircuitDivider />
 
       <section
         className="relative overflow-hidden bg-[radial-gradient(circle_at_18%_22%,rgba(56,189,248,0.12),transparent_34%),radial-gradient(circle_at_84%_78%,rgba(45,212,191,0.12),transparent_38%),linear-gradient(180deg,#071327_0%,#0a1a33_100%)]"
@@ -905,8 +864,6 @@ export default async function PublicLandingPage() {
           </p>
         </div>
       </section>
-
-      <CircuitDivider />
 
       <section
         id="dashboard-preview"
@@ -986,8 +943,6 @@ export default async function PublicLandingPage() {
         </div>
       </section>
 
-      <CircuitDivider reverse />
-
       <section
         id="benefits"
         className="relative overflow-hidden bg-[radial-gradient(circle_at_12%_12%,rgba(45,212,191,0.12),transparent_30%),linear-gradient(180deg,#071122_0%,#0a1831_100%)]"
@@ -1010,8 +965,6 @@ export default async function PublicLandingPage() {
           </div>
         </div>
       </section>
-
-      <CircuitDivider />
 
       <section className="relative overflow-hidden bg-[linear-gradient(180deg,#071226_0%,#091731_100%)]">
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
@@ -1044,8 +997,6 @@ export default async function PublicLandingPage() {
           </div>
         </div>
       </section>
-
-      <CircuitDivider reverse />
 
       <footer className="bg-[linear-gradient(180deg,#050a18_0%,#070f21_100%)]">
         <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-12 lg:px-8">
