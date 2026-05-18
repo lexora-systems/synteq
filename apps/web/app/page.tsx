@@ -493,30 +493,6 @@ export default async function PublicLandingPage() {
                 {token ? "Open Dashboard" : "Log in"}
               </Link>
             </div>
-            <div className="mt-6 grid max-w-6xl gap-4 rounded-2xl border border-cyan-300/10 bg-slate-950/45 p-4 shadow-[0_20px_55px_rgba(2,6,23,0.34)] backdrop-blur-sm sm:grid-cols-2 lg:grid-cols-4 lg:p-5">
-              {heroTrustItems.map((item) => (
-                <article key={item.title} className="flex min-w-0 gap-3">
-                  <div
-                    className={[
-                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border",
-                      item.tone === "violet"
-                        ? "border-violet-400/15 bg-violet-500/15 text-violet-300"
-                        : item.tone === "indigo"
-                          ? "border-indigo-400/15 bg-indigo-500/15 text-indigo-300"
-                          : item.tone === "emerald"
-                            ? "border-emerald-400/15 bg-emerald-500/15 text-emerald-300"
-                            : "border-cyan-400/15 bg-cyan-500/15 text-cyan-300"
-                    ].join(" ")}
-                  >
-                    <HeroTrustIcon type={item.icon} />
-                  </div>
-                  <div className="min-w-0">
-                    <h2 className="text-sm font-semibold leading-5 text-slate-50">{item.title}</h2>
-                    <p className="mt-1 text-xs leading-5 text-slate-300">{item.description}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
           </div>
         </div>
       </section>
