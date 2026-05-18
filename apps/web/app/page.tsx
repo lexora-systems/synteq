@@ -364,7 +364,7 @@ export default async function PublicLandingPage() {
         <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-4 pb-10 pt-7 sm:px-6 lg:grid-cols-12 lg:px-8 lg:pb-16 lg:pt-10">
           <div className="lg:col-span-10">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/90">WORKFLOW RELIABILITY INFRASTRUCTURE</p>
-            <h1 className="mt-3 max-w-[820px] text-4xl font-semibold leading-[1.06] text-slate-50 sm:text-6xl lg:text-7xl">
+            <h1 className="mt-3 max-w-[960px] text-4xl font-semibold leading-[1.06] text-slate-50 sm:text-6xl lg:text-[4.35rem] xl:text-7xl">
               Monitor Reliability Across Your Workflow and Automation Signals
             </h1>
             <p className="mt-5 max-w-[680px] text-base leading-7 text-slate-200/90 sm:text-xl sm:leading-8">
