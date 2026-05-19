@@ -199,6 +199,21 @@ const problemIncidentItems = [
   }
 ] as const;
 
+const dashboardPreviewItems = [
+  {
+    src: "/howitworks1.png",
+    alt: "Synteq dashboard risk overview preview",
+    width: 968,
+    height: 531
+  },
+  {
+    src: "/howitworks2.png",
+    alt: "Synteq dashboard operational surface preview",
+    width: 958,
+    height: 438
+  }
+] as const;
+
 const heroFeatureItems = [
   {
     title: "Detect risk earlier",
@@ -246,13 +261,6 @@ const heroTrustItems = [
     tone: "cyan"
   }
 ] as const;
-
-const timelineItems = [
-  { time: "09:42", label: "Retry storm trend detected", severity: "watch" },
-  { time: "09:47", label: "Latency drift crossed threshold", severity: "high" },
-  { time: "09:55", label: "Incident guidance generated", severity: "open" },
-  { time: "10:02", label: "Mitigation confirmed", severity: "resolved" }
-];
 
 function HeroFeatureIcon({ type }: { type: (typeof heroFeatureItems)[number]["icon"] }) {
   if (type === "users") {
@@ -959,70 +967,24 @@ export default async function PublicLandingPage() {
             <h2 className="mt-2 text-3xl font-semibold text-slate-50 sm:text-4xl">One view for score, signal, and incident movement</h2>
           </div>
 
-          <div className="mt-8 grid gap-4 lg:grid-cols-12">
-            <article className="rounded-3xl border border-cyan-300/20 bg-[linear-gradient(145deg,rgba(3,11,30,0.9)_0%,rgba(8,24,50,0.78)_100%)] p-6 shadow-[0_22px_60px_rgba(1,6,19,0.48)] lg:col-span-7">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-cyan-200/85">Global Risk</p>
-                  <p className="mt-1 text-4xl font-semibold text-cyan-50">78</p>
+          <div className="mt-8 grid gap-4 lg:grid-cols-2">
+            {dashboardPreviewItems.map((item) => (
+              <article
+                key={item.src}
+                className="rounded-3xl border border-cyan-300/20 bg-[linear-gradient(145deg,rgba(3,11,30,0.9)_0%,rgba(8,24,50,0.78)_100%)] p-3 shadow-[0_22px_60px_rgba(1,6,19,0.48)] sm:p-4"
+              >
+                <div className="flex aspect-[16/9] w-full items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/15 bg-slate-950/35">
+                  <Image
+                    src={item.src}
+                    alt={item.alt}
+                    width={item.width}
+                    height={item.height}
+                    className="h-full w-full object-contain"
+                    sizes="(max-width: 1023px) calc(100vw - 2rem), 544px"
+                  />
                 </div>
-                <span className="rounded-full border border-amber-300/35 bg-amber-300/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-100">
-                  Watch
-                </span>
-              </div>
-              <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-cyan-300/20 bg-slate-950/40 px-3 py-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Failures</p>
-                  <p className="mt-1 text-lg font-semibold text-cyan-50">2.8%</p>
-                </div>
-                <div className="rounded-xl border border-cyan-300/20 bg-slate-950/40 px-3 py-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Retries</p>
-                  <p className="mt-1 text-lg font-semibold text-cyan-50">6.2%</p>
-                </div>
-                <div className="rounded-xl border border-cyan-300/20 bg-slate-950/40 px-3 py-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-slate-400">p95 Latency</p>
-                  <p className="mt-1 text-lg font-semibold text-cyan-50">1.9s</p>
-                </div>
-              </div>
-              <div className="mt-6 overflow-hidden rounded-xl border border-cyan-300/20 bg-[linear-gradient(180deg,rgba(15,23,42,0.8)_0%,rgba(2,6,23,0.72)_100%)] p-4">
-                <div className="h-40 bg-[linear-gradient(180deg,rgba(56,189,248,0.3)_0%,rgba(14,116,144,0.08)_75%)] [clip-path:polygon(0%_88%,12%_76%,24%_81%,36%_60%,48%_66%,60%_43%,72%_49%,84%_34%,100%_22%,100%_100%,0%_100%)]" />
-              </div>
-            </article>
-
-            <article className="rounded-3xl border border-cyan-300/25 bg-[linear-gradient(135deg,#081127_0%,#0c1a34_50%,#12264b_100%)] p-6 shadow-[0_18px_60px_rgba(12,18,38,0.45)] lg:col-span-5">
-              <p className="text-xs uppercase tracking-[0.2em] text-cyan-200/85">Live Risk Surface</p>
-              <div className="mt-4 flex items-end justify-between">
-                <div>
-                  <p className="text-sm text-slate-300">Workflow Risk Score</p>
-                  <p className="text-5xl font-semibold text-cyan-100">78</p>
-                </div>
-                <span className="rounded-full border border-amber-300/40 bg-amber-300/12 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-200">
-                  Watch
-                </span>
-              </div>
-              <div className="mt-6 space-y-3 text-sm">
-                <div className="rounded-xl border border-cyan-300/25 bg-slate-950/50 px-3 py-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Incident Timeline</p>
-                  <p className="mt-1 font-medium text-cyan-100">3 active risk threads in last 30m</p>
-                </div>
-                <div className="rounded-xl border border-cyan-300/25 bg-slate-950/50 px-3 py-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Latency Drift</p>
-                  <p className="mt-1 font-medium text-cyan-100">p95 rising above expected baseline</p>
-                </div>
-                <div className="rounded-xl border border-cyan-300/25 bg-slate-950/50 px-3 py-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Escalation Risk</p>
-                  <p className="mt-1 font-medium text-cyan-100">Medium, with actionable guidance available</p>
-                </div>
-              </div>
-              <div className="mt-5 space-y-2">
-                {timelineItems.slice(0, 2).map((item) => (
-                  <div key={`${item.time}-${item.label}`} className="flex items-center justify-between text-xs text-slate-300">
-                    <p>{item.label}</p>
-                    <p className="font-medium text-cyan-200">{item.time}</p>
-                  </div>
-                ))}
-              </div>
-            </article>
+              </article>
+            ))}
           </div>
         </div>
       </section>
