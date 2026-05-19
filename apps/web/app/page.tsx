@@ -41,25 +41,6 @@ const benefitItems = [
   }
 ];
 
-const supportedSourceItems = [
-  {
-    title: "GitHub Actions",
-    description: "Supported through signed GitHub webhooks for workflow and job events. No OAuth or source-code access required."
-  },
-  {
-    title: "Custom webhooks",
-    description: "Supported through Synteq's normalized workflow-event contract for webhook-capable systems."
-  },
-  {
-    title: "GoHighLevel",
-    description: "Supported through outbound webhooks using the generic webhook path with a GoHighLevel provider marker. No OAuth/API enrichment yet."
-  },
-  {
-    title: "n8n, Make, Zapier",
-    description: "Supported when configured to send normalized workflow events. These are webhook/event-contract integrations, not native OAuth apps yet."
-  }
-];
-
 const problemSourceItems = [
   {
     title: "GitHub Actions",
@@ -476,7 +457,6 @@ export default async function PublicLandingPage() {
             <nav className="hidden items-center gap-6 text-sm font-medium text-slate-200/90 md:flex">
               <a href="#problem" className="syn-nav-lift hover:text-cyan-200">Problem</a>
               <a href="#how-it-works" className="syn-nav-lift hover:text-cyan-200">Capabilities</a>
-              <a href="#sources" className="syn-nav-lift hover:text-cyan-200">Sources</a>
               <a href="#dashboard-preview" className="syn-nav-lift hover:text-cyan-200">Dashboard</a>
               <a href="#benefits" className="syn-nav-lift hover:text-cyan-200">Benefits</a>
             </nav>
@@ -880,40 +860,6 @@ export default async function PublicLandingPage() {
         </div>
       </section>
       <section
-        id="sources"
-        className="relative overflow-hidden bg-[radial-gradient(circle_at_18%_22%,rgba(56,189,248,0.13),transparent_34%),radial-gradient(circle_at_82%_74%,rgba(45,212,191,0.12),transparent_38%),linear-gradient(180deg,#071327_0%,#0a1a33_100%)]"
-      >
-        <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
-          <div className="max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">Current Supported Sources</p>
-            <h2 className="mt-2 text-3xl font-semibold text-slate-50 sm:text-4xl">Connect the signals Synteq supports today</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-300">
-              Synteq supports operational signals from GitHub Actions and webhook-capable automation tools. Some sources are first-class webhooks; others connect by sending Synteq's normalized workflow-event contract.
-            </p>
-          </div>
-
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
-            {supportedSourceItems.map((item) => (
-              <article
-                key={item.title}
-                className="rounded-2xl border border-cyan-300/20 bg-[linear-gradient(145deg,rgba(2,8,24,0.82)_0%,rgba(9,23,44,0.74)_100%)] p-6 shadow-[0_20px_52px_rgba(1,6,19,0.42)]"
-              >
-                <h3 className="text-lg font-semibold text-cyan-50">{item.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-300">{item.description}</p>
-              </article>
-            ))}
-          </div>
-
-          <div className="mt-6 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-5 text-sm leading-6 text-amber-50">
-            <p className="font-semibold">Not currently included</p>
-            <p className="mt-1 text-amber-100/90">
-              Synteq is not currently a full APM, SIEM, log search platform, marketplace app, or native OAuth integration hub.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section
         className="relative overflow-hidden bg-[radial-gradient(circle_at_18%_22%,rgba(56,189,248,0.12),transparent_34%),radial-gradient(circle_at_84%_78%,rgba(45,212,191,0.12),transparent_38%),linear-gradient(180deg,#071327_0%,#0a1a33_100%)]"
       >
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
@@ -1071,7 +1017,6 @@ export default async function PublicLandingPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Product</p>
               <div className="mt-3 flex flex-col gap-2 text-sm text-slate-300">
                 <a href="#how-it-works" className="hover:text-cyan-100">Capabilities</a>
-                <a href="#sources" className="hover:text-cyan-100">Sources</a>
                 <a href="#dashboard-preview" className="hover:text-cyan-100">Dashboard Preview</a>
                 <a href="#benefits" className="hover:text-cyan-100">Benefits</a>
               </div>
