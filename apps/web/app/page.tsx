@@ -683,16 +683,16 @@ export default async function PublicLandingPage() {
               </svg>
 
               <div className="absolute left-1/2 top-[250px] hidden h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(124,58,237,0.3),rgba(59,130,246,0.18)_42%,transparent_70%)] blur-md lg:block" aria-hidden />
-              <div className="relative z-20 mx-auto mt-20 max-w-[300px] pt-[9.5rem] text-center sm:pt-[10.5rem] lg:absolute lg:left-1/2 lg:top-[263px] lg:mt-0 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:pt-[11.5rem]">
+              <div className="relative z-20 mx-auto mt-20 max-w-[300px] pt-16 text-center sm:pt-20 lg:absolute lg:left-1/2 lg:top-[263px] lg:mt-0 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:pt-[11.5rem]">
                 <Image
                   src="/syn-logo.png"
                   alt="Synteq mark"
                   width={1024}
                   height={1024}
-                  className="syn-problem-logo mx-auto h-10 w-10 object-contain sm:h-11 sm:w-11 lg:h-12 lg:w-12"
-                  sizes="(max-width: 640px) 40px, (max-width: 1023px) 44px, 48px"
+                  className="syn-problem-logo mx-auto h-20 w-20 object-contain sm:h-24 sm:w-24 lg:h-28 lg:w-28"
+                  sizes="(max-width: 640px) 80px, (max-width: 1023px) 96px, 112px"
                 />
-                <ul className="mt-4 grid gap-2 text-left text-sm leading-5 text-slate-300 lg:mt-5">
+                <ul className="mt-3 grid gap-2 text-left text-sm leading-5 text-slate-300 lg:mt-4">
                   {problemProcessItems.map((item) => (
                     <li key={item} className="flex items-center gap-2">
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-blue-300">
