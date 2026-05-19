@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { DashboardPreviewZoom } from "../components/dashboard-preview-zoom";
 import { getToken } from "../lib/auth";
 import { resolveActivationState } from "../lib/activation";
 
@@ -913,25 +914,7 @@ export default async function PublicLandingPage() {
             <h2 className="mt-2 text-3xl font-semibold text-slate-50 sm:text-4xl">One view for score, signal, and incident movement</h2>
           </div>
 
-          <div className="mt-8 grid gap-4 lg:grid-cols-2">
-            {dashboardPreviewItems.map((item) => (
-              <article
-                key={item.src}
-                className="rounded-3xl border border-cyan-300/20 bg-[linear-gradient(145deg,rgba(3,11,30,0.9)_0%,rgba(8,24,50,0.78)_100%)] p-3 shadow-[0_22px_60px_rgba(1,6,19,0.48)] sm:p-4"
-              >
-                <div className="flex aspect-[16/9] w-full items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/15 bg-slate-950/35">
-                  <Image
-                    src={item.src}
-                    alt={item.alt}
-                    width={item.width}
-                    height={item.height}
-                    className="h-full w-full object-contain"
-                    sizes="(max-width: 1023px) calc(100vw - 2rem), 544px"
-                  />
-                </div>
-              </article>
-            ))}
-          </div>
+          <DashboardPreviewZoom items={dashboardPreviewItems} />
         </div>
       </section>
 
