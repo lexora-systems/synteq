@@ -676,9 +676,6 @@ export default async function PublicLandingPage() {
                   {problemSourceSignalRows.map((row) => (
                     <circle key={`source-node-${row.id}`} className={`syn-problem-node ${row.nodeClass}`} cx="0" cy={row.sourceY} r="5" />
                   ))}
-                  {problemSourceSignalRows.map((row) => (
-                    <circle key={`core-in-node-${row.id}`} className={`syn-problem-node ${row.nodeClass}`} cx="172" cy={row.coreY} r="4.5" />
-                  ))}
                   {problemOperationalSignalRows.map((row) => (
                     <circle key={`panel-node-${row.id}`} className={`syn-problem-node ${row.nodeClass}`} cx="520" cy={row.panelY} r="5" />
                   ))}
@@ -689,14 +686,13 @@ export default async function PublicLandingPage() {
               <div className="relative z-20 mx-auto mt-20 max-w-[300px] text-center lg:absolute lg:left-1/2 lg:top-[263px] lg:mt-0 lg:-translate-x-1/2 lg:-translate-y-1/2">
                 <Image
                   src="/syn-logo.png"
-                  alt="Synteq logo"
+                  alt="Synteq mark"
                   width={1024}
                   height={1024}
                   className="syn-problem-logo mx-auto h-36 w-36 object-contain sm:h-40 sm:w-40 lg:h-44 lg:w-44"
                   sizes="(max-width: 640px) 144px, (max-width: 1023px) 160px, 176px"
                 />
-                <p className="mt-1 text-2xl font-semibold uppercase tracking-[0.18em] text-slate-50">Synteq</p>
-                <p className="mt-1 bg-gradient-to-r from-sky-300 via-blue-300 to-violet-300 bg-clip-text text-sm font-medium text-transparent">
+                <p className="mt-2 bg-gradient-to-r from-sky-300 via-blue-300 to-violet-300 bg-clip-text text-sm font-medium text-transparent">
                   Reliability Intelligence
                 </p>
                 <ul className="mt-5 grid gap-2 text-left text-sm leading-5 text-slate-300 lg:mt-6">
