@@ -683,19 +683,16 @@ export default async function PublicLandingPage() {
               </svg>
 
               <div className="absolute left-1/2 top-[250px] hidden h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(124,58,237,0.3),rgba(59,130,246,0.18)_42%,transparent_70%)] blur-md lg:block" aria-hidden />
-              <div className="relative z-20 mx-auto mt-20 max-w-[300px] text-center lg:absolute lg:left-1/2 lg:top-[263px] lg:mt-0 lg:-translate-x-1/2 lg:-translate-y-1/2">
+              <div className="relative z-20 mx-auto mt-20 max-w-[300px] pt-[9.5rem] text-center sm:pt-[10.5rem] lg:absolute lg:left-1/2 lg:top-[263px] lg:mt-0 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:pt-[11.5rem]">
                 <Image
                   src="/syn-logo.png"
                   alt="Synteq mark"
                   width={1024}
                   height={1024}
-                  className="syn-problem-logo mx-auto h-36 w-36 object-contain sm:h-40 sm:w-40 lg:h-44 lg:w-44"
-                  sizes="(max-width: 640px) 144px, (max-width: 1023px) 160px, 176px"
+                  className="syn-problem-logo mx-auto h-10 w-10 object-contain sm:h-11 sm:w-11 lg:h-12 lg:w-12"
+                  sizes="(max-width: 640px) 40px, (max-width: 1023px) 44px, 48px"
                 />
-                <p className="mt-2 bg-gradient-to-r from-sky-300 via-blue-300 to-violet-300 bg-clip-text text-sm font-medium text-transparent">
-                  Reliability Intelligence
-                </p>
-                <ul className="mt-5 grid gap-2 text-left text-sm leading-5 text-slate-300 lg:mt-6">
+                <ul className="mt-4 grid gap-2 text-left text-sm leading-5 text-slate-300 lg:mt-5">
                   {problemProcessItems.map((item) => (
                     <li key={item} className="flex items-center gap-2">
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-blue-300">
