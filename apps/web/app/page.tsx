@@ -683,14 +683,16 @@ export default async function PublicLandingPage() {
 
               <div className="absolute left-1/2 top-[250px] hidden h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(124,58,237,0.3),rgba(59,130,246,0.18)_42%,transparent_70%)] blur-md lg:block" aria-hidden />
               <div className="relative z-20 mx-auto mt-20 max-w-[300px] pt-16 text-center sm:pt-20 lg:absolute lg:left-1/2 lg:top-[263px] lg:mt-0 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:pt-[11.5rem]">
-                <Image
-                  src="/syn-logo.png"
-                  alt="Synteq mark"
-                  width={1024}
-                  height={1024}
-                  className="syn-problem-logo mx-auto h-24 w-24 object-contain sm:h-28 sm:w-28 lg:h-32 lg:w-32"
-                  sizes="(max-width: 640px) 96px, (max-width: 1023px) 112px, 128px"
-                />
+                <div className="syn-problem-core mx-auto flex h-36 w-36 items-center justify-center sm:h-40 sm:w-40 lg:h-44 lg:w-44">
+                  <Image
+                    src="/syn-logo.png"
+                    alt="Synteq mark"
+                    width={1024}
+                    height={1024}
+                    className="syn-problem-logo relative z-10 h-24 w-24 object-contain sm:h-28 sm:w-28 lg:h-32 lg:w-32"
+                    sizes="(max-width: 640px) 96px, (max-width: 1023px) 112px, 128px"
+                  />
+                </div>
                 <ul className="mt-3 grid gap-2 text-left text-sm leading-5 text-slate-300 lg:mt-4">
                   {problemProcessItems.map((item) => (
                     <li key={item} className="flex items-center gap-2">
