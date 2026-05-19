@@ -879,6 +879,17 @@ a[class*="inline-flex"]:active {
   opacity: 0.98;
 }
 
+.syn-problem-core-light {
+  border-radius: 9999px;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(125, 211, 252, 0.38) 0, rgba(125, 211, 252, 0.18) 18%, transparent 32%),
+    radial-gradient(circle at 50% 50%, rgba(124, 58, 237, 0.42) 0, rgba(124, 58, 237, 0.2) 36%, transparent 64%),
+    radial-gradient(circle at 50% 50%, rgba(37, 99, 235, 0.28) 0, rgba(37, 99, 235, 0.12) 46%, transparent 76%);
+  filter: blur(10px);
+  mix-blend-mode: screen;
+  opacity: 0.92;
+}
+
 .syn-problem-flow-a {
   animation-duration: 3.3s;
   animation-delay: -0.3s;
@@ -954,8 +965,8 @@ a[class*="inline-flex"]:active {
   position: relative;
   isolation: isolate;
   filter:
-    drop-shadow(0 0 18px rgba(56, 189, 248, 0.38))
-    drop-shadow(0 0 46px rgba(124, 58, 237, 0.38));
+    drop-shadow(0 0 20px rgba(56, 189, 248, 0.48))
+    drop-shadow(0 0 54px rgba(124, 58, 237, 0.48));
 }
 
 .syn-problem-core::before,
@@ -970,7 +981,7 @@ a[class*="inline-flex"]:active {
   inset: 0;
   z-index: -2;
   background:
-    radial-gradient(circle at 52% 42%, rgba(45, 212, 191, 0.22), transparent 38%),
+    radial-gradient(circle at 52% 42%, rgba(45, 212, 191, 0.28), transparent 38%),
     linear-gradient(145deg, rgba(30, 64, 175, 0.78), rgba(30, 27, 75, 0.96) 54%, rgba(15, 23, 42, 0.94));
   box-shadow:
     inset 0 0 0 1px rgba(125, 211, 252, 0.44),

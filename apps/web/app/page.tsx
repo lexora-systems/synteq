@@ -164,12 +164,15 @@ const problemOperationalSignalRows = [
   { id: "incidents", coreY: 288, panelY: 376, flowClass: "syn-problem-flow-h", nodeClass: "syn-problem-node-b" }
 ] as const;
 
+const problemCoreInputX = 212;
+const problemCoreOutputX = 308;
+
 function problemSourceSignalPath(sourceY: number, coreY: number) {
-  return `M0 ${sourceY}H44C112 ${sourceY} 104 ${coreY} 172 ${coreY}`;
+  return `M0 ${sourceY}H44C118 ${sourceY} 124 ${coreY} ${problemCoreInputX} ${coreY}`;
 }
 
 function problemOperationalSignalPath(coreY: number, panelY: number) {
-  return `M348 ${coreY}H376C444 ${coreY} 436 ${panelY} 520 ${panelY}`;
+  return `M${problemCoreOutputX} ${coreY}H376C444 ${coreY} 436 ${panelY} 520 ${panelY}`;
 }
 
 const problemIncidentItems = [
@@ -593,7 +596,7 @@ export default async function PublicLandingPage() {
               <svg
                 viewBox="0 0 520 478"
                 preserveAspectRatio="none"
-                className="syn-problem-flow absolute -left-6 top-8 hidden h-[478px] w-[calc(100%+3rem)] lg:block"
+                className="syn-problem-flow absolute -left-6 top-8 z-10 hidden h-[478px] w-[calc(100%+3rem)] lg:block"
                 aria-hidden
               >
                 <defs>
@@ -622,13 +625,14 @@ export default async function PublicLandingPage() {
                     <stop offset="100%" stopColor="#c084fc" />
                   </linearGradient>
                   <radialGradient id="problemCenterGlow" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stopColor="#7c3aed" stopOpacity="0.42" />
-                    <stop offset="60%" stopColor="#38bdf8" stopOpacity="0.16" />
+                    <stop offset="0%" stopColor="#7dd3fc" stopOpacity="0.34" />
+                    <stop offset="42%" stopColor="#7c3aed" stopOpacity="0.28" />
+                    <stop offset="70%" stopColor="#38bdf8" stopOpacity="0.1" />
                     <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
                   </radialGradient>
                 </defs>
 
-                <circle cx="260" cy="239" r="150" fill="url(#problemCenterGlow)" />
+                <circle cx="260" cy="239" r="170" fill="url(#problemCenterGlow)" />
                 <g className="syn-problem-flow-base">
                   {problemSourceSignalRows.map((row) => (
                     <path key={`source-base-${row.id}`} d={problemSourceSignalPath(row.sourceY, row.coreY)} />
@@ -671,7 +675,7 @@ export default async function PublicLandingPage() {
                     </g>
                   ))}
                 </g>
-                <g>
+                <g className="syn-problem-endpoint-layer">
                   {problemSourceSignalRows.map((row) => (
                     <circle key={`source-node-${row.id}`} className={`syn-problem-node ${row.nodeClass}`} cx="0" cy={row.sourceY} r="5" />
                   ))}
@@ -681,7 +685,7 @@ export default async function PublicLandingPage() {
                 </g>
               </svg>
 
-              <div className="absolute left-1/2 top-[250px] hidden h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(124,58,237,0.3),rgba(59,130,246,0.18)_42%,transparent_70%)] blur-md lg:block" aria-hidden />
+              <div className="syn-problem-core-light pointer-events-none absolute left-1/2 top-[230px] z-0 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 sm:top-[260px] sm:h-[340px] sm:w-[340px] lg:top-[263px] lg:h-[410px] lg:w-[410px]" aria-hidden />
               <div className="relative z-20 mx-auto mt-20 max-w-[300px] pt-16 text-center sm:pt-20 lg:absolute lg:left-1/2 lg:top-[263px] lg:mt-0 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:pt-[11.5rem]">
                 <div className="syn-problem-core mx-auto flex h-36 w-36 items-center justify-center sm:h-40 sm:w-40 lg:h-44 lg:w-44">
                   <Image
