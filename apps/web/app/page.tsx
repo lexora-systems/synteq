@@ -161,7 +161,6 @@ const problemSourceSignalRows = [
 
 const problemOperationalSignalRows = [
   { id: "overview", coreY: 190, panelY: 80, flowClass: "syn-problem-flow-f", nodeClass: "syn-problem-node-f" },
-  { id: "visibility", coreY: 239, panelY: 239, flowClass: "syn-problem-flow-g", nodeClass: "syn-problem-node-a" },
   { id: "incidents", coreY: 288, panelY: 376, flowClass: "syn-problem-flow-h", nodeClass: "syn-problem-node-b" }
 ] as const;
 
@@ -689,8 +688,8 @@ export default async function PublicLandingPage() {
                   alt="Synteq mark"
                   width={1024}
                   height={1024}
-                  className="syn-problem-logo mx-auto h-20 w-20 object-contain sm:h-24 sm:w-24 lg:h-28 lg:w-28"
-                  sizes="(max-width: 640px) 80px, (max-width: 1023px) 96px, 112px"
+                  className="syn-problem-logo mx-auto h-24 w-24 object-contain sm:h-28 sm:w-28 lg:h-32 lg:w-32"
+                  sizes="(max-width: 640px) 96px, (max-width: 1023px) 112px, 128px"
                 />
                 <ul className="mt-3 grid gap-2 text-left text-sm leading-5 text-slate-300 lg:mt-4">
                   {problemProcessItems.map((item) => (
