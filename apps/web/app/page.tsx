@@ -64,14 +64,14 @@ const problemSourceItems = [
   {
     title: "GitHub Actions",
     description: "Workflow runs, jobs, statuses",
-    logo: "/github-logo.png",
+    logo: "/github_logo.png",
     alt: "GitHub logo",
     tone: "blue"
   },
   {
     title: "Webhooks",
     description: "Custom events from any system",
-    logo: "/webhook-logo.png",
+    logo: "/webhook_logo.png",
     alt: "Webhook logo",
     tone: "violet"
   },
