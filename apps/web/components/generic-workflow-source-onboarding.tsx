@@ -161,7 +161,7 @@ export function GenericWorkflowSourceOnboarding({
       ) : null}
 
       {canManage ? (
-        <form action={formAction} className="rounded-2xl bg-white p-5 shadow-panel" data-testid="generic-workflow-source-create-form">
+        <form action={formAction} className="syn-app-panel rounded-2xl p-5" data-testid="generic-workflow-source-create-form">
           <input type="hidden" name="intent" value="create" />
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Generic workflow source</p>
           <h3 className="mt-1 text-lg font-semibold text-ink">Create workflow event source</h3>

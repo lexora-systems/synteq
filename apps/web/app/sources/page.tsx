@@ -598,7 +598,7 @@ export default async function ConnectedSourcesPage() {
       <TopNav />
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pt-8">
         <div
-          className="rounded-3xl border border-cyan-200 bg-gradient-to-r from-white via-cyan-50 to-white p-6 shadow-panel"
+          className="syn-app-panel rounded-3xl p-6"
           data-testid="sources-guided-hero"
         >
           <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Connected Sources</p>
