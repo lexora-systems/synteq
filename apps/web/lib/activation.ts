@@ -233,7 +233,7 @@ export function deriveActivationJourney(input: ActivationJourneyInput): Activati
     {
       key: "source_connected",
       title: "Source connected",
-      description: "At least one active source is connected for monitoring.",
+      description: "A GitHub integration or generic workflow source has been configured.",
       state: sourceConnected ? "complete" : "current"
     },
     {
@@ -241,7 +241,7 @@ export function deriveActivationJourney(input: ActivationJourneyInput): Activati
       title: "Webhook verified",
       description: webhookStepRequired
         ? "GitHub webhook has delivered at least one valid event to Synteq."
-        : "GitHub webhook verification is optional until a GitHub integration is connected.",
+        : "For GitHub, at least one signed webhook delivery must arrive. Generic workflow sources validate through test events or live ingestion.",
       state: webhookMilestoneComplete
         ? "complete"
         : currentMilestoneKey === "webhook_verified"
@@ -253,7 +253,7 @@ export function deriveActivationJourney(input: ActivationJourneyInput): Activati
     {
       key: "first_signal_received",
       title: "First signal received",
-      description: "Synteq has ingested at least one operational signal from a connected source.",
+      description: "Synteq has ingested at least one workflow execution event.",
       state: firstSignalReceived
         ? "complete"
         : currentMilestoneKey === "first_signal_received"
@@ -267,7 +267,7 @@ export function deriveActivationJourney(input: ActivationJourneyInput): Activati
     {
       key: "monitoring_active",
       title: "Monitoring active",
-      description: "Detection is live and Synteq is ready to surface risk as signals arrive.",
+      description: "Synteq can update reliability windows and surface incident context as new signals arrive.",
       state: monitoringActive
         ? "complete"
         : currentMilestoneKey === "monitoring_active"
@@ -283,9 +283,9 @@ export function deriveActivationJourney(input: ActivationJourneyInput): Activati
   let primaryAction: ActivationPrimaryAction;
   if (!sourceConnected) {
     primaryAction = {
-      label: "Connect GitHub",
-      href: "/settings/control-plane/github",
-      helper: "Connect your first source so Synteq can begin ingesting live operational signals."
+      label: "Choose first source",
+      href: "/sources",
+      helper: "Choose GitHub Actions or a generic workflow webhook so Synteq can begin receiving workflow execution signals."
     };
   } else if (webhookStepRequired && !webhookVerified) {
     primaryAction = {

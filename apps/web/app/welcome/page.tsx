@@ -41,6 +41,14 @@ function milestoneStateClasses(state: ActivationMilestoneState): string {
   return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
+const monitoringFlowSteps = [
+  "Choose source",
+  "Configure webhook/API key",
+  "Send first event",
+  "Synteq normalizes the signal",
+  "Incidents, reliability windows, and dashboards become useful"
+];
+
 async function startTrialAction() {
   "use server";
   const token = await requireToken();
@@ -173,10 +181,11 @@ export default async function WelcomePage({
           <div className="relative">
             <p className="syn-hero-kicker text-xs font-medium uppercase tracking-[0.24em]">Welcome to Synteq</p>
             <h1 className="mt-3 max-w-[760px] text-4xl font-semibold leading-tight text-slate-100 sm:text-5xl">
-              Understand risk clearly before it becomes an incident
+              Connect your first workflow signal source
             </h1>
             <p className="mt-4 max-w-[760px] text-base text-cyan-50/85 sm:text-lg">
-              Operational awareness with minimal access. Alert delivery depends on verified scheduler and email/webhook infrastructure.
+              Synteq starts monitoring after it receives event-level workflow signals such as execution status, timing,
+              environment, and run identifiers.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2.5">
@@ -187,11 +196,11 @@ export default async function WelcomePage({
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <a
-                href="#activation-flow"
+                href="#choose-first-source"
                 className="syn-cta-lift syn-btn-secondary syn-btn-secondary-soft w-full text-sm sm:w-auto"
                 data-testid="welcome-connect-workflow-cta"
               >
-                Review activation checklist
+                Choose first source
               </a>
               <Link
                 href="/settings/control-plane"
@@ -209,7 +218,7 @@ export default async function WelcomePage({
             </div>
 
             <p className="mt-4 text-sm text-cyan-100/70">
-              Follow the activation flow below to connect a source, verify delivery, and confirm monitoring.
+              Choose GitHub Actions or a generic workflow webhook/API-key source, then send the first workflow event.
             </p>
           </div>
         </section>
@@ -235,6 +244,59 @@ export default async function WelcomePage({
           </div>
         </section>
 
+        <section id="choose-first-source" className="mt-5 space-y-4" data-testid="welcome-source-choice-section">
+          <div>
+            <p className="syn-app-kicker text-xs font-medium uppercase tracking-[0.22em]">First source</p>
+            <h2 className="syn-app-title mt-1 text-2xl font-semibold">Choose your first source</h2>
+            <p className="syn-app-copy mt-2 max-w-3xl text-sm">
+              GitHub is one supported path. Teams can also use generic webhook/API-key ingestion for tools that can send
+              workflow execution events.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <article className="syn-app-panel rounded-2xl p-5" data-testid="welcome-github-source-option">
+              <p className="syn-app-kicker text-[11px] font-medium uppercase tracking-[0.18em]">GitHub Actions</p>
+              <h3 className="syn-app-title mt-2 text-lg font-semibold">GitHub Actions webhook</h3>
+              <p className="syn-app-copy mt-2 text-sm">
+                Use GitHub webhook events to send workflow/job status and timing signals.
+              </p>
+              <div className="mt-4">
+                <Link href="/settings/control-plane/github" className="syn-cta-lift syn-btn-secondary syn-btn-secondary-soft text-sm">
+                  Set up GitHub webhook
+                </Link>
+              </div>
+            </article>
+
+            <article className="syn-app-panel rounded-2xl p-5" data-testid="welcome-generic-source-option">
+              <p className="syn-app-kicker text-[11px] font-medium uppercase tracking-[0.18em]">Generic workflow events</p>
+              <h3 className="syn-app-title mt-2 text-lg font-semibold">Generic workflow webhook</h3>
+              <p className="syn-app-copy mt-2 text-sm">
+                Create an API-key protected endpoint for workflow execution events from tools that can send HTTP requests.
+              </p>
+              <div className="mt-4">
+                <Link href="/sources" className="syn-cta-lift syn-btn-secondary syn-btn-secondary-soft text-sm">
+                  Create generic source
+                </Link>
+              </div>
+            </article>
+          </div>
+
+          <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-5 text-sm text-slate-700 shadow-panel" data-testid="welcome-monitoring-flow">
+            <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">How Synteq starts monitoring</p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              {monitoringFlowSteps.map((step, index) => (
+                <div key={step} className="flex items-center gap-2">
+                  <span className="rounded-full border border-cyan-300 bg-white px-3 py-1 text-xs font-semibold text-cyan-900">
+                    {step}
+                  </span>
+                  {index < monitoringFlowSteps.length - 1 ? <span className="hidden text-cyan-700 sm:inline">-&gt;</span> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section id="activation-flow" className="mt-5">
           <div className="syn-app-panel rounded-3xl p-5 sm:p-6" data-testid="welcome-activation-panel">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -242,7 +304,7 @@ export default async function WelcomePage({
                 <p className="syn-app-kicker text-xs uppercase tracking-[0.22em]">Activation</p>
                 <h2 className="syn-app-title mt-1 text-xl font-semibold">Get Synteq live</h2>
                 <p className="syn-app-copy mt-1 text-sm">
-                  Connect a source, verify delivery, and confirm first signal flow so monitoring can run with confidence.
+                  Connect a source, verify delivery, and confirm first signal flow so monitoring can begin with real events.
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm">
@@ -327,7 +389,7 @@ export default async function WelcomePage({
           ) : null}
           {params.workflow === "connected" ? (
             <div className="rounded-2xl border border-emerald-300/70 bg-emerald-50/95 px-4 py-3 text-sm text-emerald-800 shadow-panel">
-              Workflow connected. Synteq watches this source once telemetry arrives; configured alert delivery can notify teams about reliability risks.
+              Workflow identity registered. To complete monitoring setup, connect a source or send events through a configured webhook/API key.
             </div>
           ) : null}
           {params.workflow === "invalid" ? (
@@ -394,14 +456,14 @@ export default async function WelcomePage({
             </article>
 
             <article className="syn-app-panel rounded-2xl p-5">
-              <p className="syn-app-kicker text-[11px] font-medium uppercase tracking-[0.18em]">Live Setup</p>
-              <h3 className="syn-app-title mt-2 text-lg font-semibold">Connect a workflow</h3>
+              <p className="syn-app-kicker text-[11px] font-medium uppercase tracking-[0.18em]">Workflow Identity</p>
+              <h3 className="syn-app-title mt-2 text-lg font-semibold">Register workflow identity</h3>
               <p className="syn-app-copy mt-2 text-sm">
-                Register your first service to start receiving telemetry and building risk insights.
+                Optional identity setup for grouping future signals. Ingestion still requires a source webhook or API key.
               </p>
               <div className="mt-4">
                 <a href="#connect-workflow" className="syn-cta-lift syn-btn-secondary syn-btn-secondary-soft text-sm">
-                  Connect workflow
+                  Register workflow
                 </a>
               </div>
             </article>
@@ -438,9 +500,13 @@ export default async function WelcomePage({
           <div className="syn-app-panel rounded-3xl p-5 sm:p-6">
             <div>
               <p className="syn-app-kicker text-xs font-medium uppercase tracking-[0.22em]">Workflow Setup</p>
-              <h2 className="syn-app-title mt-1 text-2xl font-semibold">Connect your first workflow</h2>
+              <h2 className="syn-app-title mt-1 text-2xl font-semibold">Register workflow identity</h2>
               <p className="syn-app-copy mt-2 text-sm">
-                Add one workflow to start live monitoring. You can run simulation while telemetry setup is pending.
+                Add a workflow identity so future signals can be grouped by service and environment.
+              </p>
+              <p className="mt-2 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-slate-700" data-testid="welcome-workflow-registration-note">
+                This does not create an ingestion endpoint or API key by itself. To send workflow events, create a generic
+                workflow source or configure a GitHub webhook.
               </p>
             </div>
 
@@ -467,7 +533,7 @@ export default async function WelcomePage({
                   <input type="text" name="slug" placeholder="payments-daily" className="h-11 rounded-xl border px-3 text-sm" />
                 </label>
                 <div className="md:col-span-2">
-                  <button className="syn-cta-lift syn-btn-primary text-sm">Connect workflow</button>
+                  <button className="syn-cta-lift syn-btn-primary text-sm">Register workflow</button>
                 </div>
               </form>
             ) : (

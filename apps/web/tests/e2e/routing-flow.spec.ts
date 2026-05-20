@@ -92,7 +92,19 @@ test("welcome shows activation next step for first-time user", async ({ page }) 
   await setSession(page, "nonactivated");
   await page.goto("/welcome");
   await expect(page.getByTestId("welcome-activation-panel")).toBeVisible();
-  await expect(page.getByTestId("welcome-primary-next-action")).toHaveText(/Connect GitHub|Complete webhook setup/);
+  await expect(page.getByTestId("welcome-primary-next-action")).toHaveText("Choose first source");
+  await expect(page.getByTestId("welcome-primary-next-action")).toHaveAttribute("href", "/sources");
+  await expect(page.getByTestId("welcome-source-choice-section")).toBeVisible();
+  await expect(page.getByTestId("welcome-github-source-option")).toContainText("GitHub Actions webhook");
+  await expect(page.getByTestId("welcome-github-source-option")).toContainText("Use GitHub webhook events to send workflow/job status and timing signals.");
+  await expect(page.getByTestId("welcome-generic-source-option")).toContainText("Generic workflow webhook");
+  await expect(page.getByTestId("welcome-generic-source-option")).toContainText(
+    "Create an API-key protected endpoint for workflow execution events from tools that can send HTTP requests."
+  );
+  await expect(page.getByText("GitHub is one supported path.")).toBeVisible();
+  await expect(page.getByText(/GitHub is required/i)).toHaveCount(0);
+  await expect(page.getByTestId("welcome-monitoring-flow")).toContainText("Synteq normalizes the signal");
+  await expect(page.getByTestId("welcome-workflow-registration-note")).toContainText("does not create an ingestion endpoint or API key by itself");
 });
 
 test("non-activated user can access /overview", async ({ page }) => {

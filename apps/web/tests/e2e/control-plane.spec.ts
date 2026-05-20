@@ -105,8 +105,23 @@ test("generic workflow source onboarding separates silent checks from mutative t
   await setSession(page);
 
   await page.goto("/sources");
+  await expect(page.getByTestId("sources-source-choice-section")).toContainText("Choose how Synteq receives workflow signals");
+  await expect(page.getByTestId("sources-github-path")).toContainText("GitHub Actions webhook");
+  await expect(page.getByTestId("sources-github-path")).toContainText("Use GitHub webhook events to send workflow/job status and timing signals.");
+  await expect(page.getByTestId("sources-generic-path")).toContainText("Generic workflow webhook");
+  await expect(page.getByTestId("sources-generic-path")).toContainText(
+    "Create an API-key protected source for workflow execution events from tools that can send HTTP requests."
+  );
+  await expect(page.getByText(/GitHub is required/i)).toHaveCount(0);
+  await expect(page.getByTestId("sources-first-event-guidance")).toContainText("Copy endpoint/key or webhook secret");
+  await expect(page.getByTestId("sources-first-event-guidance")).toContainText("first signal milestone completes");
   await expect(page.getByTestId("generic-source-silent-check-submit")).toHaveCount(0);
-  await expect(page.getByTestId("gohighlevel-webhook-guidance")).toContainText("GoHighLevel is supported through outbound webhooks");
+  await expect(page.getByTestId("generic-workflow-source-create-form")).toContainText(
+    "This creates the API-key protected endpoint and source identity needed for workflow execution event ingestion."
+  );
+  await expect(page.getByTestId("generic-workflow-source-create-form")).toContainText("not native account integrations");
+  await expect(page.getByTestId("gohighlevel-webhook-guidance")).toContainText("send outbound webhooks through the generic Webhook source");
+  await expect(page.getByTestId("gohighlevel-webhook-guidance")).toContainText("not a native CRM integration");
   await expect(page.getByTestId("gohighlevel-webhook-guidance")).toContainText("X-Synteq-Key: <your_ingestion_key>");
   await expect(page.getByTestId("gohighlevel-webhook-guidance")).toContainText("Content-Type: application/json");
   await expect(page.getByTestId("synthetic-readiness-note")).toContainText(
@@ -119,6 +134,8 @@ test("generic workflow source onboarding separates silent checks from mutative t
   await page.getByTestId("generic-source-create-submit").click();
 
   await expect(page.getByTestId("generic-source-setup-card")).toBeVisible();
+  await expect(page.getByTestId("generic-source-setup-card")).toContainText("Configure your workflow tool to POST execution events");
+  await expect(page.getByTestId("generic-source-setup-card")).toContainText("Successful delivery appears in source activity");
   await expect(page.getByTestId("generic-source-silent-check-submit")).toBeVisible();
   await expect(page.getByRole("button", { name: "Send test failure event" })).toBeVisible();
   await expect(page.getByText("Run silent check is dry-run validation only.")).toBeVisible();
@@ -144,6 +161,7 @@ test("GoHighLevel webhook onboarding shows a safe operational sample", async ({ 
   await page.goto("/sources");
   await expect(page.getByTestId("generic-workflow-source-create-form")).toBeVisible();
   await expect(page.getByTestId("gohighlevel-webhook-guidance")).toContainText("The Synteq source type remains webhook");
+  await expect(page.getByTestId("gohighlevel-webhook-guidance")).toContainText("not a native CRM integration");
   await expect(page.getByTestId("gohighlevel-webhook-guidance")).toContainText(
     "Send workflow execution signals, not customer records"
   );

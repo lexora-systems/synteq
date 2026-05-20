@@ -45,6 +45,13 @@ const unavailableSourcesPayload: ConnectedSourcesPayload = {
     alert_dispatch_ready: false
   }
 };
+const sourceSetupSteps = [
+  "Choose source",
+  "Copy endpoint/key or webhook secret",
+  "Configure the external workflow tool",
+  "Send a test or live event",
+  "Confirm first signal and monitoring state"
+];
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -562,7 +569,7 @@ export default async function ConnectedSourcesPage() {
       : !activationStatus.available
         ? "Source inventory loaded, but activation progress is temporarily unavailable."
         : !hasSources
-      ? "Connect GitHub or another source to begin activation."
+      ? "Choose GitHub Actions or a generic workflow webhook to begin activation."
       : !hasActiveSources
         ? "Sources are configured but currently inactive. Synteq monitoring resumes when at least one source is active."
       : activeGitHubSources.length > 0 && !activationJourney.webhookVerified
@@ -581,7 +588,7 @@ export default async function ConnectedSourcesPage() {
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Connected Sources</p>
           <h2 className="mt-1 text-2xl font-semibold text-ink">Operational signal connectivity</h2>
           <p className="mt-2 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-slate-700">
-            Connected sources let Synteq detect abnormal behavior and support alerting once delivery infrastructure is configured.
+            Choose how Synteq receives workflow execution signals, then send the first event so monitoring can begin.
           </p>
           <p className="mt-2 text-sm text-slate-600">
             Connected sources are how Synteq continuously receives operational signals.
@@ -601,6 +608,58 @@ export default async function ConnectedSourcesPage() {
             </div>
           </div>
         </div>
+
+        <section className="mt-4 space-y-4" data-testid="sources-source-choice-section">
+          <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-5 text-sm text-slate-700 shadow-panel">
+            <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Source choice</p>
+            <h3 className="mt-1 text-lg font-semibold text-ink">Choose how Synteq receives workflow signals</h3>
+            <p className="mt-2">
+              Start with GitHub Actions if your workflows run in GitHub, or create a generic workflow webhook for tools that can send HTTP execution events.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <article className="rounded-2xl bg-white p-5 shadow-panel" data-testid="sources-github-path">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">GitHub Actions webhook</p>
+              <h3 className="mt-1 text-lg font-semibold text-ink">Use GitHub workflow events</h3>
+              <p className="mt-2 text-sm text-slate-600">
+                Use GitHub webhook events to send workflow/job status and timing signals.
+              </p>
+              <Link href="/settings/control-plane/github" className="mt-4 inline-flex rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">
+                Configure GitHub
+              </Link>
+            </article>
+
+            <article className="rounded-2xl bg-white p-5 shadow-panel" data-testid="sources-generic-path">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Generic workflow webhook</p>
+              <h3 className="mt-1 text-lg font-semibold text-ink">Create an API-key source</h3>
+              <p className="mt-2 text-sm text-slate-600">
+                Create an API-key protected source for workflow execution events from tools that can send HTTP requests.
+              </p>
+              <a href="#generic-workflow-source" className="mt-4 inline-flex rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">
+                Create generic source
+              </a>
+            </article>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-panel" data-testid="sources-first-event-guidance">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Send first event</p>
+            <div className="mt-3 flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
+              {sourceSetupSteps.map((step, index) => (
+                <div key={step} className="flex items-center gap-2">
+                  <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-900">
+                    {step}
+                  </span>
+                  {index < sourceSetupSteps.length - 1 ? <span className="hidden text-slate-400 md:inline">-&gt;</span> : null}
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-slate-600">
+              Delivery is working when last activity updates, the first signal milestone completes, and overview reliability windows begin showing activity.
+              Failed or timed-out workflow events may create incident context when detection rules match.
+            </p>
+          </div>
+        </section>
 
         {loadWarnings.length > 0 ? (
           <div
@@ -626,13 +685,13 @@ export default async function ConnectedSourcesPage() {
                 ? "Synteq could not load current source status. Retry this page once the API responds."
                 : hasSources
                 ? "Configured sources are currently inactive, so Synteq is not monitoring live signals right now."
-                : "Connect and activate your first source to start live monitoring."}
+                : "Choose GitHub Actions or create a generic workflow webhook to begin signal setup."}
             </p>
             <p className="mt-1">Monitoring becomes active after real workflow events arrive. Alert delivery depends on configured scheduler/email infrastructure.</p>
             <div className="mt-3">
-              <Link href="/settings/control-plane" className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">
-                Open control plane
-              </Link>
+              <a href="#generic-workflow-source" className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                Create generic source
+              </a>
             </div>
           </div>
         ) : (
@@ -683,7 +742,7 @@ export default async function ConnectedSourcesPage() {
           </p>
         </div>
 
-        <div className="mt-4">
+        <div id="generic-workflow-source" className="mt-4 scroll-mt-24">
           <GenericWorkflowSourceOnboarding
             canManage={canManageWorkflowSources}
             action={manageGenericWorkflowSourceAction}

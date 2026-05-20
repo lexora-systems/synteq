@@ -39,6 +39,12 @@ const TEST_STATUSES: Array<{ value: WorkflowSourceTestStatus; label: string }> =
   { value: "timed_out", label: "Send test timeout event" }
 ];
 
+const codeFrameClassName = "mt-2 overflow-hidden rounded-xl border border-cyan-200 bg-white shadow-inner";
+const codeBlockClassName =
+  "max-h-[420px] overflow-auto whitespace-pre-wrap break-words p-4 text-[12px] leading-5 text-slate-800 sm:text-xs";
+const inlineSecretClassName =
+  "mt-1 rounded-lg border border-cyan-200 bg-white px-3 py-2 font-mono text-xs leading-5 text-ink [overflow-wrap:anywhere]";
+
 function goHighLevelSamplePayload(sourceKey = "<your_source_key>") {
   return {
     provider: "gohighlevel",
@@ -120,6 +126,20 @@ export function GenericWorkflowSourceOnboarding({
     () => JSON.stringify(goHighLevelSamplePayload(latestSource?.source_key), null, 2),
     [latestSource?.source_key]
   );
+  const curlExample = useMemo(() => {
+    if (!latestSource) {
+      return "";
+    }
+
+    return [
+      `curl -X POST "${latestSource.ingest_endpoint_url}" \\`,
+      `  -H "Content-Type: application/json" \\`,
+      `  -H "X-Synteq-Key: ${latestSource.ingestion_key}" \\`,
+      `  --data-binary @- <<'JSON'`,
+      examplePayload,
+      "JSON"
+    ].join("\n");
+  }, [examplePayload, latestSource]);
 
   async function copyText(label: string, value: string) {
     await navigator.clipboard.writeText(value);
@@ -146,11 +166,11 @@ export function GenericWorkflowSourceOnboarding({
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Generic workflow source</p>
           <h3 className="mt-1 text-lg font-semibold text-ink">Create workflow event source</h3>
           <p className="mt-2 text-sm text-slate-600">
-            Use this with any automation tool that can send HTTP requests.
+            This creates the API-key protected endpoint and source identity needed for workflow execution event ingestion.
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            GoHighLevel Phase 1 uses the Webhook source type with <code>provider: "gohighlevel"</code>. Send workflow
-            execution signals, not customer records.
+            Use this with tools that can send HTTP requests. Source-type labels such as n8n, Make, and Zapier are generic event labels,
+            not native account integrations.
           </p>
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_160px_150px_auto]">
             <input
@@ -203,8 +223,9 @@ export function GenericWorkflowSourceOnboarding({
         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">GoHighLevel outbound webhook</p>
         <h3 className="mt-1 text-lg font-semibold text-ink">Use the generic Webhook source</h3>
         <p className="mt-2">
-          GoHighLevel is supported through outbound webhooks. The Synteq source type remains <code>webhook</code>; include{" "}
-          <code>provider: "gohighlevel"</code> or <code>metadata.provider: "gohighlevel"</code> in the JSON body.
+          If you use GoHighLevel, send outbound webhooks through the generic Webhook source. The Synteq source type remains{" "}
+          <code>webhook</code>; include <code>provider: "gohighlevel"</code> or <code>metadata.provider: "gohighlevel"</code>{" "}
+          in the JSON body. This is generic webhook ingestion, not a native CRM integration.
         </p>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -237,8 +258,9 @@ export function GenericWorkflowSourceOnboarding({
           and are not scheduled synthetic monitors.
         </p>
         <p className="mt-1">
-          Failed or timed-out test events use the real ingestion path and may create incidents or alert behavior. Use them intentionally
-          while setting up or validating a source.
+          After source creation, copy the endpoint and key, configure the external workflow tool to POST workflow execution events,
+          then send a test event or wait for a live event. Failed or timed-out test events use the real ingestion path and may create
+          incidents or alert behavior when detection rules match.
         </p>
       </div>
 
@@ -249,13 +271,15 @@ export function GenericWorkflowSourceOnboarding({
           <p className="mt-1 text-sm text-slate-700">
             {sourceTypeLabel(latestSource.source_type)} source created. Copy the ingestion key now; Synteq only shows the raw key once.
           </p>
+          <p className="mt-1 text-xs text-slate-600">
+            Configure your workflow tool to POST execution events to this endpoint with <code>X-Synteq-Key</code>. Use the test buttons below
+            to verify delivery before relying on live events.
+          </p>
 
           <div className="mt-4 grid gap-3 text-sm text-slate-700 md:grid-cols-2">
-            <div>
+            <div className="min-w-0">
               <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Endpoint</p>
-              <div className="mt-1 rounded-lg border border-cyan-200 bg-white px-3 py-2 font-mono text-xs text-ink break-all">
-                {latestSource.ingest_endpoint_url}
-              </div>
+              <div className={inlineSecretClassName}>{latestSource.ingest_endpoint_url}</div>
               <button
                 type="button"
                 className="mt-2 rounded-lg border border-cyan-300 px-3 py-1.5 text-xs font-semibold text-cyan-800"
@@ -264,11 +288,9 @@ export function GenericWorkflowSourceOnboarding({
                 Copy endpoint
               </button>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Ingestion key</p>
-              <div className="mt-1 rounded-lg border border-cyan-200 bg-white px-3 py-2 font-mono text-xs text-ink break-all">
-                {latestSource.ingestion_key}
-              </div>
+              <div className={inlineSecretClassName}>{latestSource.ingestion_key}</div>
               <button
                 type="button"
                 className="mt-2 rounded-lg border border-cyan-300 px-3 py-1.5 text-xs font-semibold text-cyan-800"
@@ -314,15 +336,35 @@ export function GenericWorkflowSourceOnboarding({
 
           <div className="mt-4">
             <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Example JSON payload</p>
-            <pre className="mt-2 max-h-[360px] overflow-auto rounded-lg border border-cyan-200 bg-white p-3 text-xs text-slate-800">
-              {examplePayload}
-            </pre>
+            <p className="mt-1 text-xs text-slate-600">
+              Use this shape for workflow execution events. Copying preserves the formatted JSON.
+            </p>
+            <div className={codeFrameClassName}>
+              <pre className={codeBlockClassName} data-testid="generic-source-example-payload">{examplePayload}</pre>
+            </div>
             <button
               type="button"
               className="mt-2 rounded-lg border border-cyan-300 px-3 py-1.5 text-xs font-semibold text-cyan-800"
               onClick={() => copyText("payload", examplePayload)}
             >
               Copy payload
+            </button>
+          </div>
+
+          <div className="mt-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">cURL test request</p>
+            <p className="mt-1 text-xs text-slate-600">
+              Multiline formatting keeps the endpoint, headers, and payload readable while the copy button preserves the full command.
+            </p>
+            <div className={codeFrameClassName}>
+              <pre className={codeBlockClassName} data-testid="generic-source-curl-example">{curlExample}</pre>
+            </div>
+            <button
+              type="button"
+              className="mt-2 rounded-lg border border-cyan-300 px-3 py-1.5 text-xs font-semibold text-cyan-800"
+              onClick={() => copyText("curl request", curlExample)}
+            >
+              Copy cURL request
             </button>
           </div>
 
@@ -333,12 +375,9 @@ export function GenericWorkflowSourceOnboarding({
                 Send workflow execution signals, not customer records. Avoid forwarding names, emails, phone numbers, notes,
                 message bodies, or full CRM payloads.
               </p>
-              <pre
-                className="mt-2 max-h-[360px] overflow-auto rounded-lg border border-cyan-200 bg-white p-3 text-xs text-slate-800"
-                data-testid="gohighlevel-sample-payload"
-              >
-                {goHighLevelPayload}
-              </pre>
+              <div className={codeFrameClassName}>
+                <pre className={codeBlockClassName} data-testid="gohighlevel-sample-payload">{goHighLevelPayload}</pre>
+              </div>
               <button
                 type="button"
                 className="mt-2 rounded-lg border border-cyan-300 px-3 py-1.5 text-xs font-semibold text-cyan-800"
@@ -378,6 +417,7 @@ export function GenericWorkflowSourceOnboarding({
 
           <p className="mt-2 text-xs text-slate-600">
             Run silent check is dry-run validation only. Send test event uses the live ingestion lifecycle and may create operational signals.
+            Successful delivery appears in source activity and helps complete the first signal received activation milestone.
           </p>
 
           {state.last_silent_check ? (
