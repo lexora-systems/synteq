@@ -105,16 +105,25 @@ test("generic workflow source onboarding separates silent checks from mutative t
   await setSession(page);
 
   await page.goto("/sources");
+  await expect(page.getByTestId("sources-guided-hero")).toContainText("Connect a workflow signal source");
+  await expect(page.getByTestId("sources-guided-stages")).toContainText("Choose source");
+  await expect(page.getByTestId("sources-guided-stages")).toContainText("Configure webhook/API key");
+  await expect(page.getByTestId("sources-guided-stages")).toContainText("Verify activity");
   await expect(page.getByTestId("sources-source-choice-section")).toContainText("Choose how Synteq receives workflow signals");
   await expect(page.getByTestId("sources-github-path")).toContainText("GitHub Actions webhook");
-  await expect(page.getByTestId("sources-github-path")).toContainText("Use GitHub webhook events to send workflow/job status and timing signals.");
+  await expect(page.getByTestId("sources-github-path")).toContainText("Use GitHub workflow/job status and timing signals.");
   await expect(page.getByTestId("sources-generic-path")).toContainText("Generic workflow webhook");
-  await expect(page.getByTestId("sources-generic-path")).toContainText(
-    "Create an API-key protected source for workflow execution events from tools that can send HTTP requests."
-  );
+  await expect(page.getByTestId("sources-generic-path")).toContainText("Use API-key ingestion for workflow execution events.");
   await expect(page.getByText(/GitHub is required/i)).toHaveCount(0);
-  await expect(page.getByTestId("sources-first-event-guidance")).toContainText("Copy endpoint/key or webhook secret");
-  await expect(page.getByTestId("sources-first-event-guidance")).toContainText("first signal milestone completes");
+  await expect(page.getByTestId("sources-configure-section")).toContainText("Stage 2 - Configure Source");
+  await expect(page.getByTestId("sources-verify-section")).toContainText("Stage 3 - Verify Activity");
+  await expect(page.getByTestId("sources-first-event-guidance")).toContainText("First signal milestone completes after ingestion");
+  await expect(page.getByTestId("sources-first-event-guidance")).toContainText("Overview and reliability windows begin showing activity");
+  const choiceBox = await page.getByTestId("sources-source-choice-section").boundingBox();
+  const operationalBox = await page.getByTestId("sources-operational-state").boundingBox();
+  expect(choiceBox).not.toBeNull();
+  expect(operationalBox).not.toBeNull();
+  expect(operationalBox!.y).toBeGreaterThan(choiceBox!.y);
   await expect(page.getByTestId("generic-source-silent-check-submit")).toHaveCount(0);
   await expect(page.getByTestId("generic-workflow-source-create-form")).toContainText(
     "This creates the API-key protected endpoint and source identity needed for workflow execution event ingestion."
@@ -135,6 +144,8 @@ test("generic workflow source onboarding separates silent checks from mutative t
 
   await expect(page.getByTestId("generic-source-setup-card")).toBeVisible();
   await expect(page.getByTestId("generic-source-setup-card")).toContainText("Configure your workflow tool to POST execution events");
+  await expect(page.getByTestId("generic-source-setup-card")).toContainText("Supported test statuses");
+  await expect(page.getByTestId("generic-source-curl-example")).toContainText("curl -X POST");
   await expect(page.getByTestId("generic-source-setup-card")).toContainText("Successful delivery appears in source activity");
   await expect(page.getByTestId("generic-source-silent-check-submit")).toBeVisible();
   await expect(page.getByRole("button", { name: "Send test failure event" })).toBeVisible();
@@ -212,7 +223,7 @@ test("sources page stays usable when source status fails to load", async ({ page
 
   await page.goto("/sources");
 
-  await expect(page.getByRole("heading", { name: "Operational signal connectivity" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Connect a workflow signal source" })).toBeVisible();
   await expect(page.getByTestId("sources-load-warning")).toContainText("Source inventory is temporarily unavailable");
   await expect(page.getByTestId("sources-operational-state")).toContainText("Source status temporarily unavailable");
   await expect(page.getByText("Workflow sources")).toBeVisible();
@@ -227,7 +238,7 @@ test("sources page renders workflow rows when details are null", async ({ page, 
 
   await page.goto("/sources");
 
-  await expect(page.getByRole("heading", { name: "Operational signal connectivity" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Connect a workflow signal source" })).toBeVisible();
   await expect(page.getByTestId("sources-load-warning")).toHaveCount(0);
   const row = page.locator("tr", { hasText: "Payments Daily" }).first();
   await expect(row).toContainText("Workflow");
@@ -239,7 +250,7 @@ test("sources page renders workflow rows when source_type is missing", async ({ 
 
   await page.goto("/sources");
 
-  await expect(page.getByRole("heading", { name: "Operational signal connectivity" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Connect a workflow signal source" })).toBeVisible();
   const row = page.locator("tr", { hasText: "Payments Daily" }).first();
   await expect(row).toContainText("Workflow");
   await expect(row).toContainText("Execution status, retries, latency, heartbeat");
@@ -251,7 +262,7 @@ test("sources page stays usable when current user lookup fails", async ({ page, 
 
   await page.goto("/sources");
 
-  await expect(page.getByRole("heading", { name: "Operational signal connectivity" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Connect a workflow signal source" })).toBeVisible();
   await expect(page.getByTestId("sources-load-warning")).toContainText("User role details are temporarily unavailable");
   await expect(page.getByTestId("generic-workflow-source-create-form")).toBeVisible();
 });

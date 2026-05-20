@@ -216,11 +216,14 @@ export function GenericWorkflowSourceOnboarding({
         </div>
       )}
 
-      <div
-        className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-panel"
+      <details
+        className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700"
         data-testid="gohighlevel-webhook-guidance"
       >
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">GoHighLevel outbound webhook</p>
+        <summary className="cursor-pointer font-semibold text-ink">
+          Advanced: GoHighLevel and privacy-safe webhook guidance
+        </summary>
+        <p className="mt-3 text-xs uppercase tracking-[0.2em] text-slate-500">GoHighLevel outbound webhook</p>
         <h3 className="mt-1 text-lg font-semibold text-ink">Use the generic Webhook source</h3>
         <p className="mt-2">
           If you use GoHighLevel, send outbound webhooks through the generic Webhook source. The Synteq source type remains{" "}
@@ -246,10 +249,10 @@ export function GenericWorkflowSourceOnboarding({
             <p className="mt-2 font-semibold text-ink">Designed to monitor systems - not access them.</p>
           </div>
         </div>
-      </div>
+      </details>
 
       <div
-        className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-panel"
+        className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600"
         data-testid="synthetic-readiness-note"
       >
         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Validation mode</p>
@@ -274,6 +277,9 @@ export function GenericWorkflowSourceOnboarding({
           <p className="mt-1 text-xs text-slate-600">
             Configure your workflow tool to POST execution events to this endpoint with <code>X-Synteq-Key</code>. Use the test buttons below
             to verify delivery before relying on live events.
+          </p>
+          <p className="mt-1 text-xs text-slate-600">
+            Supported test statuses: <code>succeeded</code>, <code>failed</code>, and <code>timed_out</code>.
           </p>
 
           <div className="mt-4 grid gap-3 text-sm text-slate-700 md:grid-cols-2">

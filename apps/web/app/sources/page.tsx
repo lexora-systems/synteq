@@ -45,12 +45,25 @@ const unavailableSourcesPayload: ConnectedSourcesPayload = {
     alert_dispatch_ready: false
   }
 };
-const sourceSetupSteps = [
-  "Choose source",
-  "Copy endpoint/key or webhook secret",
-  "Configure the external workflow tool",
-  "Send a test or live event",
-  "Confirm first signal and monitoring state"
+const guidedStages = [
+  {
+    title: "Choose source",
+    description: "Pick GitHub Actions or a generic webhook source."
+  },
+  {
+    title: "Configure webhook/API key",
+    description: "Copy the webhook secret, endpoint, or ingestion key into the workflow tool."
+  },
+  {
+    title: "Verify activity",
+    description: "Send an event and confirm Synteq receives workflow activity."
+  }
+];
+const verificationSignals = [
+  "Source activity updates after events arrive",
+  "First signal milestone completes after ingestion",
+  "Overview and reliability windows begin showing activity",
+  "Failed or timed-out events may create incident context when rules match"
 ];
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -583,48 +596,44 @@ export default async function ConnectedSourcesPage() {
   return (
     <main className="min-h-screen syn-app-shell pb-12">
       <TopNav />
-      <section className="mx-auto w-full max-w-6xl px-4 pt-8">
-        <div className="rounded-2xl bg-white p-6 shadow-panel">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Connected Sources</p>
-          <h2 className="mt-1 text-2xl font-semibold text-ink">Operational signal connectivity</h2>
-          <p className="mt-2 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-slate-700">
-            Choose how Synteq receives workflow execution signals, then send the first event so monitoring can begin.
+      <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pt-8">
+        <div
+          className="rounded-3xl border border-cyan-200 bg-gradient-to-r from-white via-cyan-50 to-white p-6 shadow-panel"
+          data-testid="sources-guided-hero"
+        >
+          <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Connected Sources</p>
+          <h2 className="mt-1 text-3xl font-semibold text-ink">Connect a workflow signal source</h2>
+          <p className="mt-2 max-w-3xl text-sm text-slate-700">
+            Synteq starts monitoring after it receives workflow execution events such as status, timing, environment,
+            and run identifiers.
           </p>
-          <p className="mt-2 text-sm text-slate-600">
-            Connected sources are how Synteq continuously receives operational signals.
-          </p>
-          <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 md:grid-cols-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What Synteq receives</p>
-              <p className="mt-1">Operational signal metadata, source ownership context, and heartbeat activity used for risk detection.</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What Synteq does NOT receive</p>
-              <p className="mt-1">Source code, full execution logs, artifact contents, or customer secrets by default.</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Control</p>
-              <p className="mt-1">Disconnect integrations, rotate/revoke credentials, and disable alerts anytime.</p>
-            </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-3" data-testid="sources-guided-stages">
+            {guidedStages.map((stage, index) => (
+              <div key={stage.title} className="rounded-2xl border border-cyan-200 bg-white p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-cyan-700">Stage {index + 1}</p>
+                <h3 className="mt-1 font-semibold text-ink">{stage.title}</h3>
+                <p className="mt-1 text-sm text-slate-600">{stage.description}</p>
+              </div>
+            ))}
           </div>
         </div>
 
-        <section className="mt-4 space-y-4" data-testid="sources-source-choice-section">
-          <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-5 text-sm text-slate-700 shadow-panel">
-            <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Source choice</p>
-            <h3 className="mt-1 text-lg font-semibold text-ink">Choose how Synteq receives workflow signals</h3>
-            <p className="mt-2">
-              Start with GitHub Actions if your workflows run in GitHub, or create a generic workflow webhook for tools that can send HTTP execution events.
-            </p>
-          </div>
+        <section
+          className="rounded-3xl border border-cyan-200 bg-cyan-50 p-5 text-sm text-slate-700 shadow-panel"
+          data-testid="sources-source-choice-section"
+        >
+          <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Stage 1 - Choose Source</p>
+          <h3 className="mt-1 text-xl font-semibold text-ink">Choose how Synteq receives workflow signals</h3>
+          <p className="mt-2 max-w-3xl">
+            Start with GitHub Actions if your workflows run in GitHub, or create a generic webhook source for tools that
+            can send HTTP workflow events.
+          </p>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
             <article className="rounded-2xl bg-white p-5 shadow-panel" data-testid="sources-github-path">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">GitHub Actions webhook</p>
               <h3 className="mt-1 text-lg font-semibold text-ink">Use GitHub workflow events</h3>
-              <p className="mt-2 text-sm text-slate-600">
-                Use GitHub webhook events to send workflow/job status and timing signals.
-              </p>
+              <p className="mt-2 text-sm text-slate-600">Use GitHub workflow/job status and timing signals.</p>
               <Link href="/settings/control-plane/github" className="mt-4 inline-flex rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">
                 Configure GitHub
               </Link>
@@ -633,142 +642,176 @@ export default async function ConnectedSourcesPage() {
             <article className="rounded-2xl bg-white p-5 shadow-panel" data-testid="sources-generic-path">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Generic workflow webhook</p>
               <h3 className="mt-1 text-lg font-semibold text-ink">Create an API-key source</h3>
-              <p className="mt-2 text-sm text-slate-600">
-                Create an API-key protected source for workflow execution events from tools that can send HTTP requests.
-              </p>
+              <p className="mt-2 text-sm text-slate-600">Use API-key ingestion for workflow execution events.</p>
               <a href="#generic-workflow-source" className="mt-4 inline-flex rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">
                 Create generic source
               </a>
             </article>
           </div>
+        </section>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-panel" data-testid="sources-first-event-guidance">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Send first event</p>
-            <div className="mt-3 flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
-              {sourceSetupSteps.map((step, index) => (
-                <div key={step} className="flex items-center gap-2">
-                  <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-900">
-                    {step}
-                  </span>
-                  {index < sourceSetupSteps.length - 1 ? <span className="hidden text-slate-400 md:inline">-&gt;</span> : null}
-                </div>
-              ))}
+        <section
+          id="generic-workflow-source"
+          className="scroll-mt-24 rounded-3xl border border-slate-200 bg-white p-5 shadow-panel"
+          data-testid="sources-configure-section"
+        >
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Stage 2 - Configure Source</p>
+          <h3 className="mt-1 text-xl font-semibold text-ink">Configure a generic workflow webhook</h3>
+          <p className="mt-2 max-w-3xl text-sm text-slate-600">
+            Use this path for generic webhook/API-key ingestion from tools that can send HTTP workflow execution events.
+            GitHub setup stays in the GitHub configuration page.
+          </p>
+          <div className="mt-4">
+            <GenericWorkflowSourceOnboarding
+              canManage={canManageWorkflowSources}
+              action={manageGenericWorkflowSourceAction}
+            />
+          </div>
+        </section>
+
+        <section
+          className="rounded-3xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-panel"
+          data-testid="sources-verify-section"
+        >
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Stage 3 - Verify Activity</p>
+          <h3 className="mt-1 text-xl font-semibold text-ink">Confirm Synteq is receiving signals</h3>
+          <p className="mt-2 max-w-3xl text-slate-600">
+            After configuration, send a test event or wait for a live workflow run. Synteq uses received events to update
+            source activity, activation progress, reliability windows, and incident context.
+          </p>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2" data-testid="sources-first-event-guidance">
+            {verificationSignals.map((step) => (
+              <div key={step} className="rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3">
+                {step}
+              </div>
+            ))}
+          </div>
+
+          {loadWarnings.length > 0 ? (
+            <div
+              className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900"
+              data-testid="sources-load-warning"
+            >
+              <p className="font-semibold">Some source setup data is temporarily unavailable.</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {loadWarnings.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
             </div>
-            <p className="mt-3 text-slate-600">
-              Delivery is working when last activity updates, the first signal milestone completes, and overview reliability windows begin showing activity.
-              Failed or timed-out workflow events may create incident context when detection rules match.
+          ) : null}
+
+          {!hasActiveSources ? (
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="font-semibold text-ink">
+                {!sourcesStatus.available ? "Source status temporarily unavailable" : hasSources ? "Sources configured but inactive" : "No active source connected yet"}
+              </p>
+              <p className="mt-1">
+                {!sourcesStatus.available
+                  ? "Synteq could not load current source status. Retry this page once the API responds."
+                  : hasSources
+                  ? "Configured sources are currently inactive, so Synteq is not monitoring live signals right now."
+                  : "Choose GitHub Actions or create a generic workflow webhook to begin signal setup."}
+              </p>
+              <p className="mt-1">Monitoring becomes active after real workflow events arrive. Alert delivery depends on configured scheduler/email infrastructure.</p>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
+              <p className="font-semibold">Synteq is now watching {payload.sources.length} source{payload.sources.length === 1 ? "" : "s"}.</p>
+              <p className="mt-1">
+                Active signal coverage: {workflowCount} workflow source{workflowCount === 1 ? "" : "s"}, {githubCount} GitHub integration{githubCount === 1 ? "" : "s"}.
+              </p>
+              <p className="mt-1">
+                Configured alert delivery can notify teams when failure spikes, retry storms, missing heartbeats, or latency-related risks are detected.
+              </p>
+            </div>
+          )}
+
+          <div className="mt-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-4" data-testid="sources-operational-state">
+            <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Source operational state</p>
+            <h3 className="mt-1 text-lg font-semibold text-ink">{sourceOperationalStatus}</h3>
+            <p className="mt-1">{sourceOperationalMessage}</p>
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              <p>
+                Integration status: <strong>{activeSources.length > 0 ? "Active source present" : "No active source"}</strong>
+              </p>
+              <p>
+                Webhook verification: <strong>{verifiedGitHubSources.length > 0 ? "Verified" : githubCount > 0 ? "Pending" : hasInactiveGitHubSources ? "Inactive" : "Not configured"}</strong>
+              </p>
+              <p>
+                Last source signal: <strong>{formatTimestamp(latestSourceSignalAt)}</strong>
+                <span className={`ml-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${freshnessClasses(latestSourceSignalFreshness)}`}>
+                  {latestSourceSignalFreshness}
+                </span>
+              </p>
+              <p>
+                Last GitHub delivery: <strong>{formatTimestamp(latestGitHubSignalAt)}</strong>
+                <span className={`ml-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${freshnessClasses(latestGitHubDeliveryFreshness)}`}>
+                  {latestGitHubDeliveryFreshness}
+                </span>
+              </p>
+              <p>
+                Repo scope: <strong>{githubCount > 0 ? "Configured" : hasInactiveGitHubSources ? "Configured (inactive)" : "Not configured"}</strong>
+              </p>
+              <p>
+                Monitoring status: <strong>{activationJourney.monitoringActive ? "Live" : hasActiveSources ? "Waiting for signal" : "Inactive"}</strong>
+              </p>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Fresh/Stale labels use a {STALE_THRESHOLD_MINUTES}-minute recency threshold where timestamp data is available.
+              Unknown means freshness is not yet available from current source telemetry.
             </p>
           </div>
         </section>
 
-        {loadWarnings.length > 0 ? (
-          <div
-            className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-panel"
-            data-testid="sources-load-warning"
-          >
-            <p className="font-semibold">Some source setup data is temporarily unavailable.</p>
-            <ul className="mt-2 list-disc space-y-1 pl-5">
-              {loadWarnings.map((message) => (
-                <li key={message}>{message}</li>
-              ))}
-            </ul>
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-panel" data-testid="sources-advanced-section">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Advanced Status</p>
+            <h3 className="mt-1 text-xl font-semibold text-ink">Source inventory and setup status</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Use this after setup to inspect current source counts, access model, freshness, and inventory details.
+            </p>
           </div>
-        ) : null}
 
-        {!hasActiveSources ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-panel">
-            <p className="font-semibold text-ink">
-              {!sourcesStatus.available ? "Source status temporarily unavailable" : hasSources ? "Sources configured but inactive" : "No active source connected yet"}
-            </p>
-            <p className="mt-1">
-              {!sourcesStatus.available
-                ? "Synteq could not load current source status. Retry this page once the API responds."
-                : hasSources
-                ? "Configured sources are currently inactive, so Synteq is not monitoring live signals right now."
-                : "Choose GitHub Actions or create a generic workflow webhook to begin signal setup."}
-            </p>
-            <p className="mt-1">Monitoring becomes active after real workflow events arrive. Alert delivery depends on configured scheduler/email infrastructure.</p>
-            <div className="mt-3">
-              <a href="#generic-workflow-source" className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">
-                Create generic source
-              </a>
+          <details className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700" data-testid="sources-advanced-notes">
+            <summary className="cursor-pointer font-semibold text-ink">Privacy, access, and validation notes</summary>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What Synteq receives</p>
+                <p className="mt-1">Operational signal metadata, source ownership context, and heartbeat activity used for risk detection.</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What Synteq does NOT receive</p>
+                <p className="mt-1">Source code, full execution logs, artifact contents, or customer secrets by default.</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Control</p>
+                <p className="mt-1">Disconnect integrations, rotate/revoke credentials, and disable alerts anytime.</p>
+              </div>
+            </div>
+          </details>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Workflow sources</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">{toStatusValue(payload.summary.workflow_sources, sourcesStatus.available)}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">GitHub sources</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">{toStatusValue(payload.summary.github_sources, sourcesStatus.available)}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Ingestion keys</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">{toStatusValue(payload.summary.ingestion_keys_active, sourcesStatus.available)}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Alert channels</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">{toStatusValue(payload.summary.alert_channels_ready, sourcesStatus.available)}</p>
             </div>
           </div>
-        ) : (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900 shadow-panel">
-            <p className="font-semibold">Synteq is now watching {payload.sources.length} source{payload.sources.length === 1 ? "" : "s"}.</p>
-            <p className="mt-1">
-              Active signal coverage: {workflowCount} workflow source{workflowCount === 1 ? "" : "s"}, {githubCount} GitHub integration{githubCount === 1 ? "" : "s"}.
-            </p>
-            <p className="mt-1">
-              Configured alert delivery can notify teams when failure spikes, retry storms, missing heartbeats, or latency-related risks are detected.
-            </p>
-          </div>
-        )}
 
-        <div className="mt-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-5 text-sm text-slate-700 shadow-panel" data-testid="sources-operational-state">
-          <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Source operational state</p>
-          <h3 className="mt-1 text-lg font-semibold text-ink">{sourceOperationalStatus}</h3>
-          <p className="mt-1">{sourceOperationalMessage}</p>
-          <div className="mt-3 grid gap-2 md:grid-cols-3">
-            <p>
-              Integration status: <strong>{activeSources.length > 0 ? "Active source present" : "No active source"}</strong>
-            </p>
-            <p>
-              Webhook verification: <strong>{verifiedGitHubSources.length > 0 ? "Verified" : githubCount > 0 ? "Pending" : hasInactiveGitHubSources ? "Inactive" : "Not configured"}</strong>
-            </p>
-            <p>
-              Last source signal: <strong>{formatTimestamp(latestSourceSignalAt)}</strong>
-              <span className={`ml-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${freshnessClasses(latestSourceSignalFreshness)}`}>
-                {latestSourceSignalFreshness}
-              </span>
-            </p>
-            <p>
-              Last GitHub delivery: <strong>{formatTimestamp(latestGitHubSignalAt)}</strong>
-              <span className={`ml-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${freshnessClasses(latestGitHubDeliveryFreshness)}`}>
-                {latestGitHubDeliveryFreshness}
-              </span>
-            </p>
-            <p>
-              Repo scope: <strong>{githubCount > 0 ? "Configured" : hasInactiveGitHubSources ? "Configured (inactive)" : "Not configured"}</strong>
-            </p>
-            <p>
-              Monitoring status: <strong>{activationJourney.monitoringActive ? "Live" : hasActiveSources ? "Waiting for signal" : "Inactive"}</strong>
-            </p>
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
-            Fresh/Stale labels use a {STALE_THRESHOLD_MINUTES}-minute recency threshold where timestamp data is available.
-            Unknown means freshness is not yet available from current source telemetry.
-          </p>
-        </div>
-
-        <div id="generic-workflow-source" className="mt-4 scroll-mt-24">
-          <GenericWorkflowSourceOnboarding
-            canManage={canManageWorkflowSources}
-            action={manageGenericWorkflowSourceAction}
-          />
-        </div>
-
-        <div className="mt-4 grid gap-4 md:grid-cols-4">
-          <div className="rounded-2xl bg-white p-4 shadow-panel">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Workflow sources</p>
-            <p className="mt-2 text-2xl font-semibold text-ink">{toStatusValue(payload.summary.workflow_sources, sourcesStatus.available)}</p>
-          </div>
-          <div className="rounded-2xl bg-white p-4 shadow-panel">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">GitHub sources</p>
-            <p className="mt-2 text-2xl font-semibold text-ink">{toStatusValue(payload.summary.github_sources, sourcesStatus.available)}</p>
-          </div>
-          <div className="rounded-2xl bg-white p-4 shadow-panel">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Ingestion keys</p>
-            <p className="mt-2 text-2xl font-semibold text-ink">{toStatusValue(payload.summary.ingestion_keys_active, sourcesStatus.available)}</p>
-          </div>
-          <div className="rounded-2xl bg-white p-4 shadow-panel">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Alert channels</p>
-            <p className="mt-2 text-2xl font-semibold text-ink">{toStatusValue(payload.summary.alert_channels_ready, sourcesStatus.available)}</p>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-2xl bg-white p-5 shadow-panel">
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5">
           <h3 className="text-lg font-semibold text-ink">Source inventory</h3>
           <p className="mt-1 text-sm text-slate-600">
             Each source provides signals that power continuous risk detection.
@@ -811,7 +854,8 @@ export default async function ConnectedSourcesPage() {
               </tbody>
             </table>
           </div>
-        </div>
+          </div>
+        </section>
       </section>
     </main>
   );
