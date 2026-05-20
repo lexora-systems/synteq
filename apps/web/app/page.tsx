@@ -25,20 +25,20 @@ const capabilityItems = [
 
 const benefitItems = [
   {
-    title: "Detect instability earlier",
-    description: "Catch rising failure and retry patterns while there is still time to investigate before small failures escalate."
+    title: "Detect workflow failures before escalation",
+    description: "Identify failed executions, retry spikes, stale workflow activity, and operational anomalies before they become larger incidents."
   },
   {
-    title: "Reduce deployment blind spots",
-    description: "Spot workflow and CI/CD signal changes between releases so high-impact deploy windows are not flying blind."
+    title: "Connect signals into incident context",
+    description: "Turn disconnected workflow events into timelines, incident visibility, and reliability signals teams can investigate."
   },
   {
-    title: "Understand connected workflow risk",
-    description: "Give operators and engineering leaders a clear signal from connected workflow events, not just disconnected logs and dashboard noise."
+    title: "Reduce blind spots across automation systems",
+    description: "Track workflow and CI/CD operational behavior across connected sources without requiring broad system access."
   },
   {
-    title: "Reduce time-to-detection",
-    description: "Focus teams on the highest-risk workflows with incident context, timelines, and readiness signals."
+    title: "Focus teams on high-risk workflow activity",
+    description: "Surface incidents, workflow instability, and reliability patterns instead of adding more disconnected dashboard noise."
   }
 ];
 
@@ -931,10 +931,18 @@ export default async function PublicLandingPage() {
             {benefitItems.map((item) => (
               <article
                 key={item.title}
-                className="rounded-2xl border border-cyan-300/20 bg-[linear-gradient(135deg,rgba(2,8,24,0.84)_0%,rgba(7,19,40,0.75)_100%)] p-6 shadow-[0_18px_50px_rgba(1,6,19,0.4)]"
+                className="group relative overflow-hidden rounded-2xl border border-cyan-300/20 bg-[linear-gradient(135deg,rgba(2,8,24,0.84)_0%,rgba(7,19,40,0.75)_100%)] p-6 shadow-[0_18px_50px_rgba(1,6,19,0.4)] transition-[transform,border-color,box-shadow] duration-300 ease-out hover:-translate-y-1 hover:border-cyan-300/45 hover:shadow-[0_24px_70px_rgba(8,145,178,0.16)] focus-within:border-cyan-300/45 focus-within:shadow-[0_24px_70px_rgba(8,145,178,0.16)] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
               >
-                <h3 className="text-lg font-semibold text-cyan-50">{item.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-300">{item.description}</p>
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(56,189,248,0.16),transparent_32%),linear-gradient(135deg,rgba(20,184,166,0.08),transparent_48%)] opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none"
+                />
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200/60 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none"
+                />
+                <h3 className="relative text-lg font-semibold text-cyan-50">{item.title}</h3>
+                <p className="relative mt-2 text-sm leading-6 text-slate-300">{item.description}</p>
               </article>
             ))}
           </div>
