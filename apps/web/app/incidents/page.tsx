@@ -5,9 +5,208 @@ import {
   fetchIncidentAttentionGroups,
   fetchIncidents,
   postIncidentAction,
-  type IncidentAttentionGroup
+  type IncidentAttentionGroup,
+  type IncidentGuidance
 } from "../../lib/api";
 import { requireToken } from "../../lib/auth";
+import {
+  asRecord,
+  logServerLoadFailure,
+  safeArray,
+  safeDateString,
+  safeNullableString,
+  safeNumber,
+  safeString
+} from "../../lib/resilience";
+
+type IncidentListPayload = Awaited<ReturnType<typeof fetchIncidents>>;
+type IncidentRow = IncidentListPayload["incidents"][number];
+type IncidentAttentionGroupsPayload = Awaited<ReturnType<typeof fetchIncidentAttentionGroups>>;
+type LoadResult<T> = {
+  ok: boolean;
+  payload: T;
+};
+
+const INCIDENT_STATUSES: IncidentRow["status"][] = ["open", "acked", "resolved"];
+const INCIDENT_SEVERITIES: IncidentRow["severity"][] = ["warn", "low", "medium", "high", "critical"];
+const ATTENTION_STATES: IncidentAttentionGroup["attention"][] = ["urgent", "elevated", "normal", "unknown"];
+const ATTENTION_SEVERITIES: IncidentAttentionGroup["highestSeverity"][] = ["critical", "high", "medium", "low", "unknown"];
+const DEFAULT_GUIDANCE: IncidentGuidance = {
+  incident_type: "unknown",
+  likely_causes: [],
+  business_impact: "Impact has not been classified yet.",
+  recommended_actions: [],
+  confidence: "low",
+  evidence: [],
+  generated_by: "rules_v1",
+  summary_text: "Guidance is unavailable for this incident."
+};
+
+async function loadIncidentsData<T>(
+  scope: string,
+  loader: () => Promise<unknown>,
+  fallback: T,
+  normalize: (payload: unknown) => T
+): Promise<LoadResult<T>> {
+  try {
+    return {
+      ok: true,
+      payload: normalize(await loader())
+    };
+  } catch (error) {
+    logServerLoadFailure("incidents", scope, error);
+    return {
+      ok: false,
+      payload: fallback
+    };
+  }
+}
+
+function fallbackIncidentList(page: number): IncidentListPayload {
+  return {
+    incidents: [],
+    pagination: {
+      page,
+      page_size: 25,
+      total: 0,
+      has_next: false
+    },
+    last_updated: new Date().toISOString()
+  };
+}
+
+function normalizeGuidance(value: unknown): IncidentGuidance {
+  const guidance = asRecord(value);
+  if (!guidance) {
+    return DEFAULT_GUIDANCE;
+  }
+
+  const incidentType = [
+    "duplicate_webhook",
+    "retry_storm",
+    "latency_spike",
+    "failure_rate_spike",
+    "missing_heartbeat",
+    "cost_spike",
+    "unknown"
+  ].includes(guidance.incident_type as string)
+    ? (guidance.incident_type as IncidentGuidance["incident_type"])
+    : "unknown";
+  const confidence = ["low", "medium", "high"].includes(guidance.confidence as string)
+    ? (guidance.confidence as IncidentGuidance["confidence"])
+    : "low";
+
+  return {
+    incident_type: incidentType,
+    likely_causes: safeArray(guidance.likely_causes, (item) => safeString(item) || null),
+    business_impact: safeString(guidance.business_impact, DEFAULT_GUIDANCE.business_impact),
+    recommended_actions: safeArray(guidance.recommended_actions, (item) => safeString(item) || null),
+    confidence,
+    evidence: safeArray(guidance.evidence, (item) => safeString(item) || null),
+    generated_by: "rules_v1",
+    summary_text: safeString(guidance.summary_text, DEFAULT_GUIDANCE.summary_text)
+  };
+}
+
+function normalizeIncident(value: unknown): IncidentRow | null {
+  const incident = asRecord(value);
+  if (!incident) {
+    return null;
+  }
+
+  const id = safeString(incident.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    tenant_id: safeString(incident.tenant_id, "unknown"),
+    workflow_id: safeNullableString(incident.workflow_id),
+    environment: safeNullableString(incident.environment),
+    policy_id: safeNullableString(incident.policy_id),
+    status: INCIDENT_STATUSES.includes(incident.status as IncidentRow["status"]) ? (incident.status as IncidentRow["status"]) : "open",
+    severity: INCIDENT_SEVERITIES.includes(incident.severity as IncidentRow["severity"]) ? (incident.severity as IncidentRow["severity"]) : "warn",
+    started_at: safeDateString(incident.started_at),
+    last_seen_at: safeDateString(incident.last_seen_at),
+    resolved_at: safeNullableString(incident.resolved_at),
+    summary: safeString(incident.summary, "Untitled incident"),
+    details_json: asRecord(incident.details_json) ?? {},
+    guidance: normalizeGuidance(incident.guidance)
+  };
+}
+
+function normalizeIncidentListPayload(payload: unknown, page: number): IncidentListPayload {
+  const record = asRecord(payload);
+  if (!record) {
+    throw new Error("Malformed incidents payload");
+  }
+  const pagination = asRecord(record.pagination);
+
+  return {
+    incidents: safeArray(record.incidents, normalizeIncident),
+    pagination: {
+      page: Math.max(1, safeNumber(pagination?.page, page)),
+      page_size: Math.max(1, safeNumber(pagination?.page_size, 25)),
+      total: Math.max(0, safeNumber(pagination?.total)),
+      has_next: Boolean(pagination?.has_next)
+    },
+    last_updated: safeDateString(record.last_updated)
+  };
+}
+
+function normalizeAttentionGroup(value: unknown): IncidentAttentionGroup | null {
+  const group = asRecord(value);
+  if (!group) {
+    return null;
+  }
+
+  const id = safeString(group.id);
+  const groupKey = asRecord(group.groupKey);
+  const activeStatuses = asRecord(group.activeStatuses);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    label: safeString(group.label, "Unknown group"),
+    attention: ATTENTION_STATES.includes(group.attention as IncidentAttentionGroup["attention"])
+      ? (group.attention as IncidentAttentionGroup["attention"])
+      : "unknown",
+    incidentCount: safeNumber(group.incidentCount),
+    highestSeverity: ATTENTION_SEVERITIES.includes(group.highestSeverity as IncidentAttentionGroup["highestSeverity"])
+      ? (group.highestSeverity as IncidentAttentionGroup["highestSeverity"])
+      : "unknown",
+    lastSeenAt: safeNullableString(group.lastSeenAt),
+    alertFailureCount: safeNumber(group.alertFailureCount),
+    activeStatuses: {
+      open: safeNumber(activeStatuses?.open),
+      acked: safeNumber(activeStatuses?.acked)
+    },
+    groupKey: {
+      fingerprint: safeNullableString(groupKey?.fingerprint) ?? undefined,
+      workflowId: safeNullableString(groupKey?.workflowId) ?? undefined,
+      workflowName: safeNullableString(groupKey?.workflowName) ?? undefined,
+      source: safeNullableString(groupKey?.source) ?? undefined,
+      system: safeNullableString(groupKey?.system) ?? undefined,
+      environment: safeNullableString(groupKey?.environment) ?? undefined,
+      ruleKey: safeNullableString(groupKey?.ruleKey) ?? undefined
+    }
+  };
+}
+
+function normalizeAttentionGroupsPayload(payload: unknown): IncidentAttentionGroupsPayload {
+  const record = asRecord(payload);
+  if (!record) {
+    throw new Error("Malformed attention groups payload");
+  }
+
+  return {
+    generatedAt: safeDateString(record.generatedAt),
+    groups: safeArray(record.groups, normalizeAttentionGroup)
+  };
+}
 
 async function ackAction(formData: FormData) {
   "use server";
@@ -82,12 +281,24 @@ export default async function IncidentsPage({
   const status = params.status;
   const workflowId = params.workflow_id;
   const token = await requireToken();
-  const [payload, attentionResult] = await Promise.all([
-    fetchIncidents(token, status, page, 25, workflowId),
-    fetchIncidentAttentionGroups(token)
-      .then((attentionPayload) => ({ ok: true as const, payload: attentionPayload }))
-      .catch(() => ({ ok: false as const }))
+  const [incidentsResult, attentionResult] = await Promise.all([
+    loadIncidentsData(
+      "incident_list",
+      () => fetchIncidents(token, status, page, 25, workflowId),
+      fallbackIncidentList(page),
+      (incidentPayload) => normalizeIncidentListPayload(incidentPayload, page)
+    ),
+    loadIncidentsData(
+      "attention_groups",
+      () => fetchIncidentAttentionGroups(token),
+      {
+        generatedAt: new Date().toISOString(),
+        groups: []
+      },
+      normalizeAttentionGroupsPayload
+    )
   ]);
+  const payload = incidentsResult.payload;
   const attentionGroups = attentionResult.ok ? attentionResult.payload.groups.slice(0, 6) : [];
   const hiddenAttentionGroups = attentionResult.ok ? Math.max(0, attentionResult.payload.groups.length - attentionGroups.length) : 0;
   const hasIncidentFilters = Boolean(status || workflowId);
@@ -114,6 +325,12 @@ export default async function IncidentsPage({
           <p className="mt-2 text-xs text-slate-500">
             Page {payload.pagination.page} of {Math.max(1, Math.ceil(payload.pagination.total / payload.pagination.page_size))}
           </p>
+
+          {!incidentsResult.ok ? (
+            <p className="mt-4 border-l-4 border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800" data-testid="incidents-load-warning">
+              Incident data is temporarily unavailable. This route is still available for navigation.
+            </p>
+          ) : null}
 
           <div className="mt-5 border-t border-slate-200 pt-5" data-testid="attention-groups-section">
             <div className="flex flex-wrap items-end justify-between gap-3">

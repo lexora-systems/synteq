@@ -8,13 +8,403 @@ import {
   fetchReliabilityWindows,
   fetchTenantSettings,
   fetchWorkflows,
+  type ConnectedSourceRow,
+  type GitHubIntegrationRow,
   type OperationalDashboard,
   type OperationalFreshnessState,
   type OperationalHealthState,
-  type ReliabilityWindows
+  type ReliabilityWindows,
+  type TenantSettings,
+  type WorkflowRow
 } from "../../lib/api";
 import { deriveActivationJourney } from "../../lib/activation";
 import { requireToken } from "../../lib/auth";
+import {
+  asRecord,
+  logServerLoadFailure,
+  safeArray,
+  safeBoolean,
+  safeDateString,
+  safeNullableString,
+  safeNumber,
+  safeString
+} from "../../lib/resilience";
+
+type LoadResult<T> = {
+  ok: boolean;
+  payload: T;
+};
+
+type ConnectedSourcesPayload = Awaited<ReturnType<typeof fetchConnectedSources>>;
+type GitHubIntegrationsPayload = Awaited<ReturnType<typeof fetchGitHubIntegrations>>;
+type TenantSettingsPayload = Awaited<ReturnType<typeof fetchTenantSettings>>;
+type WorkflowsPayload = Awaited<ReturnType<typeof fetchWorkflows>>;
+
+const HEALTH_STATES: OperationalHealthState[] = ["healthy", "degraded", "failing", "unknown"];
+const FRESHNESS_STATES: OperationalFreshnessState[] = ["fresh", "stale", "unknown"];
+const FALLBACK_CONNECTED_SOURCES: ConnectedSourcesPayload = {
+  summary: {
+    workflow_sources: 0,
+    github_sources: 0,
+    ingestion_keys_active: 0,
+    alert_channels_ready: 0
+  },
+  sources: [],
+  readiness: {
+    ingestion_api_keys_configured: false,
+    alert_dispatch_ready: false
+  }
+};
+const FALLBACK_GITHUB_INTEGRATIONS: GitHubIntegrationsPayload = {
+  webhook_url: "",
+  integrations: []
+};
+const FALLBACK_TENANT_SETTINGS: TenantSettingsPayload = {
+  settings: {
+    tenant_id: "unknown",
+    default_currency: "USD",
+    current_plan: "free",
+    effective_plan: "free",
+    trial: {
+      status: "none",
+      available: false,
+      active: false,
+      consumed: false,
+      started_at: null,
+      ends_at: null,
+      source: null,
+      days_remaining: 0
+    }
+  }
+};
+const FALLBACK_WORKFLOWS: WorkflowsPayload = {
+  workflows: []
+};
+
+async function loadOverviewData<T>(
+  scope: string,
+  loader: () => Promise<unknown>,
+  fallback: T,
+  normalize: (payload: unknown) => T
+): Promise<LoadResult<T>> {
+  try {
+    return {
+      ok: true,
+      payload: normalize(await loader())
+    };
+  } catch (error) {
+    logServerLoadFailure("overview", scope, error);
+    return {
+      ok: false,
+      payload: fallback
+    };
+  }
+}
+
+function normalizeHealthState(value: unknown): OperationalHealthState {
+  return HEALTH_STATES.includes(value as OperationalHealthState) ? (value as OperationalHealthState) : "unknown";
+}
+
+function normalizeFreshnessState(value: unknown): OperationalFreshnessState {
+  return FRESHNESS_STATES.includes(value as OperationalFreshnessState) ? (value as OperationalFreshnessState) : "unknown";
+}
+
+function normalizeConnectedSource(value: unknown): ConnectedSourceRow | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const id = safeString(record.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    type: record.type === "github_integration" ? "github_integration" : "workflow",
+    name: safeString(record.name, "Unknown source"),
+    status: record.status === "inactive" ? "inactive" : "active",
+    powers: safeString(record.powers, "Operational monitoring"),
+    details: asRecord(record.details) ?? {},
+    last_activity_at: safeNullableString(record.last_activity_at),
+    connected_at: safeDateString(record.connected_at)
+  };
+}
+
+function normalizeConnectedSourcesPayload(payload: unknown): ConnectedSourcesPayload {
+  const record = asRecord(payload);
+  if (!record) {
+    throw new Error("Malformed connected sources payload");
+  }
+  const summary = asRecord(record.summary);
+  const readiness = asRecord(record.readiness);
+
+  return {
+    summary: {
+      workflow_sources: safeNumber(summary?.workflow_sources),
+      github_sources: safeNumber(summary?.github_sources),
+      ingestion_keys_active: safeNumber(summary?.ingestion_keys_active),
+      alert_channels_ready: safeNumber(summary?.alert_channels_ready)
+    },
+    sources: safeArray(record.sources, normalizeConnectedSource),
+    readiness: {
+      ingestion_api_keys_configured: safeBoolean(readiness?.ingestion_api_keys_configured),
+      alert_dispatch_ready: safeBoolean(readiness?.alert_dispatch_ready)
+    }
+  };
+}
+
+function normalizeGitHubIntegration(value: unknown): GitHubIntegrationRow | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const id = safeString(record.id);
+  const webhookId = safeString(record.webhook_id);
+  if (!id || !webhookId) {
+    return null;
+  }
+
+  return {
+    id,
+    webhook_id: webhookId,
+    repository_full_name: safeNullableString(record.repository_full_name),
+    is_active: safeBoolean(record.is_active),
+    last_delivery_id: safeNullableString(record.last_delivery_id),
+    last_seen_at: safeNullableString(record.last_seen_at),
+    created_at: safeDateString(record.created_at),
+    updated_at: safeDateString(record.updated_at)
+  };
+}
+
+function normalizeGitHubIntegrationsPayload(payload: unknown): GitHubIntegrationsPayload {
+  const record = asRecord(payload);
+  if (!record) {
+    throw new Error("Malformed GitHub integrations payload");
+  }
+
+  return {
+    webhook_url: safeString(record.webhook_url),
+    integrations: safeArray(record.integrations, normalizeGitHubIntegration)
+  };
+}
+
+function normalizeWorkflow(value: unknown): WorkflowRow | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const id = safeString(record.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    slug: safeString(record.slug, id),
+    display_name: safeString(record.display_name, "Untitled workflow"),
+    environment: safeString(record.environment, "prod"),
+    system: safeString(record.system, "workflow")
+  };
+}
+
+function normalizeWorkflowsPayload(payload: unknown): WorkflowsPayload {
+  const record = asRecord(payload);
+  if (!record) {
+    throw new Error("Malformed workflows payload");
+  }
+
+  return {
+    workflows: safeArray(record.workflows, normalizeWorkflow)
+  };
+}
+
+function normalizeTenantSettingsPayload(payload: unknown): TenantSettingsPayload {
+  const record = asRecord(payload);
+  const settings = asRecord(record?.settings);
+  if (!settings) {
+    return FALLBACK_TENANT_SETTINGS;
+  }
+  const trial = asRecord(settings.trial);
+
+  return {
+    settings: {
+      tenant_id: safeString(settings.tenant_id, FALLBACK_TENANT_SETTINGS.settings.tenant_id),
+      default_currency: ["USD", "PHP", "EUR", "GBP", "JPY", "AUD", "CAD"].includes(settings.default_currency as string)
+        ? (settings.default_currency as TenantSettings["default_currency"])
+        : FALLBACK_TENANT_SETTINGS.settings.default_currency,
+      current_plan: ["free", "pro", "enterprise"].includes(settings.current_plan as string)
+        ? (settings.current_plan as TenantSettings["current_plan"])
+        : FALLBACK_TENANT_SETTINGS.settings.current_plan,
+      effective_plan: ["free", "pro", "enterprise"].includes(settings.effective_plan as string)
+        ? (settings.effective_plan as TenantSettings["effective_plan"])
+        : FALLBACK_TENANT_SETTINGS.settings.effective_plan,
+      trial: {
+        status: ["none", "active", "expired"].includes(trial?.status as string)
+          ? (trial?.status as TenantSettings["trial"]["status"])
+          : "none",
+        available: safeBoolean(trial?.available),
+        active: safeBoolean(trial?.active),
+        consumed: safeBoolean(trial?.consumed),
+        started_at: safeNullableString(trial?.started_at),
+        ends_at: safeNullableString(trial?.ends_at),
+        source: ["manual", "auto_ingest", "auto_real_scan", "auto_workflow_connect"].includes(trial?.source as string)
+          ? (trial?.source as TenantSettings["trial"]["source"])
+          : null,
+        days_remaining: safeNumber(trial?.days_remaining)
+      }
+    }
+  };
+}
+
+function normalizeDashboard(payload: unknown): OperationalDashboard {
+  const record = asRecord(payload);
+  if (!record) {
+    throw new Error("Malformed operational dashboard payload");
+  }
+  const activeIncidents = asRecord(record.activeIncidents);
+  const bySeverity = asRecord(activeIncidents?.bySeverity);
+  const recentlyResolved = asRecord(record.recentlyResolved);
+  const sources = asRecord(record.sources);
+  const workflows = asRecord(record.workflows);
+  const pipeline = asRecord(record.pipeline);
+  const events = asRecord(record.events);
+
+  return {
+    generatedAt: safeDateString(record.generatedAt),
+    globalState: normalizeHealthState(record.globalState),
+    activeIncidents: {
+      total: safeNumber(activeIncidents?.total),
+      bySeverity: {
+        critical: safeNumber(bySeverity?.critical),
+        high: safeNumber(bySeverity?.high),
+        medium: safeNumber(bySeverity?.medium),
+        low: safeNumber(bySeverity?.low),
+        unknown: safeNumber(bySeverity?.unknown)
+      }
+    },
+    recentlyResolved: {
+      total: safeNumber(recentlyResolved?.total),
+      windowHours: safeNumber(recentlyResolved?.windowHours, 24)
+    },
+    sources: {
+      total: safeNumber(sources?.total),
+      fresh: safeNumber(sources?.fresh),
+      stale: safeNumber(sources?.stale),
+      unknown: safeNumber(sources?.unknown),
+      items: safeArray(sources?.items, (item) => {
+        const source = asRecord(item);
+        if (!source) {
+          return null;
+        }
+        const id = safeString(source.id);
+        return id
+          ? {
+              id,
+              name: safeString(source.name, "Unknown source"),
+              type: safeString(source.type, "unknown"),
+              state: normalizeFreshnessState(source.state),
+              lastSignalAt: safeNullableString(source.lastSignalAt)
+            }
+          : null;
+      })
+    },
+    workflows: {
+      total: safeNumber(workflows?.total),
+      healthy: safeNumber(workflows?.healthy),
+      degraded: safeNumber(workflows?.degraded),
+      failing: safeNumber(workflows?.failing),
+      unknown: safeNumber(workflows?.unknown),
+      items: safeArray(workflows?.items, (item) => {
+        const workflow = asRecord(item);
+        if (!workflow) {
+          return null;
+        }
+        const id = safeString(workflow.id);
+        return id
+          ? {
+              id,
+              name: safeString(workflow.name, "Untitled workflow"),
+              sourceName: safeNullableString(workflow.sourceName) ?? undefined,
+              environment: safeNullableString(workflow.environment) ?? undefined,
+              state: normalizeHealthState(workflow.state),
+              lastSignalAt: safeNullableString(workflow.lastSignalAt),
+              activeIncidentCount: safeNumber(workflow.activeIncidentCount)
+            }
+          : null;
+      })
+    },
+    pipeline: {
+      state: normalizeFreshnessState(pipeline?.state),
+      jobs: safeArray(pipeline?.jobs, (item) => {
+        const job = asRecord(item);
+        if (!job) {
+          return null;
+        }
+        const name = safeString(job.name);
+        return name
+          ? {
+              name,
+              state: normalizeFreshnessState(job.state),
+              lastSeenAt: safeNullableString(job.lastSeenAt)
+            }
+          : null;
+      })
+    },
+    events: {
+      windowHours: safeNumber(events?.windowHours, 24),
+      succeeded: safeNumber(events?.succeeded),
+      failed: safeNumber(events?.failed),
+      timedOut: safeNumber(events?.timedOut),
+      unknown: safeNumber(events?.unknown)
+    }
+  };
+}
+
+function normalizeReliabilityWindows(payload: unknown): ReliabilityWindows {
+  const record = asRecord(payload);
+  if (!record) {
+    throw new Error("Malformed reliability windows payload");
+  }
+  const scope = asRecord(record.scope);
+
+  return {
+    generatedAt: safeDateString(record.generatedAt),
+    scope: {
+      tenantId: safeNullableString(scope?.tenantId) ?? undefined,
+      workflowId: safeNullableString(scope?.workflowId),
+      sourceId: safeNullableString(scope?.sourceId),
+      sourceKey: safeNullableString(scope?.sourceKey)
+    },
+    windows: safeArray(record.windows, (item) => {
+      const window = asRecord(item);
+      if (!window) {
+        return null;
+      }
+      const label = ["1h", "24h", "7d"].includes(window.label as string) ? (window.label as "1h" | "24h" | "7d") : null;
+      return label
+        ? {
+            label,
+            startAt: safeDateString(window.startAt),
+            endAt: safeDateString(window.endAt),
+            total: safeNumber(window.total),
+            succeeded: safeNumber(window.succeeded),
+            failed: safeNumber(window.failed),
+            timedOut: safeNumber(window.timedOut),
+            unknown: safeNumber(window.unknown),
+            successRate: typeof window.successRate === "number" ? window.successRate : null,
+            failureRate: typeof window.failureRate === "number" ? window.failureRate : null,
+            timeoutRate: typeof window.timeoutRate === "number" ? window.timeoutRate : null,
+            lastSignalAt: safeNullableString(window.lastSignalAt),
+            state: normalizeHealthState(window.state)
+          }
+        : null;
+    })
+  };
+}
 
 function formatState(value: string): string {
   return value
@@ -122,48 +512,23 @@ function reliabilityWindowDetail(window: ReliabilityWindows["windows"][number]) 
 export default async function OverviewPage() {
   const token = await requireToken();
 
-  const [dashboardResult, reliabilityResult, workflowsPayload, settingsResult, sourcesResult, githubIntegrationsResult] = await Promise.all([
-    fetchOperationalDashboard(token)
-      .then((payload) => ({ ok: true as const, payload }))
-      .catch(() => ({ ok: false as const })),
-    fetchReliabilityWindows(token)
-      .then((payload) => ({ ok: true as const, payload }))
-      .catch(() => ({ ok: false as const })),
-    fetchWorkflows(token),
-    fetchTenantSettings(token)
-      .then((payload) => ({ ok: true as const, payload }))
-      .catch(() => ({ ok: false as const })),
-    fetchConnectedSources(token)
-      .then((payload) => ({ ok: true as const, payload }))
-      .catch(() => ({
-        ok: false as const,
-        payload: {
-          summary: {
-            workflow_sources: 0,
-            github_sources: 0,
-            ingestion_keys_active: 0,
-            alert_channels_ready: 0
-          },
-          sources: [],
-          readiness: {
-            ingestion_api_keys_configured: false,
-            alert_dispatch_ready: false
-          }
-        }
-      })),
-    fetchGitHubIntegrations(token)
-      .then((payload) => ({ ok: true as const, payload }))
-      .catch(() => ({
-        ok: false as const,
-        payload: {
-          webhook_url: "",
-          integrations: []
-        }
-      }))
+  const [dashboardResult, reliabilityResult, workflowsResult, settingsResult, sourcesResult, githubIntegrationsResult] = await Promise.all([
+    loadOverviewData("operational_dashboard", () => fetchOperationalDashboard(token), null as OperationalDashboard | null, normalizeDashboard),
+    loadOverviewData("reliability_windows", () => fetchReliabilityWindows(token), null as ReliabilityWindows | null, normalizeReliabilityWindows),
+    loadOverviewData("workflows", () => fetchWorkflows(token), FALLBACK_WORKFLOWS, normalizeWorkflowsPayload),
+    loadOverviewData("tenant_settings", () => fetchTenantSettings(token), FALLBACK_TENANT_SETTINGS, normalizeTenantSettingsPayload),
+    loadOverviewData("connected_sources", () => fetchConnectedSources(token), FALLBACK_CONNECTED_SOURCES, normalizeConnectedSourcesPayload),
+    loadOverviewData(
+      "github_integrations",
+      () => fetchGitHubIntegrations(token),
+      FALLBACK_GITHUB_INTEGRATIONS,
+      normalizeGitHubIntegrationsPayload
+    )
   ]);
 
-  const dashboard = dashboardResult.ok ? dashboardResult.payload : null;
-  const reliability = reliabilityResult.ok ? reliabilityResult.payload : null;
+  const dashboard = dashboardResult.payload;
+  const reliability = reliabilityResult.payload;
+  const workflowsPayload = workflowsResult.payload;
   const monitoringDataUnavailable = !dashboard;
   const openIncidents = dashboard?.activeIncidents.total ?? 0;
   const recentEventTotal = countRecentEvents(dashboard);
@@ -183,24 +548,7 @@ export default async function OverviewPage() {
   ).length;
   const connectedButQuiet = activationJourney.hasActiveSources && openIncidents === 0 && !activationJourney.firstSignalReceived;
   const activationIncomplete = !activationJourney.monitoringActive;
-  const tenantSettings = settingsResult.ok
-    ? settingsResult.payload.settings
-    : {
-        tenant_id: "unknown",
-        default_currency: "USD" as const,
-        current_plan: "free" as const,
-        effective_plan: "free" as const,
-        trial: {
-          status: "none" as const,
-          available: false,
-          active: false,
-          consumed: false,
-          started_at: null,
-          ends_at: null,
-          source: null,
-          days_remaining: 0
-        }
-      };
+  const tenantSettings = settingsResult.payload.settings;
   const trial = tenantSettings.trial;
   const showTrialActive = trial.active;
   const showTrialEnded = !trial.active && trial.consumed && tenantSettings.current_plan === "free";
@@ -211,6 +559,14 @@ export default async function OverviewPage() {
         dashboard.workflows.items.filter((workflow) => workflow.state !== "healthy" || workflow.activeIncidentCount > 0)
       ).slice(0, 5)
     : [];
+  const unavailableSections = [
+    dashboardResult.ok ? null : "operational dashboard",
+    reliabilityResult.ok ? null : "reliability windows",
+    workflowsResult.ok ? null : "workflows",
+    settingsResult.ok ? null : "tenant settings",
+    sourcesResult.ok ? null : "sources",
+    githubIntegrationsResult.ok ? null : "GitHub integrations"
+  ].filter(Boolean);
 
   return (
     <main className="min-h-screen syn-app-shell pb-12">
@@ -283,6 +639,12 @@ export default async function OverviewPage() {
         {showTrialEnded ? (
           <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-panel">
             Trial ended. Upgrade to Pro to continue full feature access.
+          </div>
+        ) : null}
+
+        {unavailableSections.length > 0 ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-panel" data-testid="overview-load-warning">
+            Some live data is temporarily unavailable: {unavailableSections.join(", ")}. The rest of the dashboard remains usable.
           </div>
         ) : null}
 

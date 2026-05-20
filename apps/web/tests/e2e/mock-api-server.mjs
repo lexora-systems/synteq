@@ -318,7 +318,18 @@ let failNextGitHubRotate = false;
 let omitNextGitHubRotateSecret = false;
 let failNextGitHubDeactivateAfterMutation = false;
 let failNextControlPlaneSources = false;
+let failControlPlaneSources = false;
 let failNextSilentCheckUnsupported = false;
+let nullControlPlaneSourceDetails = false;
+let failAuthMe = false;
+let failWorkflows = false;
+let failMetricsOverview = false;
+let failOperationalDashboard = false;
+let failReliabilityWindows = false;
+let failIncidentsList = false;
+let malformedIncidentsList = false;
+let failIncidentDetail = false;
+let failIncidentTimeline = false;
 
 const API_KEYS = [];
 
@@ -338,7 +349,18 @@ function resetState() {
   omitNextGitHubRotateSecret = false;
   failNextGitHubDeactivateAfterMutation = false;
   failNextControlPlaneSources = false;
+  failControlPlaneSources = false;
   failNextSilentCheckUnsupported = false;
+  nullControlPlaneSourceDetails = false;
+  failAuthMe = false;
+  failWorkflows = false;
+  failMetricsOverview = false;
+  failOperationalDashboard = false;
+  failReliabilityWindows = false;
+  failIncidentsList = false;
+  malformedIncidentsList = false;
+  failIncidentDetail = false;
+  failIncidentTimeline = false;
 
   API_KEYS.length = 0;
   API_KEYS.push({
@@ -409,8 +431,41 @@ const server = http.createServer(async (req, res) => {
     if (typeof body.fail_next_control_plane_sources_get === "boolean") {
       failNextControlPlaneSources = body.fail_next_control_plane_sources_get;
     }
+    if (typeof body.fail_control_plane_sources_get === "boolean") {
+      failControlPlaneSources = body.fail_control_plane_sources_get;
+    }
     if (typeof body.fail_next_silent_check_unsupported === "boolean") {
       failNextSilentCheckUnsupported = body.fail_next_silent_check_unsupported;
+    }
+    if (typeof body.null_control_plane_source_details === "boolean") {
+      nullControlPlaneSourceDetails = body.null_control_plane_source_details;
+    }
+    if (typeof body.fail_auth_me_get === "boolean") {
+      failAuthMe = body.fail_auth_me_get;
+    }
+    if (typeof body.fail_workflows_get === "boolean") {
+      failWorkflows = body.fail_workflows_get;
+    }
+    if (typeof body.fail_metrics_overview_get === "boolean") {
+      failMetricsOverview = body.fail_metrics_overview_get;
+    }
+    if (typeof body.fail_operational_dashboard_get === "boolean") {
+      failOperationalDashboard = body.fail_operational_dashboard_get;
+    }
+    if (typeof body.fail_reliability_windows_get === "boolean") {
+      failReliabilityWindows = body.fail_reliability_windows_get;
+    }
+    if (typeof body.fail_incidents_get === "boolean") {
+      failIncidentsList = body.fail_incidents_get;
+    }
+    if (typeof body.malformed_incidents_get === "boolean") {
+      malformedIncidentsList = body.malformed_incidents_get;
+    }
+    if (typeof body.fail_incident_detail_get === "boolean") {
+      failIncidentDetail = body.fail_incident_detail_get;
+    }
+    if (typeof body.fail_incident_timeline_get === "boolean") {
+      failIncidentTimeline = body.fail_incident_timeline_get;
     }
     sendJson(res, 200, {
       ok: true,
@@ -419,7 +474,18 @@ const server = http.createServer(async (req, res) => {
       omit_next_github_rotate_secret: omitNextGitHubRotateSecret,
       fail_next_github_deactivate_after_mutation: failNextGitHubDeactivateAfterMutation,
       fail_next_control_plane_sources_get: failNextControlPlaneSources,
-      fail_next_silent_check_unsupported: failNextSilentCheckUnsupported
+      fail_control_plane_sources_get: failControlPlaneSources,
+      fail_next_silent_check_unsupported: failNextSilentCheckUnsupported,
+      null_control_plane_source_details: nullControlPlaneSourceDetails,
+      fail_auth_me_get: failAuthMe,
+      fail_workflows_get: failWorkflows,
+      fail_metrics_overview_get: failMetricsOverview,
+      fail_operational_dashboard_get: failOperationalDashboard,
+      fail_reliability_windows_get: failReliabilityWindows,
+      fail_incidents_get: failIncidentsList,
+      malformed_incidents_get: malformedIncidentsList,
+      fail_incident_detail_get: failIncidentDetail,
+      fail_incident_timeline_get: failIncidentTimeline
     });
     return;
   }
@@ -478,6 +544,10 @@ const server = http.createServer(async (req, res) => {
     if (!persona) {
       return;
     }
+    if (failWorkflows) {
+      sendJson(res, 500, { error: "mock workflows failure" });
+      return;
+    }
     if (persona === "activated") {
       sendJson(res, 200, {
         workflows: [
@@ -499,6 +569,10 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && pathname === "/v1/metrics/overview") {
     const persona = ensureAuth(req, res);
     if (!persona) {
+      return;
+    }
+    if (failMetricsOverview) {
+      sendJson(res, 500, { error: "mock metrics overview failure" });
       return;
     }
     const activated = persona === "activated";
@@ -541,6 +615,10 @@ const server = http.createServer(async (req, res) => {
     if (!persona) {
       return;
     }
+    if (failOperationalDashboard) {
+      sendJson(res, 500, { error: "mock operational dashboard failure" });
+      return;
+    }
     sendJson(res, 200, operationalDashboardPayload(persona === "activated"));
     return;
   }
@@ -548,6 +626,10 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && pathname === "/v1/metrics/reliability-windows") {
     const persona = ensureAuth(req, res);
     if (!persona) {
+      return;
+    }
+    if (failReliabilityWindows) {
+      sendJson(res, 500, { error: "mock reliability windows failure" });
       return;
     }
     sendJson(res, 200, reliabilityWindowsPayload(persona === "activated"));
@@ -568,6 +650,10 @@ const server = http.createServer(async (req, res) => {
     if (!persona) {
       return;
     }
+    if (failAuthMe) {
+      sendJson(res, 500, { error: "mock auth me failure" });
+      return;
+    }
     sendJson(res, 200, {
       user: {
         user_id: `user_${persona}`,
@@ -584,6 +670,24 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && pathname === "/v1/incidents") {
     const persona = ensureAuth(req, res);
     if (!persona) {
+      return;
+    }
+    if (failIncidentsList) {
+      sendJson(res, 500, { error: "mock incidents failure" });
+      return;
+    }
+    if (malformedIncidentsList) {
+      sendJson(res, 200, {
+        incidents: [
+          {
+            id: "inc-malformed",
+            details_json: null,
+            guidance: null
+          }
+        ],
+        pagination: null,
+        last_updated: "not-a-date"
+      });
       return;
     }
     const activated = persona === "activated";
@@ -607,6 +711,10 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && pathname.match(/^\/v1\/incidents\/[^/]+\/timeline$/)) {
     const persona = ensureAuth(req, res);
     if (!persona) {
+      return;
+    }
+    if (failIncidentTimeline) {
+      sendJson(res, 500, { error: "mock incident timeline failure" });
       return;
     }
     const id = pathname.split("/")[3];
@@ -645,6 +753,10 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && pathname.match(/^\/v1\/incidents\/[^/]+$/)) {
     const persona = ensureAuth(req, res);
     if (!persona) {
+      return;
+    }
+    if (failIncidentDetail) {
+      sendJson(res, 500, { error: "mock incident detail failure" });
       return;
     }
     const id = pathname.split("/")[3];
@@ -1182,7 +1294,7 @@ const server = http.createServer(async (req, res) => {
     if (!persona) {
       return;
     }
-    if (failNextControlPlaneSources) {
+    if (failNextControlPlaneSources || failControlPlaneSources) {
       failNextControlPlaneSources = false;
       sendJson(res, 500, { error: "mock control plane sources failure" });
       return;
@@ -1197,7 +1309,7 @@ const server = http.createServer(async (req, res) => {
               name: "Payments Daily",
               status: "active",
               powers: "Execution and heartbeat telemetry",
-              details: { slug: "payments-daily", system: "checkout-service", environment: "prod" },
+              details: nullControlPlaneSourceDetails ? null : { slug: "payments-daily", system: "checkout-service", environment: "prod" },
               last_activity_at: new Date().toISOString(),
               connected_at: new Date().toISOString()
             }

@@ -38,7 +38,7 @@ async function resetMockApi(request: { post: (url: string, options?: { data?: un
 
 async function setMockApiBehavior(
   request: { post: (url: string, options?: { data?: unknown }) => Promise<unknown> },
-  data: Record<string, boolean>
+  data: Record<string, unknown>
 ) {
   await request.post("http://localhost:4010/__test/config", { data });
 }
@@ -186,6 +186,56 @@ test("control plane index stays usable when setup status fails to load", async (
   await expect(page.getByText("Active workflow sources:")).toContainText("Unavailable");
   await expect(page.getByRole("link", { name: "API keys" })).toBeVisible();
   await expect(page.getByRole("link", { name: "GitHub integrations" })).toBeVisible();
+});
+
+test("sources page stays usable when source status fails to load", async ({ page, request }) => {
+  await setSession(page);
+  await setMockApiBehavior(request, { fail_control_plane_sources_get: true });
+
+  await page.goto("/sources");
+
+  await expect(page.getByRole("heading", { name: "Operational signal connectivity" })).toBeVisible();
+  await expect(page.getByTestId("sources-load-warning")).toContainText("Source inventory is temporarily unavailable");
+  await expect(page.getByTestId("sources-operational-state")).toContainText("Source status temporarily unavailable");
+  await expect(page.getByText("Workflow sources")).toBeVisible();
+  await expect(page.getByText("Unavailable").first()).toBeVisible();
+  await expect(page.getByTestId("connected-sources-table")).toContainText("Source inventory is temporarily unavailable");
+  await expect(page.getByTestId("generic-workflow-source-create-form")).toBeVisible();
+});
+
+test("sources page renders workflow rows when details are null", async ({ page, request }) => {
+  await setSession(page);
+  await setMockApiBehavior(request, { null_control_plane_source_details: true });
+
+  await page.goto("/sources");
+
+  await expect(page.getByRole("heading", { name: "Operational signal connectivity" })).toBeVisible();
+  await expect(page.getByTestId("sources-load-warning")).toHaveCount(0);
+  const row = page.locator("tr", { hasText: "Payments Daily" }).first();
+  await expect(row).toContainText("Workflow");
+  await expect(row).toContainText("Signal-level event ingestion");
+});
+
+test("sources page renders workflow rows when source_type is missing", async ({ page }) => {
+  await setSession(page);
+
+  await page.goto("/sources");
+
+  await expect(page.getByRole("heading", { name: "Operational signal connectivity" })).toBeVisible();
+  const row = page.locator("tr", { hasText: "Payments Daily" }).first();
+  await expect(row).toContainText("Workflow");
+  await expect(row).toContainText("Execution status, retries, latency, heartbeat");
+});
+
+test("sources page stays usable when current user lookup fails", async ({ page, request }) => {
+  await setSession(page);
+  await setMockApiBehavior(request, { fail_auth_me_get: true });
+
+  await page.goto("/sources");
+
+  await expect(page.getByRole("heading", { name: "Operational signal connectivity" })).toBeVisible();
+  await expect(page.getByTestId("sources-load-warning")).toContainText("User role details are temporarily unavailable");
+  await expect(page.getByTestId("generic-workflow-source-create-form")).toBeVisible();
 });
 
 test("rotate succeeds and refresh succeeds keeps secret visible", async ({ page }) => {

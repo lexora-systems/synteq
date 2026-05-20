@@ -6,9 +6,214 @@ import {
   fetchIncidentTimeline,
   fetchMe,
   postIncidentAction,
+  type IncidentGuidance,
   type IncidentTimelineEntry
 } from "../../../lib/api";
 import { requireToken } from "../../../lib/auth";
+import {
+  asRecord,
+  logServerLoadFailure,
+  safeArray,
+  safeDateString,
+  safeNullableString,
+  safeNumber,
+  safeString
+} from "../../../lib/resilience";
+
+type IncidentDetailPayload = Awaited<ReturnType<typeof fetchIncidentById>>;
+type IncidentRow = IncidentDetailPayload["incident"];
+type IncidentTimelinePayload = Awaited<ReturnType<typeof fetchIncidentTimeline>>;
+type DashboardRole = "owner" | "admin" | "engineer" | "viewer";
+type LoadResult<T> = {
+  ok: boolean;
+  payload: T;
+};
+
+const INCIDENT_STATUSES: IncidentRow["status"][] = ["open", "acked", "resolved"];
+const INCIDENT_SEVERITIES: IncidentRow["severity"][] = ["warn", "low", "medium", "high", "critical"];
+const TIMELINE_TYPES: IncidentTimelineEntry["type"][] = [
+  "incident_created",
+  "incident_refreshed",
+  "incident_acknowledged",
+  "incident_resolved",
+  "alert_pending",
+  "alert_sent",
+  "alert_failed",
+  "finding_linked",
+  "detection_event",
+  "status_change",
+  "unknown_event"
+];
+const DEFAULT_GUIDANCE: IncidentGuidance = {
+  incident_type: "unknown",
+  likely_causes: [],
+  business_impact: "Impact has not been classified yet.",
+  recommended_actions: [],
+  confidence: "low",
+  evidence: [],
+  generated_by: "rules_v1",
+  summary_text: "Guidance is unavailable for this incident."
+};
+
+async function loadIncidentData<T>(
+  scope: string,
+  loader: () => Promise<unknown>,
+  fallback: T,
+  normalize: (payload: unknown) => T
+): Promise<LoadResult<T>> {
+  try {
+    return {
+      ok: true,
+      payload: normalize(await loader())
+    };
+  } catch (error) {
+    logServerLoadFailure("incident_detail", scope, error);
+    return {
+      ok: false,
+      payload: fallback
+    };
+  }
+}
+
+function roleFromToken(token: string): DashboardRole | null {
+  const parts = token.split(".");
+  if (parts.length < 2) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as { role?: unknown };
+    return payload.role === "owner" || payload.role === "admin" || payload.role === "engineer" || payload.role === "viewer"
+      ? payload.role
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeGuidance(value: unknown): IncidentGuidance {
+  const guidance = asRecord(value);
+  if (!guidance) {
+    return DEFAULT_GUIDANCE;
+  }
+  const incidentType = [
+    "duplicate_webhook",
+    "retry_storm",
+    "latency_spike",
+    "failure_rate_spike",
+    "missing_heartbeat",
+    "cost_spike",
+    "unknown"
+  ].includes(guidance.incident_type as string)
+    ? (guidance.incident_type as IncidentGuidance["incident_type"])
+    : "unknown";
+  const confidence = ["low", "medium", "high"].includes(guidance.confidence as string)
+    ? (guidance.confidence as IncidentGuidance["confidence"])
+    : "low";
+
+  return {
+    incident_type: incidentType,
+    likely_causes: safeArray(guidance.likely_causes, (item) => safeString(item) || null),
+    business_impact: safeString(guidance.business_impact, DEFAULT_GUIDANCE.business_impact),
+    recommended_actions: safeArray(guidance.recommended_actions, (item) => safeString(item) || null),
+    confidence,
+    evidence: safeArray(guidance.evidence, (item) => safeString(item) || null),
+    generated_by: "rules_v1",
+    summary_text: safeString(guidance.summary_text, DEFAULT_GUIDANCE.summary_text)
+  };
+}
+
+function normalizeIncident(value: unknown): IncidentRow | null {
+  const incident = asRecord(value);
+  if (!incident) {
+    return null;
+  }
+  const id = safeString(incident.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    tenant_id: safeString(incident.tenant_id, "unknown"),
+    workflow_id: safeNullableString(incident.workflow_id),
+    environment: safeNullableString(incident.environment),
+    policy_id: safeNullableString(incident.policy_id),
+    status: INCIDENT_STATUSES.includes(incident.status as IncidentRow["status"]) ? (incident.status as IncidentRow["status"]) : "open",
+    severity: INCIDENT_SEVERITIES.includes(incident.severity as IncidentRow["severity"]) ? (incident.severity as IncidentRow["severity"]) : "warn",
+    started_at: safeDateString(incident.started_at),
+    last_seen_at: safeDateString(incident.last_seen_at),
+    resolved_at: safeNullableString(incident.resolved_at),
+    summary: safeString(incident.summary, "Untitled incident"),
+    details_json: asRecord(incident.details_json) ?? {},
+    guidance: normalizeGuidance(incident.guidance)
+  };
+}
+
+function normalizeIncidentDetailPayload(payload: unknown): IncidentDetailPayload {
+  const record = asRecord(payload);
+  const incident = normalizeIncident(record?.incident);
+  if (!record || !incident) {
+    throw new Error("Malformed incident detail payload");
+  }
+
+  return {
+    incident,
+    recent_events: safeArray(record.recent_events, (item) => {
+      const event = asRecord(item);
+      if (!event) {
+        return null;
+      }
+      const eventId = safeString(event.id);
+      const eventType = safeString(event.event_type);
+      return eventId && eventType
+        ? {
+            id: eventId,
+            event_type: eventType,
+            at_time: safeDateString(event.at_time),
+            summary: safeString(event.summary),
+            metadata: asRecord(event.metadata) as Record<string, string | number | boolean | null> | undefined
+          }
+        : null;
+    })
+  };
+}
+
+function normalizeTimelinePayload(payload: unknown): IncidentTimelinePayload {
+  const record = asRecord(payload);
+  if (!record) {
+    throw new Error("Malformed incident timeline payload");
+  }
+
+  return {
+    incident_id: safeString(record.incident_id),
+    timeline: safeArray(record.timeline, (item) => {
+      const entry = asRecord(item);
+      if (!entry) {
+        return null;
+      }
+      const id = safeString(entry.id);
+      if (!id) {
+        return null;
+      }
+
+      return {
+        id,
+        at: safeDateString(entry.at),
+        type: TIMELINE_TYPES.includes(entry.type as IncidentTimelineEntry["type"])
+          ? (entry.type as IncidentTimelineEntry["type"])
+          : "unknown_event",
+        title: safeString(entry.title, "Timeline event"),
+        description: safeNullableString(entry.description) ?? undefined,
+        severity: safeNullableString(entry.severity) ?? undefined,
+        source: safeNullableString(entry.source) ?? undefined,
+        workflow: safeNullableString(entry.workflow) ?? undefined,
+        environment: safeNullableString(entry.environment) ?? undefined,
+        metadata: asRecord(entry.metadata) ?? undefined
+      };
+    })
+  };
+}
 
 function confidenceClass(confidence: "low" | "medium" | "high") {
   if (confidence === "high") {
@@ -109,19 +314,52 @@ async function resolveAction(formData: FormData) {
 export default async function IncidentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const token = await requireToken();
-  const [payload, me, timelineResult] = await Promise.all([
-    fetchIncidentById(token, id),
-    fetchMe(token),
-    fetchIncidentTimeline(token, id)
-      .then((timelinePayload) => ({ ok: true as const, payload: timelinePayload }))
-      .catch(() => ({ ok: false as const }))
+  const [incidentResult, meResult, timelineResult] = await Promise.all([
+    loadIncidentData("incident_detail", () => fetchIncidentById(token, id), null as IncidentDetailPayload | null, normalizeIncidentDetailPayload),
+    fetchMe(token)
+      .then((payload) => ({ ok: true as const, role: payload.user.role }))
+      .catch((error) => {
+        logServerLoadFailure("incident_detail", "current_user", error);
+        return { ok: false as const, role: roleFromToken(token) ?? "viewer" };
+      }),
+    loadIncidentData(
+      "incident_timeline",
+      () => fetchIncidentTimeline(token, id),
+      {
+        incident_id: id,
+        timeline: []
+      },
+      normalizeTimelinePayload
+    )
   ]);
+
+  if (!incidentResult.payload) {
+    return (
+      <main className="min-h-screen syn-app-shell pb-12">
+        <TopNav />
+        <section className="mx-auto w-full max-w-6xl px-4 pt-8">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900 shadow-panel" data-testid="incident-detail-load-warning">
+            <p className="text-xs uppercase tracking-[0.2em] text-amber-700">Incident unavailable</p>
+            <h2 className="mt-1 text-2xl font-semibold text-ink">Incident details are temporarily unavailable</h2>
+            <p className="mt-2 text-sm">
+              Synteq could not load this incident safely. The incident queue and other demo routes remain available.
+            </p>
+            <Link href="/incidents" className="mt-4 inline-flex rounded-lg border border-amber-300 px-3 py-2 text-sm font-semibold text-amber-900">
+              Back to Incident Queue
+            </Link>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  const payload = incidentResult.payload;
   const incident = payload.incident;
   const guidance = incident.guidance;
-  const canWriteIncident = me.user.role !== "viewer";
+  const canWriteIncident = meResult.role !== "viewer";
   const details = incident.details_json ?? {};
-  const isSimulation = details.source === "simulation" || Number(details.synthetic_ratio ?? 0) > 0;
-  const timeline = timelineResult.ok ? timelineResult.payload.timeline : [];
+  const isSimulation = details.source === "simulation" || safeNumber(details.synthetic_ratio) > 0;
+  const timeline = timelineResult.payload.timeline;
 
   return (
     <main className="min-h-screen syn-app-shell pb-12">

@@ -5,13 +5,15 @@ import {
   createGenericWorkflowSource,
   fetchConnectedSources,
   fetchMe,
+  isApiContractError,
+  isApiRequestError,
   runGenericWorkflowSourceSilentCheck,
   sendGenericWorkflowSourceTestEvent,
   type ConnectedSourceRow,
   type GenericWorkflowSourceType,
   type WorkflowSourceTestStatus
 } from "../../lib/api";
-import { resolveActivationJourney } from "../../lib/activation";
+import { deriveActivationJourney, resolveActivationJourney, type ActivationJourney } from "../../lib/activation";
 import { requireToken } from "../../lib/auth";
 import {
   GenericWorkflowSourceOnboarding,
@@ -26,8 +28,169 @@ function formatTimestamp(value: string | null): string {
 }
 
 type FreshnessState = "Fresh" | "Stale" | "Unknown";
+type ConnectedSourcesPayload = Awaited<ReturnType<typeof fetchConnectedSources>>;
+type DashboardRole = "owner" | "admin" | "engineer" | "viewer";
 
 const STALE_THRESHOLD_MINUTES = 15;
+const unavailableSourcesPayload: ConnectedSourcesPayload = {
+  summary: {
+    workflow_sources: 0,
+    github_sources: 0,
+    ingestion_keys_active: 0,
+    alert_channels_ready: 0
+  },
+  sources: [],
+  readiness: {
+    ingestion_api_keys_configured: false,
+    alert_dispatch_ready: false
+  }
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function toSafeNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function toSafeString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function toNullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function roleFromToken(token: string): DashboardRole | null {
+  const parts = token.split(".");
+  if (parts.length < 2) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as { role?: unknown };
+    return payload.role === "owner" || payload.role === "admin" || payload.role === "engineer" || payload.role === "viewer"
+      ? payload.role
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function fallbackActivationJourney(): ActivationJourney {
+  return deriveActivationJourney({
+    connectedSources: [],
+    githubIntegrations: [],
+    totalSignals: 0,
+    openIncidents: 0,
+    metricsUnavailable: true
+  });
+}
+
+function logSourcesPageFailure(scope: string, error: unknown) {
+  if (isApiRequestError(error)) {
+    console.error("sources_page.load_failed", {
+      scope,
+      path: error.path,
+      status: error.status,
+      code: error.code,
+      kind: error.kind,
+      request_id: error.requestId
+    });
+    return;
+  }
+
+  if (isApiContractError(error)) {
+    console.error("sources_page.load_failed", {
+      scope,
+      path: error.path,
+      contract: error.contract,
+      error_type: error.name
+    });
+    return;
+  }
+
+  console.error("sources_page.load_failed", {
+    scope,
+    error_type: error instanceof Error ? error.name : "UnknownError"
+  });
+}
+
+function logSourceShapeWarning(issue: string, source: { id?: unknown; type?: unknown; status?: unknown }) {
+  console.warn("sources_page.source_data_shape_invalid", {
+    issue,
+    source_id: typeof source.id === "string" ? source.id : null,
+    source_type: typeof source.type === "string" ? source.type : null,
+    source_status: typeof source.status === "string" ? source.status : null
+  });
+}
+
+function normalizeConnectedSourceRow(value: unknown, index: number): ConnectedSourceRow | null {
+  const source = asRecord(value);
+  if (!source) {
+    console.warn("sources_page.source_data_shape_invalid", {
+      issue: "source_not_object",
+      source_index: index
+    });
+    return null;
+  }
+
+  const type = source.type === "github_integration" ? "github_integration" : "workflow";
+  const status = source.status === "active" ? "active" : "inactive";
+  const details = asRecord(source.details);
+  if (!details) {
+    logSourceShapeWarning("details_not_object", source);
+  }
+
+  return {
+    id: toSafeString(source.id, `source-${index}`),
+    type,
+    name: toSafeString(source.name, "Unnamed source"),
+    status,
+    powers: toSafeString(source.powers, ""),
+    details: details ?? {},
+    last_activity_at: toNullableString(source.last_activity_at),
+    connected_at: toSafeString(source.connected_at, "")
+  };
+}
+
+function normalizeConnectedSourcesPayload(value: unknown): ConnectedSourcesPayload {
+  const payload = asRecord(value);
+  if (!payload) {
+    console.warn("sources_page.sources_payload_shape_invalid", { issue: "payload_not_object" });
+    return unavailableSourcesPayload;
+  }
+
+  const summary = asRecord(payload.summary);
+  const readiness = asRecord(payload.readiness);
+  const sources = Array.isArray(payload.sources)
+    ? payload.sources
+        .map((source, index) => normalizeConnectedSourceRow(source, index))
+        .filter((source): source is ConnectedSourceRow => Boolean(source))
+    : [];
+
+  if (!Array.isArray(payload.sources)) {
+    console.warn("sources_page.sources_payload_shape_invalid", { issue: "sources_not_array" });
+  }
+
+  return {
+    summary: {
+      workflow_sources: toSafeNumber(summary?.workflow_sources),
+      github_sources: toSafeNumber(summary?.github_sources),
+      ingestion_keys_active: toSafeNumber(summary?.ingestion_keys_active),
+      alert_channels_ready: toSafeNumber(summary?.alert_channels_ready)
+    },
+    sources,
+    readiness: {
+      ingestion_api_keys_configured: readiness?.ingestion_api_keys_configured === true,
+      alert_dispatch_ready: readiness?.alert_dispatch_ready === true
+    }
+  };
+}
 
 function classifyFreshness(value: string | null, thresholdMinutes = STALE_THRESHOLD_MINUTES): FreshnessState {
   if (!value) {
@@ -59,8 +222,17 @@ function freshnessClasses(state: FreshnessState): string {
   return "border-slate-200 bg-slate-100 text-slate-600";
 }
 
+function toStatusValue(value: number, available: boolean): string {
+  return available ? String(value) : "Unavailable";
+}
+
 function sourceTypeFromDetails(source: ConnectedSourceRow): string {
-  const sourceType = source.details.source_type;
+  const details = asRecord(source.details);
+  if (!details) {
+    logSourceShapeWarning("details_not_object", source);
+    return "workflow";
+  }
+  const sourceType = details.source_type;
   return typeof sourceType === "string" && sourceType.trim().length > 0 ? sourceType : "workflow";
 }
 
@@ -144,6 +316,57 @@ function isGenericWorkflowSourceType(value: string): value is GenericWorkflowSou
 
 function isWorkflowSourceTestStatus(value: string): value is WorkflowSourceTestStatus {
   return ["succeeded", "failed", "timed_out"].includes(value);
+}
+
+async function loadConnectedSourcesStatus(token: string) {
+  try {
+    return {
+      available: true,
+      payload: normalizeConnectedSourcesPayload(await fetchConnectedSources(token))
+    };
+  } catch (error) {
+    logSourcesPageFailure("connected_sources", error);
+    return {
+      available: false,
+      payload: unavailableSourcesPayload
+    };
+  }
+}
+
+async function loadActivationJourneyStatus(token: string) {
+  try {
+    return {
+      available: true,
+      activationJourney: await resolveActivationJourney(token)
+    };
+  } catch (error) {
+    logSourcesPageFailure("activation_journey", error);
+    return {
+      available: false,
+      activationJourney: fallbackActivationJourney()
+    };
+  }
+}
+
+async function loadCurrentUserRole(token: string) {
+  try {
+    const me = await fetchMe(token);
+    const role = me.user.role;
+    if (role === "owner" || role === "admin" || role === "engineer" || role === "viewer") {
+      return {
+        available: true,
+        role
+      };
+    }
+    console.warn("sources_page.user_shape_invalid", { issue: "invalid_role" });
+  } catch (error) {
+    logSourcesPageFailure("current_user", error);
+  }
+
+  return {
+    available: false,
+    role: roleFromToken(token) ?? "viewer"
+  };
 }
 
 async function manageGenericWorkflowSourceAction(
@@ -274,12 +497,19 @@ async function manageGenericWorkflowSourceAction(
 
 export default async function ConnectedSourcesPage() {
   const token = await requireToken();
-  const [payload, activationJourney, me] = await Promise.all([
-    fetchConnectedSources(token),
-    resolveActivationJourney(token),
-    fetchMe(token)
+  const [sourcesStatus, activationStatus, userStatus] = await Promise.all([
+    loadConnectedSourcesStatus(token),
+    loadActivationJourneyStatus(token),
+    loadCurrentUserRole(token)
   ]);
-  const canManageWorkflowSources = ["owner", "admin"].includes(me.user.role);
+  const payload = sourcesStatus.payload;
+  const activationJourney = activationStatus.activationJourney;
+  const canManageWorkflowSources = ["owner", "admin"].includes(userStatus.role);
+  const loadWarnings = [
+    !sourcesStatus.available ? "Source inventory is temporarily unavailable." : null,
+    !activationStatus.available ? "Activation status is temporarily unavailable." : null,
+    !userStatus.available ? "User role details are temporarily unavailable; permissions were inferred from the current session where possible." : null
+  ].filter((message): message is string => Boolean(message));
   const hasSources = payload.sources.length > 0;
   const activeSources = payload.sources.filter((source) => source.status === "active");
   const hasActiveSources = activeSources.length > 0;
@@ -312,7 +542,9 @@ export default async function ConnectedSourcesPage() {
   const latestGitHubDeliveryFreshness = classifyFreshness(latestGitHubSignalAt);
 
   const sourceOperationalStatus =
-    !hasSources
+    !sourcesStatus.available
+      ? "Source status temporarily unavailable"
+      : !hasSources
       ? "Waiting for first source connection"
       : !hasActiveSources
         ? "Sources configured but inactive"
@@ -325,7 +557,11 @@ export default async function ConnectedSourcesPage() {
             : "Connected, waiting for first signal";
 
   const sourceOperationalMessage =
-    !hasSources
+    !sourcesStatus.available
+      ? "Synteq could not load current source status. Configuration tools remain available, and this page will refresh once the API responds."
+      : !activationStatus.available
+        ? "Source inventory loaded, but activation progress is temporarily unavailable."
+        : !hasSources
       ? "Connect GitHub or another source to begin activation."
       : !hasActiveSources
         ? "Sources are configured but currently inactive. Synteq monitoring resumes when at least one source is active."
@@ -366,11 +602,29 @@ export default async function ConnectedSourcesPage() {
           </div>
         </div>
 
+        {loadWarnings.length > 0 ? (
+          <div
+            className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-panel"
+            data-testid="sources-load-warning"
+          >
+            <p className="font-semibold">Some source setup data is temporarily unavailable.</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {loadWarnings.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         {!hasActiveSources ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-panel">
-            <p className="font-semibold text-ink">{hasSources ? "Sources configured but inactive" : "No active source connected yet"}</p>
+            <p className="font-semibold text-ink">
+              {!sourcesStatus.available ? "Source status temporarily unavailable" : hasSources ? "Sources configured but inactive" : "No active source connected yet"}
+            </p>
             <p className="mt-1">
-              {hasSources
+              {!sourcesStatus.available
+                ? "Synteq could not load current source status. Retry this page once the API responds."
+                : hasSources
                 ? "Configured sources are currently inactive, so Synteq is not monitoring live signals right now."
                 : "Connect and activate your first source to start live monitoring."}
             </p>
@@ -439,19 +693,19 @@ export default async function ConnectedSourcesPage() {
         <div className="mt-4 grid gap-4 md:grid-cols-4">
           <div className="rounded-2xl bg-white p-4 shadow-panel">
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Workflow sources</p>
-            <p className="mt-2 text-2xl font-semibold text-ink">{payload.summary.workflow_sources}</p>
+            <p className="mt-2 text-2xl font-semibold text-ink">{toStatusValue(payload.summary.workflow_sources, sourcesStatus.available)}</p>
           </div>
           <div className="rounded-2xl bg-white p-4 shadow-panel">
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">GitHub sources</p>
-            <p className="mt-2 text-2xl font-semibold text-ink">{payload.summary.github_sources}</p>
+            <p className="mt-2 text-2xl font-semibold text-ink">{toStatusValue(payload.summary.github_sources, sourcesStatus.available)}</p>
           </div>
           <div className="rounded-2xl bg-white p-4 shadow-panel">
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Ingestion keys</p>
-            <p className="mt-2 text-2xl font-semibold text-ink">{payload.summary.ingestion_keys_active}</p>
+            <p className="mt-2 text-2xl font-semibold text-ink">{toStatusValue(payload.summary.ingestion_keys_active, sourcesStatus.available)}</p>
           </div>
           <div className="rounded-2xl bg-white p-4 shadow-panel">
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Alert channels</p>
-            <p className="mt-2 text-2xl font-semibold text-ink">{payload.summary.alert_channels_ready}</p>
+            <p className="mt-2 text-2xl font-semibold text-ink">{toStatusValue(payload.summary.alert_channels_ready, sourcesStatus.available)}</p>
           </div>
         </div>
 
@@ -475,18 +729,26 @@ export default async function ConnectedSourcesPage() {
                 </tr>
               </thead>
               <tbody>
-                {payload.sources.map((source) => (
-                  <tr key={`${source.type}-${source.id}`} className="border-b border-slate-100 align-top text-slate-700">
-                    <td className="py-3 pr-2">{source.name}</td>
-                    <td className="py-3 pr-2">{toLabel(source)}</td>
-                    <td className="py-3 pr-2">{source.status}</td>
-                    <td className="py-3 pr-2">{accessModel(source)}</td>
-                    <td className="py-3 pr-2">{signalSummary(source)}</td>
-                    <td className="py-3 pr-2">{riskSummary(source)}</td>
-                    <td className="py-3 pr-2">{formatTimestamp(source.last_activity_at)}</td>
-                    <td className="py-3 pr-2">{formatTimestamp(source.connected_at)}</td>
+                {payload.sources.length > 0 ? (
+                  payload.sources.map((source) => (
+                    <tr key={`${source.type}-${source.id}`} className="border-b border-slate-100 align-top text-slate-700">
+                      <td className="py-3 pr-2">{source.name}</td>
+                      <td className="py-3 pr-2">{toLabel(source)}</td>
+                      <td className="py-3 pr-2">{source.status}</td>
+                      <td className="py-3 pr-2">{accessModel(source)}</td>
+                      <td className="py-3 pr-2">{signalSummary(source)}</td>
+                      <td className="py-3 pr-2">{riskSummary(source)}</td>
+                      <td className="py-3 pr-2">{formatTimestamp(source.last_activity_at)}</td>
+                      <td className="py-3 pr-2">{formatTimestamp(source.connected_at)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr className="border-b border-slate-100 text-slate-600">
+                    <td className="py-4 pr-2" colSpan={8}>
+                      {sourcesStatus.available ? "No connected sources yet." : "Source inventory is temporarily unavailable."}
+                    </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

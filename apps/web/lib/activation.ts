@@ -7,6 +7,7 @@ import {
   type ConnectedSourceRow,
   type GitHubIntegrationRow
 } from "./api";
+import { asRecord, safeArray, safeBoolean, safeDateString, safeNullableString, safeNumber, safeString } from "./resilience";
 
 type ActivationState = {
   activated: boolean;
@@ -15,16 +16,63 @@ type ActivationState = {
   metricsUnavailable: boolean;
 };
 
-function asNumber(value: unknown): number {
-  return typeof value === "number" ? value : Number(value ?? 0);
-}
-
 function toTimestampMs(value: string | null): number {
   if (!value) {
     return Number.NaN;
   }
   const parsed = new Date(value).getTime();
   return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
+function normalizeConnectedSource(value: unknown): ConnectedSourceRow | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const id = safeString(record.id);
+  const name = safeString(record.name, "Unknown source");
+  const type = record.type === "github_integration" ? "github_integration" : "workflow";
+  const status = record.status === "inactive" ? "inactive" : "active";
+
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    type,
+    name,
+    status,
+    powers: safeString(record.powers, "Operational monitoring"),
+    details: asRecord(record.details) ?? {},
+    last_activity_at: safeNullableString(record.last_activity_at),
+    connected_at: safeDateString(record.connected_at)
+  };
+}
+
+function normalizeGitHubIntegration(value: unknown): GitHubIntegrationRow | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const id = safeString(record.id);
+  const webhookId = safeString(record.webhook_id);
+  if (!id || !webhookId) {
+    return null;
+  }
+
+  return {
+    id,
+    webhook_id: webhookId,
+    repository_full_name: safeNullableString(record.repository_full_name),
+    is_active: safeBoolean(record.is_active),
+    last_delivery_id: safeNullableString(record.last_delivery_id),
+    last_seen_at: safeNullableString(record.last_seen_at),
+    created_at: safeDateString(record.created_at),
+    updated_at: safeDateString(record.updated_at)
+  };
 }
 
 export async function resolveActivationState(token: string): Promise<ActivationState> {
@@ -54,7 +102,7 @@ export async function resolveActivationState(token: string): Promise<ActivationS
 
   try {
     const overview = await fetchOverview(token, "7d");
-    const totalEvents = asNumber(overview.summary?.count_total);
+    const totalEvents = safeNumber(overview.summary?.count_total);
     const hasTelemetry = totalEvents > 0;
 
     return {
@@ -329,10 +377,10 @@ export async function resolveActivationJourney(token: string): Promise<Activatio
   ]);
 
   return deriveActivationJourney({
-    connectedSources: sourcesResult.payload?.sources ?? [],
-    githubIntegrations: githubResult.payload?.integrations ?? [],
-    totalSignals: asNumber(overviewResult.payload?.summary?.count_total),
-    openIncidents: incidentsResult.payload?.pagination.total ?? 0,
+    connectedSources: safeArray(asRecord(sourcesResult.payload)?.sources, normalizeConnectedSource),
+    githubIntegrations: safeArray(asRecord(githubResult.payload)?.integrations, normalizeGitHubIntegration),
+    totalSignals: safeNumber(asRecord(asRecord(overviewResult.payload)?.summary)?.count_total),
+    openIncidents: safeNumber(asRecord(asRecord(incidentsResult.payload)?.pagination)?.total),
     metricsUnavailable: !overviewResult.ok
   });
 }
