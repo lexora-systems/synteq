@@ -47,6 +47,10 @@ test.beforeEach(async ({ request }) => {
   await resetMockApi(request);
 });
 
+test.afterEach(async ({ request }) => {
+  await resetMockApi(request);
+});
+
 test("overview stays usable when live dashboard dependencies fail", async ({ page, request }) => {
   await setMockApiBehavior(request, {
     fail_operational_dashboard_get: true,

@@ -39,6 +39,14 @@ async function login(page: Page, email: string, password = "Password123!") {
   await page.getByRole("button", { name: "Sign In" }).click();
 }
 
+async function resetMockApi(request: { post: (url: string, options?: { data?: unknown }) => Promise<unknown> }) {
+  await request.post("http://localhost:4010/__test/reset");
+}
+
+test.beforeEach(async ({ request }) => {
+  await resetMockApi(request);
+});
+
 test("public landing page renders", async ({ page }) => {
   await page.goto("/");
   await expect(
